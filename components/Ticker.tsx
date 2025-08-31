@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, Text, Dimensions, Platform } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, Text, Dimensions, LayoutChangeEvent } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -8,7 +8,6 @@ import Animated, {
   Easing,
   cancelAnimation,
   interpolate,
-  useAnimatedReaction,
 } from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -18,7 +17,7 @@ interface TickerProps {
   duration?: number;
 }
 
-export const Ticker: React.FC<TickerProps> = ({ data, duration = 20000 }) => {
+export const Ticker: React.FC<TickerProps> = ({ data }) => {
   const textContainerWidth = useSharedValue(0);
   const translateX = useSharedValue(0);
 
@@ -26,40 +25,34 @@ export const Ticker: React.FC<TickerProps> = ({ data, duration = 20000 }) => {
   const text = data.join('   •   ');
 
   const animatedStyle = useAnimatedStyle(() => {
-    // Animasyonun sadece içerik ekrandan daha genişse çalışmasını sağlıyoruz.
-    const moveAmount = textContainerWidth.value > SCREEN_WIDTH ? textContainerWidth.value + 50 : 0;
+    // Metnin tam genişliği kadar sola kaydıracağız. 50, metinler arası boşluktur.
+    const moveAmount = textContainerWidth.value + 50;
     return {
       transform: [{ translateX: interpolate(translateX.value, [0, 1], [0, -moveAmount]) }],
     };
   });
 
-  // Bu useEffect, data prop'u değiştiğinde animasyonu sıfırlar.
-  useEffect(() => {
+  const handleOnLayout = (event: LayoutChangeEvent) => {
+    const measuredWidth = event.nativeEvent.layout.width;
+    // Eğer genişlik ölçülmemişse veya öncekiyle aynıysa bir şey yapma.
+    if (measuredWidth === 0 || measuredWidth === textContainerWidth.value) {
+      return;
+    }
+    textContainerWidth.value = measuredWidth;
+
+    // Sabit bir kayma hızı için süreyi dinamik olarak hesapla.
+    // Hız = 40 piksel/saniye
+    const speed = 40;
+    const duration = (measuredWidth / speed) * 1000;
+
+    // Animasyonu başlatmadan önce mevcut olanı durdur ve sıfırla.
     cancelAnimation(translateX);
     translateX.value = 0;
-  }, [data]);
-
-  // Bu hook, metin genişliğindeki değişikliklere tepki verir ve animasyonu yönetir.
-  // Bu, UI thread üzerinde çalıştığı için uyarıları önler.
-  useAnimatedReaction(
-    () => textContainerWidth.value,
-    (currentWidth, previousWidth) => {
-      if (currentWidth === previousWidth) return;
-
-      // Eğer içerik ekran genişliğinden fazlaysa animasyonu başlat.
-      if (currentWidth > SCREEN_WIDTH) {
-        translateX.value = 0; // Pozisyonu sıfırla
-        translateX.value = withRepeat(
-          withTiming(1, { duration: duration, easing: Easing.linear }),
-          -1 // sonsuz döngü
-        );
-      } else {
-        // Eğer içerik daha kısaysa, çalışan bir animasyon varsa durdur.
-        cancelAnimation(translateX);
-        translateX.value = 0;
-      }
-    }
-  );
+    translateX.value = withRepeat(
+      withTiming(1, { duration, easing: Easing.linear }),
+      -1 // sonsuz döngü
+    );
+  };
 
   if (!data || data.length === 0) {
     return <View style={styles.container}><Text style={styles.text}>Loading rates...</Text></View>;
@@ -68,8 +61,8 @@ export const Ticker: React.FC<TickerProps> = ({ data, duration = 20000 }) => {
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.row, animatedStyle]}>
-        {/* onLayout, metnin genişliğini ölçer ve paylaşılan değeri günceller. */}
-        <Text onLayout={(e) => { textContainerWidth.value = e.nativeEvent.layout.width; }} style={styles.text}>{text}</Text>
+        {/* onLayout, metnin genişliğini ölçer ve animasyonu tetikler. */}
+        <Text onLayout={handleOnLayout} style={styles.text}>{text}</Text>
         <Text style={[styles.text, { paddingLeft: 50 }]}>{text}</Text>
       </Animated.View>
     </View>

@@ -4,60 +4,94 @@ export interface ExchangeRates {
   [key: string]: number;
 }
 
-// 1. Döviz ve Metal Kurlarını Çeken Fonksiyon
-const getFiatAndMetalRates = async (): Promise<ExchangeRates> => {
+// 1. Döviz Kurlarını Çeken Fonksiyon (USD, EUR, RUB)
+const getFiatRates = async (): Promise<ExchangeRates> => {
   try {
-    // Exchangerate.host API'si ücretsizdir ve anahtar gerektirmez.
-    // TRY bazında istediğimiz sembollerin değerini alıyoruz.
-    const response = await fetch('https://api.frankfurter.app/latest?from=TRY&to=USD,EUR,RUB,XAU,XAG');
+    // frankfurter.app, Avrupa Merkez Bankası verilerini kullanan, hızlı ve güvenilir bir servistir.
+    const response = await fetch('https://api.frankfurter.app/latest?from=TRY&to=USD,EUR,RUB');
     const data = await response.json();
+    if (!data.rates) return {};
 
-    // API, 1 TRY'nin kaç USD/XAU olduğunu verir. Biz 1 USD/XAU'nun kaç TRY olduğunu istediğimiz için 1'i sonuca bölüyoruz.
+    // API, 1 TRY'nin diğer para birimlerindeki değerini verir. Biz tersini alıyoruz.
     const invertedRates: ExchangeRates = {};
     for (const key in data.rates) {
       invertedRates[key] = 1 / data.rates[key];
     }
     return invertedRates;
   } catch (error) {
-    console.error('Error fetching fiat/metal rates:', error);
-    return {}; // Hata durumunda boş obje döndür.
+    console.warn('Could not fetch fiat rates:', error);
+    return {}; // Hata durumunda boş obje döndürerek diğer API'lerin çalışmasını engelleme.
   }
 };
 
-// 2. Kripto Para Kurlarını Çeken Fonksiyon
+// 2. Değerli Metal Kurlarını Çeken Fonksiyon (Altın, Gümüş)
+const getMetalRates = async (): Promise<ExchangeRates> => {
+  try {
+    // Bu daha güvenilir bir yöntemdir. Önce USD/TRY kurunu, sonra metallerin USD karşılığını alırız.
+    // Adım 1: Güvenilir bir kaynaktan USD/TRY kurunu al.
+    const fiatResponse = await fetch('https://api.frankfurter.app/latest?from=USD&to=TRY');
+    const fiatData = await fiatResponse.json();
+    const usdToTryRate = fiatData.rates?.TRY;
+    if (!usdToTryRate) return {};
+
+    // Adım 2: Metallerin USD cinsinden fiyatını al. Bu API, 1 USD'nin kaç ons metal ettiğini verir.
+    const metalResponse = await fetch('https://api.forexrateapi.com/v1/latest?base=USD&currencies=XAU,XAG');
+    const metalData = await metalResponse.json();
+    if (!metalData.rates || !metalData.rates.XAU || !metalData.rates.XAG) return {};
+
+    // Adım 3: Hesaplama yap. 1 Ons Altın/Gümüş'ün kaç USD ettiğini bul (tersini alarak) ve TRY'ye çevir.
+    const xauInUsd = 1 / metalData.rates.XAU;
+    const xagInUsd = 1 / metalData.rates.XAG;
+
+    return {
+      XAU: xauInUsd * usdToTryRate,
+      XAG: xagInUsd * usdToTryRate,
+    };
+  } catch (error) {
+    console.warn('Could not fetch metal rates:', error);
+    return {};
+  }
+};
+
+// 3. Kripto Para Kurlarını Çeken Fonksiyon (BTC, ETH, XRP)
 const getCryptoRates = async (): Promise<ExchangeRates> => {
   try {
-    // CoinGecko API'si en popüler ve ücretsiz kripto API'lerinden biridir.
-    // İstediğimiz kriptoların TRY cinsinden değerini alıyoruz.
+    // CoinGecko, kripto paralar için endüstri standardı, güvenilir bir API'dir.
     const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,ripple&vs_currencies=try');
     const data = await response.json();
 
-    // Gelen veriyi standart formatımıza çeviriyoruz (örn: "bitcoin" -> "BTC").
-    return {
-      BTC: data.bitcoin?.try || 0,
-      ETH: data.ethereum?.try || 0,
-      XRP: data.ripple?.try || 0,
-    };
+    const rates: ExchangeRates = {};
+    if (data.bitcoin?.try) rates['BTC'] = data.bitcoin.try;
+    if (data.ethereum?.try) rates['ETH'] = data.ethereum.try;
+    if (data.ripple?.try) rates['XRP'] = data.ripple.try;
+
+    return rates;
   } catch (error) {
-    console.error('Error fetching crypto rates:', error);
-    return {}; // Hata durumunda boş obje döndür.
+    console.warn('Could not fetch crypto rates:', error);
+    return {};
   }
 };
 
-// 3. Tüm Kurları Birleştiren Ana Fonksiyon
-// Uygulamanın diğer kısımları bu fonksiyonu çağıracak.
+// Ana fonksiyon: Tüm kur verilerini birleştirir.
 export const getExchangeRates = async (): Promise<ExchangeRates | null> => {
-  try {
-    // İki API çağrısını aynı anda (paralel) yaparak zaman kazanıyoruz.
-    const [fiatAndMetalRates, cryptoRates] = await Promise.all([
-      getFiatAndMetalRates(),
-      getCryptoRates(),
-    ]);
+  // Promise.allSettled kullanarak, bir API başarısız olsa bile diğerlerinin sonuçlarını alabiliyoruz.
+  // Bu, sistemi çok daha dayanıklı hale getirir.
+  const results = await Promise.allSettled([getFiatRates(), getMetalRates(), getCryptoRates()]);
 
-    // İki sonuç objesini birleştirip, TRY'yi de ekleyerek nihai kur listesini oluşturuyoruz.
-    return { ...fiatAndMetalRates, ...cryptoRates, TRY: 1 };
-  } catch (error) {
-    console.error('Error fetching combined exchange rates:', error);
+  const combinedRates: ExchangeRates = { TRY: 1 };
+
+  results.forEach((result) => {
+    // Sadece başarılı olan isteklerin sonuçlarını birleştiriyoruz.
+    if (result.status === 'fulfilled' && result.value) {
+      Object.assign(combinedRates, result.value);
+    }
+  });
+
+  // Eğer hiçbir API'den veri alınamadıysa (örn: internet yok), null döndür.
+  if (Object.keys(combinedRates).length <= 1) {
+    console.error('Error fetching exchange rates: All API calls failed.');
     return null;
   }
+
+  return combinedRates;
 };
