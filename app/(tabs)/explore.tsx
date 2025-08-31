@@ -103,8 +103,9 @@ export default function ExploreScreen() {
         acc[category] = 0;
       }
       // Her bir harcamayı, kendi para biriminden ana para birimimiz olan TRY'ye çevirerek topluyoruz.
+      // rates[curr.currency] bir birim yabancı paranın kaç TRY olduğunu tutar (örn: rates['USD'] = 32.5)
       const rate = rates[curr.currency] || 1;
-      const amountInTRY = Math.abs(curr.amount) / rate;
+      const amountInTRY = Math.abs(curr.amount) * rate;
       acc[category] += amountInTRY;
       return acc;
     }, {} as Record<string, number>);
@@ -115,8 +116,8 @@ export default function ExploreScreen() {
     // Veriyi react-native-chart-kit'in beklediği formata dönüştür.
     return Object.keys(expenseByCategory).map((category, index) => {
       const totalInCategoryInTRY = expenseByCategory[category];
-      // Toplamı, seçili gösterim para birimine çeviriyoruz.
-      const totalInDisplayCurrency = totalInCategoryInTRY * rates[displayCurrency.code];
+      // Toplam TRY tutarını, seçili gösterim para birimine çeviriyoruz (bölerek).
+      const totalInDisplayCurrency = totalInCategoryInTRY / (rates[displayCurrency.code] || 1);
       return {
         name: `${displayCurrency.symbol}${totalInDisplayCurrency.toFixed(0)} ${category}`,
         population: totalInDisplayCurrency,
@@ -147,8 +148,9 @@ export default function ExploreScreen() {
         acc[category] = 0;
       }
       // Her bir geliri, kendi para biriminden ana para birimimiz olan TRY'ye çevirerek topluyoruz.
+      // rates[curr.currency] bir birim yabancı paranın kaç TRY olduğunu tutar (örn: rates['USD'] = 32.5)
       const rate = rates[curr.currency] || 1;
-      const amountInTRY = curr.amount / rate;
+      const amountInTRY = curr.amount * rate;
       acc[category] += amountInTRY;
       return acc;
     }, {} as Record<string, number>);
@@ -158,8 +160,8 @@ export default function ExploreScreen() {
 
     return Object.keys(incomeByCategory).map((category, index) => {
       const totalInCategoryInTRY = incomeByCategory[category];
-      // Toplamı, seçili gösterim para birimine çeviriyoruz.
-      const totalInDisplayCurrency = totalInCategoryInTRY * rates[displayCurrency.code];
+      // Toplam TRY tutarını, seçili gösterim para birimine çeviriyoruz (bölerek).
+      const totalInDisplayCurrency = totalInCategoryInTRY / (rates[displayCurrency.code] || 1);
       return {
         name: `${displayCurrency.symbol}${totalInDisplayCurrency.toFixed(0)} ${category}`,
         population: totalInDisplayCurrency,
@@ -354,15 +356,14 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     paddingHorizontal: 16,
     gap: 12,
   },
-  topDecorationBar: {
-    height: 5,
-    backgroundColor: '#48484a',
-    marginHorizontal: 120,
-    marginTop: 8,
-    marginBottom: 4,
-    borderRadius: 2.5,
-    alignSelf: 'center',
-  },
+    topDecorationBar: {
+        top:-5,
+        height: 5,
+        backgroundColor: '#48484a', // Koyu gri, ince bir çizgi
+        marginHorizontal: 120, // Ortalamak için sağdan ve soldan boşluk
+        marginTop: 8,
+        borderRadius: 2.5,
+    },
   legendContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap', // Bu, elemanların alt satıra geçmesini sağlar.
@@ -431,6 +432,7 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     fontWeight: 'bold',
   },
   analysisResultBox: {
+    color:'black',  
     marginTop: 16,
     padding: 16,
     backgroundColor: Colors[colorScheme].tint,

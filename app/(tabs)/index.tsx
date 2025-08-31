@@ -8,6 +8,7 @@ import { Alert, FlatList, Modal, SafeAreaView, ScrollView, StyleSheet, View, Lis
 
 // Kendi oluşturduğumuz tema bileşenlerini import ediyoruz.
 import { ThemedText } from '@/components/ThemedText';
+import { Ticker } from '@/components/Ticker';
 import { ThemedView } from '@/components/ThemedView';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { ExchangeRates, getExchangeRates } from '@/services/currencyService';
@@ -84,6 +85,7 @@ export default function HomeScreen() {
   const [rates, setRates] = useState<ExchangeRates | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('all');
+  const [tickerData, setTickerData] = useState<string[]>([]);
   const [isDateModalVisible, setDateModalVisible] = useState(false);
 
   // Seçilen zaman filtresine göre işlemleri filtreleyen bir useMemo.
@@ -124,12 +126,14 @@ export default function HomeScreen() {
     if (!rates) return { totalIncome: 0, totalExpense: 0, balance: 0 };
     return transactions.reduce(
         (acc, curr) => {
+          // rates[curr.currency] bir birim yabancı paranın kaç TRY olduğunu tutar (örn: rates['USD'] = 32.5)
           const rate = rates[curr.currency] || 1;
-          const amountInTRY = curr.amount / rate;
+          // İşlem tutarını TRY'ye çevirmek için çarpmalıyız.
+          const amountInTRY = curr.amount * rate;
           if (curr.type === 'income') {
             acc.totalIncome += amountInTRY;
           } else {
-            acc.totalExpense += amountInTRY;
+            acc.totalExpense += amountInTRY; // Giderler zaten negatif olduğu için direkt ekliyoruz.
           }
           acc.balance = acc.totalIncome + acc.totalExpense;
           return acc;
@@ -141,10 +145,39 @@ export default function HomeScreen() {
   // Kur oranlarını çekmek için useEffect.
   useEffect(() => {
     const fetchRates = async () => {
-      const fetchedRates = await getExchangeRates();
-      setRates(fetchedRates);
+        const fetchedRates = await getExchangeRates();
+        setRates(fetchedRates);
+
+        // Kayan bant için veriyi formatla
+        if (fetchedRates) {
+            const tickerItems = [
+                { code: 'USD', name: 'Dolar' },
+                { code: 'EUR', name: 'Euro' },
+                { code: 'XAU', name: 'Altın (Ons)' },
+                { code: 'XAG', name: 'Gümüş (Ons)' },
+                { code: 'RUB', name: 'Ruble' },
+                { code: 'BTC', name: 'Bitcoin' },
+                { code: 'ETH', name: 'Ethereum' },
+                { code: 'XRP', name: 'XRP' },
+            ];
+
+            const formattedTickerData = tickerItems
+                .filter(item => fetchedRates[item.code]) // Sadece kuru mevcut olanları göster
+                .map(item => {
+                    const rate = fetchedRates[item.code];
+                    // Sayıyı para birimi formatında (örn: 2.100.000,00 ₺) göster
+                    const formattedRate = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rate);
+                    return `${item.name}: ${formattedRate} ₺`;
+                });
+            setTickerData(formattedTickerData);
+        }
     };
+
     fetchRates();
+    // Verileri her 1 dakikada bir yenilemek için bir interval kuruyoruz.
+    const intervalId = setInterval(fetchRates, 60000);
+    // Component kaldırıldığında interval'ı temizliyoruz.
+    return () => clearInterval(intervalId);
   }, []);
 
   // Sabit gelirleri kontrol edip ekleyen useEffect.
@@ -242,6 +275,9 @@ export default function HomeScreen() {
           {/* Bu, ekranın en üstünde yer alan, estetik amaçlı, işlevsiz bir çubuktur. */}
           <View style={styles.topDecorationBar} />
 
+          {/* Canlı Kur Bilgilerini Gösteren Kayan Bant */}
+          <Ticker data={tickerData} />
+
           {/* Para Birimi Seçici */}
           <View style={styles.currencySelectorContainer}>
             {currencies.map((c) => (
@@ -262,8 +298,9 @@ export default function HomeScreen() {
               <ThemedText style={styles.summaryLabel}>Income</ThemedText>
               {rates && (
                   <ThemedText style={styles.summaryAmountIncome}>
+                    {/* Toplam gelir (TRY) / seçili para biriminin kuru */}
                     {displayCurrency.symbol}
-                    {(totalIncome * rates[displayCurrency.code]).toFixed(2)}
+                    {(totalIncome / (rates[displayCurrency.code] || 1)).toFixed(2)}
                   </ThemedText>
               )}
             </View>
@@ -271,8 +308,9 @@ export default function HomeScreen() {
               <ThemedText style={styles.summaryLabel}>Expenses</ThemedText>
               {rates && (
                   <ThemedText style={styles.summaryAmountExpense}>
+                    {/* Toplam gider (TRY) / seçili para biriminin kuru */}
                     {displayCurrency.symbol}
-                    {Math.abs(totalExpense * rates[displayCurrency.code]).toFixed(2)}
+                    {Math.abs(totalExpense / (rates[displayCurrency.code] || 1)).toFixed(2)}
                   </ThemedText>
               )}
             </View>
@@ -280,8 +318,9 @@ export default function HomeScreen() {
               <ThemedText style={styles.summaryLabel}>Balance</ThemedText>
               {rates && (
                   <ThemedText style={[styles.summaryAmountBalance, { color: balance >= 0 ? '#34c759' : '#ff3b30' }]}>
+                    {/* Bakiye (TRY) / seçili para biriminin kuru */}
                     {displayCurrency.symbol}
-                    {(balance * rates[displayCurrency.code]).toFixed(2)}
+                    {(balance / (rates[displayCurrency.code] || 1)).toFixed(2)}
                   </ThemedText>
               )}
             </View>
@@ -387,6 +426,7 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     flex: 1,
   },
   topDecorationBar: {
+    top:-5,  
     height: 5,
     backgroundColor: '#48484a', // Koyu gri, ince bir çizgi
     marginHorizontal: 120, // Ortalamak için sağdan ve soldan boşluk
@@ -585,7 +625,7 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
   fab: {
     // Floating Action Button
     position: 'absolute',
-    bottom: 30,
+    bottom: 90,
     right: 30,
     width: 60,
     height: 60,

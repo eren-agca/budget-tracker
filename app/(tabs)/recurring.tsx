@@ -105,7 +105,7 @@ export default function RecurringScreen() {
             {/* Ana sayfadakiyle aynı, estetik amaçlı çubuk. */}
             <View style={styles.topDecorationBar} />
 
-            <ThemedText type="title" style={styles.header}>Add Recurring Income</ThemedText>
+            <ThemedText type="title" style={styles.header}>Add Recurring Income </ThemedText>
 
             {/* Yeni Sabit Gelir Ekleme Formu */}
             <View style={styles.formContainer}>
@@ -183,8 +183,9 @@ export default function RecurringScreen() {
 
 // Bu ekran için stiller.
 const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
-    container: { flex: 1, paddingTop: 16 },
+    container: { flex: 1, paddingTop: 46 },
     topDecorationBar: {
+        top:-4,
         height: 5,
         backgroundColor: '#48484a', // Koyu gri, ince bir çizgi
         marginHorizontal: 120, // Ortalamak için sağdan ve soldan boşluk
@@ -192,19 +193,19 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
         borderRadius: 2.5,
     },
     header: { marginBottom: 16, marginTop: 16, paddingHorizontal: 16 },
-    formContainer: { padding: 16, backgroundColor: Colors[colorScheme].tint, borderRadius: 10, marginBottom: 24, marginHorizontal: 16 },
-    input: { backgroundColor: colorScheme === 'dark' ? '#2c2c2e' : '#f0f0f0', color: Colors[colorScheme].text, padding: 15, borderRadius: 10, marginBottom: 15, fontSize: 16 },
+    formContainer: { borderColor:'#CCCC49',borderWidth: 0,padding: 16, backgroundColor:'#2c2c2e', borderRadius: 10, marginBottom: 24, marginHorizontal: 16 },
+    input: { backgroundColor: colorScheme === 'dark' ? '#fff' : '#f0f0f0', color: colorScheme === 'dark' ? '#000' : Colors[colorScheme].text, padding: 15, borderRadius: 10, marginBottom: 15, fontSize: 16 },
     currencyContainer: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: colorScheme === 'dark' ? '#2c2c2e' : '#f0f0f0', borderRadius: 10, padding: 4, marginBottom: 15 },
     currencyButton: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
-    currencyButtonActive: { backgroundColor: '#0a7ea4' },
+    currencyButtonActive: { backgroundColor: '#CCCC49' },
     currencyButtonText: { fontWeight: 'bold', color: Colors[colorScheme].text },
     currencyButtonTextActive: {
         color: '#fff', // Aktif durumdaki metin rengi
     },
     addButton: { backgroundColor: '#34c759', padding: 15, borderRadius: 10, alignItems: 'center' },
     addButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
-    listItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: Colors[colorScheme].tint, borderRadius: 10, marginBottom: 12, marginHorizontal: 16 },
-    listItemText: { fontSize: 16, fontWeight: '600' },
+    listItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#2c2c2e', borderRadius: 10, marginBottom: 12, marginHorizontal: 16 },
+    listItemText: { fontSize: 16, fontWeight: '600' ,color:'white',},
     listItemSubText: { fontSize: 12, color: '#8e8e93', marginTop: 4 },
     listItemAmount: { fontSize: 16, fontWeight: 'bold', color: '#34c759', marginRight: 16 },
     rightContainer: { flexDirection: 'row', alignItems: 'center' },
