@@ -2,14 +2,13 @@
 
 // Bu dosya, kullanıcıların sabit (tekrarlayan) gelirlerini yönettiği ekranı içerir.
 
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, FlatList, Alert, TextInput, Pressable } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react'
+import { View, StyleSheet, FlatList, Alert, TextInput, Pressable, SafeAreaView } from 'react-native';
 import { collection, addDoc, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/firebaseConfig';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { useAuth } from '@/context/AuthContext';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { Ionicons } from '@expo/vector-icons';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
@@ -26,8 +25,8 @@ interface RecurringIncome {
 
 export default function RecurringScreen() {
     const { user } = useAuth();
-    const colorScheme = useColorScheme() ?? 'light';
-    const styles = getStyles(colorScheme);
+    // Stilleri sadece bir kez oluşturmak için useMemo kullanıyoruz.
+    const styles = useMemo(() => getStyles(), []);
 
     const [recurringIncomes, setRecurringIncomes] = useState<RecurringIncome[]>([]);
     const [amount, setAmount] = useState('');
@@ -100,13 +99,12 @@ export default function RecurringScreen() {
         }
     };
 
-    return (
-        <ThemedView style={styles.container}>
-            {/* Ana sayfadakiyle aynı, estetik amaçlı çubuk. */}
+    // Bu bileşen, FlatList'in başlığı olarak render edilecek.
+    // Formu ve diğer üst bileşenleri içerir.
+    const ListHeader = () => (
+        <>
             <View style={styles.topDecorationBar} />
-
-            <ThemedText type="title" style={styles.header}>Add Recurring Income </ThemedText>
-
+            <ThemedText type="title" style={styles.header}>Add Recurring Income</ThemedText>
             {/* Yeni Sabit Gelir Ekleme Formu */}
             <View style={styles.formContainer}>
                 <TextInput
@@ -149,11 +147,16 @@ export default function RecurringScreen() {
             </View>
 
             <ThemedText type="title" style={styles.header}>Saved Incomes</ThemedText>
+        </>
+    );
 
+    return (
+        <SafeAreaView style={[styles.container, { backgroundColor: Colors.background }]}>
             {/* Kaydedilmiş Sabit Gelirler Listesi */}
             <FlatList
                 data={recurringIncomes}
                 keyExtractor={(item) => item.id}
+                ListHeaderComponent={ListHeader}
                 renderItem={({ item }) => {
                     const itemCurrency = currencies.find(c => c.code === item.currency) || { symbol: item.currency };
                     return (
@@ -169,7 +172,7 @@ export default function RecurringScreen() {
                                     {itemCurrency.symbol}{item.amount}
                                 </ThemedText>
                                 <AnimatedPressable onPress={() => handleDelete(item.id)}>
-                                    <Ionicons name="trash-outline" size={22} color="#ff3b30" />
+                                    <Ionicons name="trash-outline" size={22} color={Colors.danger} />
                                 </AnimatedPressable>
                             </View>
                         </View>
@@ -177,37 +180,41 @@ export default function RecurringScreen() {
                 }}
                 ListEmptyComponent={<ThemedText style={styles.emptyText}>No recurring incomes saved.</ThemedText>}
             />
-        </ThemedView>
+        </SafeAreaView>
     );
 }
 
 // Bu ekran için stiller.
-const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
-    container: { flex: 1, paddingTop: 46 },
+const getStyles = () => StyleSheet.create({
+    container: { flex: 1 },
     topDecorationBar: {
-        top:-4,
+        top:-5,
         height: 5,
         backgroundColor: '#48484a', // Koyu gri, ince bir çizgi
         marginHorizontal: 120, // Ortalamak için sağdan ve soldan boşluk
-        marginTop: 8,
+        marginTop: 25,
         borderRadius: 2.5,
     },
-    header: { marginBottom: 16, marginTop: 16, paddingHorizontal: 16 },
-    formContainer: { borderColor:'#CCCC49',borderWidth: 0,padding: 16, backgroundColor:'#2c2c2e', borderRadius: 10, marginBottom: 24, marginHorizontal: 16 },
-    input: { backgroundColor: colorScheme === 'dark' ? '#fff' : '#f0f0f0', color: colorScheme === 'dark' ? '#000' : Colors[colorScheme].text, padding: 15, borderRadius: 10, marginBottom: 15, fontSize: 16 },
-    currencyContainer: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: colorScheme === 'dark' ? '#2c2c2e' : '#f0f0f0', borderRadius: 10, padding: 4, marginBottom: 15 },
+    header: {
+        paddingHorizontal: 16,
+        marginTop: 24,
+        marginBottom: 16,
+    },
+    formContainer: { padding: 16, backgroundColor: Colors.surface, borderRadius: 10, marginBottom: 24, marginHorizontal: 16 },
+    input: { backgroundColor: Colors.background, color: Colors.text, padding: 15, borderRadius: 10, marginBottom: 15, fontSize: 16 },
+    currencyContainer: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: Colors.surface, borderRadius: 10, padding: 4, marginBottom: 15 },
     currencyButton: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
-    currencyButtonActive: { backgroundColor: '#CCCC49' },
-    currencyButtonText: { fontWeight: 'bold', color: Colors[colorScheme].text },
+    currencyButtonActive: { backgroundColor: Colors.tint },
+    currencyButtonText: { fontWeight: 'bold', color: Colors.text },
     currencyButtonTextActive: {
         color: '#fff', // Aktif durumdaki metin rengi
     },
-    addButton: { backgroundColor: '#34c759', padding: 15, borderRadius: 10, alignItems: 'center' },
+    addButton: { backgroundColor: Colors.success, padding: 15, borderRadius: 10, alignItems: 'center' },
     addButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
-    listItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: '#2c2c2e', borderRadius: 10, marginBottom: 12, marginHorizontal: 16 },
-    listItemText: { fontSize: 16, fontWeight: '600' ,color:'white',},
+    listItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, backgroundColor: Colors.surface, borderRadius: 10, marginBottom: 12, marginHorizontal: 16 },
+    listItemText: { fontSize: 16, fontWeight: '600', color: Colors.text },
     listItemSubText: { fontSize: 12, color: '#8e8e93', marginTop: 4 },
-    listItemAmount: { fontSize: 16, fontWeight: 'bold', color: '#34c759', marginRight: 16 },
+    listItemAmount: { fontSize: 16, fontWeight: 'bold', color: Colors.success, marginRight: 16 },
     rightContainer: { flexDirection: 'row', alignItems: 'center' },
     emptyText: { textAlign: 'center', marginTop: 20, color: '#8e8e93' },
 });

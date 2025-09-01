@@ -2,15 +2,15 @@
 
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { View } from 'react-native';
 import 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
-import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/firebaseConfig'; // getAuth yerine doğrudan auth'u import ediyoruz.
 import { AuthProvider, useAuth } from '@/context/AuthContext';
-import { useColorScheme } from '@/hooks/useColorScheme';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -27,8 +27,11 @@ export default function RootLayout() {
 // 2. Ana navigasyon ve kimlik doğrulama mantığını ayrı bir bileşene taşıyoruz.
 // Bu bileşen artık AuthProvider'ın içinde olduğu için useAuth() kancasını güvenle kullanabilir.
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
-  const { setUser } = useAuth();
+  const { user, setUser } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+  const [authLoaded, setAuthLoaded] = useState(false);
+
   const [loaded] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
   });
@@ -36,34 +39,44 @@ function RootLayoutNav() {
   useEffect(() => {
     // Kullanıcının oturum durumundaki değişiklikleri dinle.
     const unsubscribe = onAuthStateChanged(auth, (authenticatedUser) => {
-      if (authenticatedUser) {
-        // Eğer bir kullanıcı varsa, global state'i güncelle.
-        setUser(authenticatedUser);
-      } else {
-        // Eğer kullanıcı yoksa (ilk açılış veya çıkış yapılmışsa), anonim olarak oturum aç.
-        signInAnonymously(auth);
-      }
+      setUser(authenticatedUser);
+      setAuthLoaded(true);
     });
 
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-
     return () => unsubscribe(); // Clean up subscription
-  }, [loaded]);
+  }, []);
 
-  if (!loaded) {
-    return null;
+  useEffect(() => {
+    if (!authLoaded || !loaded) return;
+
+    const isAuthRoute = segments[0] === 'login' || segments[0] === 'signup';
+
+    // Eğer kullanıcı e-posta ile giriş yapmışsa ve bir auth rotasındaysa, ana sayfaya yönlendir.
+    // Bu, anonim kullanıcının kayıt sayfasına erişmesine izin verir.
+    if (user && !user.isAnonymous && isAuthRoute) {
+      router.replace('/(tabs)');
+    }
+    // Eğer kullanıcı yoksa ve giriş/kayıt ekranında değilse, giriş ekranına yönlendir.
+    else if (!user && !isAuthRoute && segments[0] !== undefined) { // `undefined` check to prevent redirect on initial load
+      router.replace('/login');
+    }
+    SplashScreen.hideAsync();
+  }, [user, segments, authLoaded, loaded]);
+
+  if (!authLoaded || !loaded) {
+    return <View style={{ flex: 1, backgroundColor: '#121212' }} />;
   }
 
   return (
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <ThemeProvider value={DarkTheme}>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="signup" options={{ presentation: 'modal', title: 'Create Account' }} />
           <Stack.Screen name="add-transaction" options={{ presentation: 'modal', title: 'New Transaction' }} />
           <Stack.Screen name="+not-found" />
         </Stack>
-        <StatusBar style="auto" />
+        <StatusBar style="light" />
       </ThemeProvider>
   );
 }

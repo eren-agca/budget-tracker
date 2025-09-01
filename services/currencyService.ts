@@ -35,17 +35,26 @@ const getMetalRates = async (): Promise<ExchangeRates> => {
     if (!usdToTryRate) return {};
 
     // Adım 2: Metallerin USD cinsinden fiyatını al. Bu API, 1 USD'nin kaç ons metal ettiğini verir.
-    const metalResponse = await fetch('https://api.forexrateapi.com/v1/latest?base=USD&currencies=XAU,XAG');
+    // DÜZELTME: Daha güvenilir bir API'ye geçiyoruz. Bu API, 1 Ons Altın/Gümüş'ün kaç USD ettiğini doğrudan verir.
+    const metalResponse = await fetch('https://data-asg.goldprice.org/dbXRates/USD');
     const metalData = await metalResponse.json();
-    if (!metalData.rates || !metalData.rates.XAU || !metalData.rates.XAG) return {};
 
-    // Adım 3: Hesaplama yap. 1 Ons Altın/Gümüş'ün kaç USD ettiğini bul (tersini alarak) ve TRY'ye çevir.
-    const xauInUsd = 1 / metalData.rates.XAU;
-    const xagInUsd = 1 / metalData.rates.XAG;
+    // API'den gelen verinin yapısını kontrol et.
+    if (!metalData.items || !metalData.items[0] || !metalData.items[0].xauPrice || !metalData.items[0].xagPrice) {
+      console.warn('Metal API response format has changed or is invalid.');
+      return {};
+    }
+
+    const xauPricePerOunceInUsd = metalData.items[0].xauPrice;
+    const xagPricePerOunceInUsd = metalData.items[0].xagPrice;
+
+    // Adım 3: Ons fiyatını gram fiyatına çevir ve TRY karşılığını hesapla.
+    const OUNCE_TO_GRAM = 31.1035;
 
     return {
-      XAU: xauInUsd * usdToTryRate,
-      XAG: xagInUsd * usdToTryRate,
+      // 1 Gram Altın/Gümüş'ün TRY karşılığını hesapla.
+      XAU_GRAM: (xauPricePerOunceInUsd / OUNCE_TO_GRAM) * usdToTryRate,
+      XAG_GRAM: (xagPricePerOunceInUsd / OUNCE_TO_GRAM) * usdToTryRate,
     };
   } catch (error) {
     console.warn('Could not fetch metal rates:', error);

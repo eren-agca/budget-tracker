@@ -1,26 +1,21 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
- */
+// C:/Users/sdsof/OneDrive/Desktop/GitHub/budget-tracker/constants/Colors.ts
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+// Uygulama için kalıcı, neon yeşil vurgulu koyu tema.
+
+const neonGreen = '#39FF14';
 
 export const Colors = {
-  light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
-  },
-  dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
-  },
+  background: '#121212', // Çok koyu gri, saf siyahtan daha yumuşak
+  surface: '#1E1E1E',    // Kartlar ve yüzeyler için biraz daha açık bir gri
+  text: '#E0E0E0',       // Okunabilirlik için açık gri
+  icon: '#9E9E9E',       // İkonlar için orta ton gri
+
+  // Vurgu ve Eylem Renkleri
+  tint: neonGreen,
+  tabIconDefault: '#9E9E9E',
+  tabIconSelected: neonGreen,
+
+  // Anlamsal Renkler
+  success: '#4CAF50', // Başarı için standart bir yeşil
+  danger: '#F44336',  // Tehlike için standart bir kırmızı
 };

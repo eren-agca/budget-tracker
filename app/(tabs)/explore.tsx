@@ -17,7 +17,6 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { db } from '@/firebaseConfig';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/context/AuthContext';
 import { analyzeTransactionsWithGemini } from '@/services/geminiService';
 
@@ -43,8 +42,8 @@ interface PieChartData {
 
 export default function ExploreScreen() {
   const { user } = useAuth();
-  const colorScheme = useColorScheme() ?? 'light';
-  const styles = getStyles(colorScheme);
+  // Stilleri sadece bir kez oluşturmak için useMemo kullanıyoruz.
+  const styles = useMemo(() => getStyles(), []);
   // Veritabanından gelen işlemleri ve yüklenme durumunu tutan state'ler.
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,8 +84,9 @@ export default function ExploreScreen() {
 
   // Veritabanından gelen `transactions` değiştiğinde, pasta grafiğinin nihai verisini hesaplayan useMemo.
   const expenseChartData = useMemo((): PieChartData[] => {
-    // Kur oranları veya işlemler yüklenmediyse, boş bir dizi döndür.
-    if (!rates || transactions.length === 0) {
+    // GÜVENLİK: Hesaplama yapmadan önce `rates` objesinin ve gerekli kurun varlığından emin oluyoruz.
+    // Bu, asenkron verilerden kaynaklanan "race condition" hatalarını önler.
+    if (!rates || transactions.length === 0 || !rates[displayCurrency.code]) {
       return [];
     }
 
@@ -121,17 +121,17 @@ export default function ExploreScreen() {
       return {
         name: `${displayCurrency.symbol}${totalInDisplayCurrency.toFixed(0)} ${category}`,
         population: totalInDisplayCurrency,
-        color: colorPalette[index % colorPalette.length], // Renk paletini tekrarla
-        legendFontColor: Colors[colorScheme].text,
+        color: colorPalette[index % colorPalette.length],
+        legendFontColor: Colors.text,
         legendFontSize: 14,
       };
     });
-  }, [transactions, rates, displayCurrency, colorScheme]);
+  }, [transactions, rates, displayCurrency]);
 
   // Veritabanından gelen `transactions` değiştiğinde, gelir grafiğinin nihai verisini hesaplayan useMemo.
   const incomeChartData = useMemo((): PieChartData[] => {
-    // Kur oranları veya işlemler yüklenmediyse, boş bir dizi döndür.
-    if (!rates || transactions.length === 0) {
+    // GÜVENLİK: Hesaplama yapmadan önce `rates` objesinin ve gerekli kurun varlığından emin oluyoruz.
+    if (!rates || transactions.length === 0 || !rates[displayCurrency.code]) {
       return [];
     }
 
@@ -165,12 +165,12 @@ export default function ExploreScreen() {
       return {
         name: `${displayCurrency.symbol}${totalInDisplayCurrency.toFixed(0)} ${category}`,
         population: totalInDisplayCurrency,
-        color: colorPalette[index % colorPalette.length],
-        legendFontColor: Colors[colorScheme].text,
+        color: colorPalette[index % colorPalette.length], 
+        legendFontColor: Colors.text,
         legendFontSize: 14,
       };
     });
-  }, [transactions, rates, displayCurrency, colorScheme]);
+  }, [transactions, rates, displayCurrency]);
 
   // Yüklenme durumu bittiğinde ve veri mevcut olduğunda animasyonları tetikliyoruz.
   useEffect(() => {
@@ -194,8 +194,8 @@ export default function ExploreScreen() {
 
   // Grafik için yapılandırma ayarları.
   const chartConfig = {
-    backgroundGradientFrom: Colors[colorScheme].background,
-    backgroundGradientTo: Colors[colorScheme].background,
+    backgroundGradientFrom: Colors.background,
+    backgroundGradientTo: Colors.background,
     // Dilimlerin üzerindeki tüm etiketleri gizlemek için rengi şeffaf yapıyoruz.
     color: (opacity = 1) => `rgba(255, 255, 255, 0)`,
   };
@@ -212,13 +212,13 @@ export default function ExploreScreen() {
   // Yükleme sırasında gösterilecek placeholder bileşeni.
   const ChartPlaceholder = () => (
       <View style={styles.emptyContainer}>
-        <ActivityIndicator size="large" color={Colors[colorScheme].text} />
+        <ActivityIndicator size="large" color={Colors.text} />
       </View>
   );
 
   return (
       // Sayfayı tekrar kaydırılabilir yaparak grafiklere daha fazla alan tanıyoruz.
-      <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: Colors.background }]}>
         <ScrollView>
           {/* Ana sayfadakiyle aynı, estetik amaçlı çubuk. */}
           <View style={styles.topDecorationBar} />
@@ -330,7 +330,7 @@ export default function ExploreScreen() {
 
             {analysis && (
                 <View style={styles.analysisResultBox}>
-                  <ThemedText>{analysis}</ThemedText>
+                  <ThemedText style={styles.analysisResultText}>{analysis}</ThemedText>
                 </View>
             )}
           </View>
@@ -339,7 +339,7 @@ export default function ExploreScreen() {
   );
 }
 
-const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
+const getStyles = () => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -361,7 +361,7 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
         height: 5,
         backgroundColor: '#48484a', // Koyu gri, ince bir çizgi
         marginHorizontal: 120, // Ortalamak için sağdan ve soldan boşluk
-        marginTop: 8,
+        marginTop: 25,
         borderRadius: 2.5,
     },
   legendContainer: {
@@ -391,11 +391,11 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
   currencyButton: {
     paddingVertical: 6,
     paddingHorizontal: 20,
-    backgroundColor: '#2c2c2e',
+    backgroundColor: Colors.surface,
     borderRadius: 15,
   },
   currencyButtonActive: {
-    backgroundColor: '#0a7ea4',
+    backgroundColor: Colors.tint,
   },
   currencyButtonText: {
     color: '#fff',
@@ -421,7 +421,7 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     marginBottom: 48,
   },
   analysisButton: {
-    backgroundColor: '#5856d6', // Mor bir renk
+    backgroundColor: Colors.tint,
     padding: 16,
     borderRadius: 10,
     alignItems: 'center',
@@ -432,10 +432,13 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     fontWeight: 'bold',
   },
   analysisResultBox: {
-    color:'black',  
     marginTop: 16,
     padding: 16,
-    backgroundColor: Colors[colorScheme].tint,
+    backgroundColor: Colors.surface,
     borderRadius: 10,
+  },
+  analysisResultText: {
+    // Arka plan rengi (tint) ile yüksek kontrast sağlamak için metin rengini beyaz yapıyoruz.
+    color: '#fff',
   },
 });

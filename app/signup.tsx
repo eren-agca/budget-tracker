@@ -1,0 +1,130 @@
+// C:/Users/sdsof/OneDrive/Desktop/GitHub/budget-tracker/app/signup.tsx
+
+import React, { useState } from 'react';
+import { View, TextInput, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { ThemedView } from '@/components/ThemedView';
+import { ThemedText } from '@/components/ThemedText';
+import {
+    EmailAuthProvider,
+    linkWithCredential,
+    createUserWithEmailAndPassword,
+} from 'firebase/auth';
+import { doc, setDoc, Timestamp } from 'firebase/firestore';
+import { auth, db } from '@/firebaseConfig';
+import { useRouter } from 'expo-router';
+import { AnimatedPressable } from '@/components/AnimatedPressable';
+import { Colors } from '@/constants/Colors';
+
+export default function SignUpScreen() {
+    const router = useRouter();
+    const styles = getStyles();
+
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleSignUp = async () => {
+        if (!email || !password) {
+            Alert.alert('Error', 'Please fill in all fields.');
+            return;
+        }
+        setLoading(true);
+        try {
+            const currentUser = auth.currentUser;
+
+            // Case 1: An anonymous user is upgrading their account.
+            if (currentUser && currentUser.isAnonymous) {
+                const credential = EmailAuthProvider.credential(email, password);
+                // Link the anonymous account with the new email/password.
+                // This preserves the UID and all associated data.
+                await linkWithCredential(currentUser, credential);
+
+                // Since the user document might not exist yet, we create it here.
+                // setDoc is "upsert": it creates if not exists, or overwrites if it does.
+                // This is safe because we're just adding/updating metadata.
+                await setDoc(doc(db, 'users', currentUser.uid), {
+                    email: email, // Use the email from the form
+                    createdAt: Timestamp.now(),
+                }, { merge: true }); // merge: true prevents overwriting existing fields
+
+                Alert.alert('Success!', 'Your account has been upgraded and your data is saved.');
+            } else {
+                // Case 2: A new user is signing up from scratch.
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const newUser = userCredential.user;
+
+                // Create a corresponding user document in Firestore.
+                await setDoc(doc(db, 'users', newUser.uid), {
+                    email: newUser.email,
+                    createdAt: Timestamp.now(),
+                });
+                Alert.alert('Success!', 'Your account has been created.');
+            }
+
+            // After successful sign-up/linking, the onAuthStateChanged listener in _layout
+            // will handle the navigation to the main app.
+            // We just need to close the modal.
+            if (router.canGoBack()) {
+                router.back();
+            }
+
+        } catch (error: any) {
+            // Handle common Firebase auth errors
+            if (error.code === 'auth/email-already-in-use') {
+                Alert.alert('Sign Up Failed', 'This email address is already in use by another account.');
+            } else if (error.code === 'auth/weak-password') {
+                Alert.alert('Sign Up Failed', 'The password must be at least 6 characters long.');
+            } else {
+                Alert.alert('Sign Up Failed', error.message);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <ThemedView style={styles.container}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.content}
+            >
+                <ThemedText type="title" style={styles.title}>Create Account</ThemedText>
+                <ThemedText style={styles.subtitle}>Save your data and access it anywhere.</ThemedText>
+                <TextInput
+                    style={styles.input}
+                    placeholder="Email"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    placeholderTextColor="#8e8e93"
+                />
+                <TextInput
+                    style={styles.input}
+                    placeholder="Password (min. 6 characters)"
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    placeholderTextColor="#8e8e93"
+                />
+                <AnimatedPressable style={styles.button} onPress={handleSignUp} disabled={loading}>
+                    {loading ? (
+                        <ActivityIndicator color="#fff" />
+                    ) : (
+                        <ThemedText style={styles.buttonText}>Sign Up and Save Data</ThemedText>
+                    )}
+                </AnimatedPressable>
+            </KeyboardAvoidingView>
+        </ThemedView>
+    );
+}
+
+const getStyles = () => StyleSheet.create({
+    container: { flex: 1 },
+    content: { flex: 1, justifyContent: 'center', padding: 20 },
+    title: { fontSize: 32, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
+    subtitle: { fontSize: 16, textAlign: 'center', color: '#8e8e93', marginBottom: 40 },
+    input: { backgroundColor: Colors.surface, color: Colors.text, padding: 15, borderRadius: 10, marginBottom: 15, fontSize: 16 },
+    button: { backgroundColor: Colors.tint, padding: 18, borderRadius: 10, alignItems: 'center' },
+    buttonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+});

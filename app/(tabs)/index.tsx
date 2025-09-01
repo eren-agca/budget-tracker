@@ -1,10 +1,11 @@
 // C:/Users/sdsof/OneDrive/Desktop/GitHub/budget-tracker/app/(tabs)/index.tsx
 
 import { Ionicons } from '@expo/vector-icons';
-import { Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, getDocs, addDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Modal, SafeAreaView, ScrollView, StyleSheet, View, ListRenderItem } from 'react-native';
+import { Alert, FlatList, Modal, SafeAreaView, ScrollView, StyleSheet, View, ListRenderItem, Pressable } from 'react-native';
 
 // Kendi oluşturduğumuz tema bileşenlerini import ediyoruz.
 import { ThemedText } from '@/components/ThemedText';
@@ -16,8 +17,7 @@ import { dateFilters } from '@/constants/DateFilters';
 import { expenseCategories } from '@/constants/Categories';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { Colors } from '@/constants/Colors';
-import { db } from '@/firebaseConfig';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { db, auth } from '@/firebaseConfig';
 import { useAuth } from '@/context/AuthContext';
 
 // Veritabanından gelen işlem verileri için bir arayüz (interface) tanımlıyoruz.
@@ -69,15 +69,16 @@ const TransactionListItem = React.memo(({ item, onDelete, styles }: { item: Tran
           </View>
           <ThemedText style={item.amount > 0 ? styles.incomeText : styles.expenseText}>{itemCurrency.symbol}{item.amount.toFixed(2)}</ThemedText>
         </View>
-        <AnimatedPressable onPress={() => onDelete(item.id)} style={styles.deleteButton}><Ionicons name="trash-outline" size={22} color="#ff3b30" /></AnimatedPressable>
+        <AnimatedPressable onPress={() => onDelete(item.id)} style={styles.deleteButton}><Ionicons name="trash-outline" size={22} color={Colors.danger} /></AnimatedPressable>
       </View>
   );
 });
 
 export default function HomeScreen() {
   const { user } = useAuth();
-  const colorScheme = useColorScheme() ?? 'light';
-  const styles = getStyles(colorScheme);
+  const router = useRouter();
+  // OPTİMİZASYON: Stillerin her render'da yeniden oluşturulmasını önlemek için useMemo kullanıyoruz.
+  const styles = useMemo(() => getStyles(), []);
 
   // States
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -126,9 +127,7 @@ export default function HomeScreen() {
     if (!rates) return { totalIncome: 0, totalExpense: 0, balance: 0 };
     return transactions.reduce(
         (acc, curr) => {
-          // rates[curr.currency] bir birim yabancı paranın kaç TRY olduğunu tutar (örn: rates['USD'] = 32.5)
           const rate = rates[curr.currency] || 1;
-          // İşlem tutarını TRY'ye çevirmek için çarpmalıyız.
           const amountInTRY = curr.amount * rate;
           if (curr.type === 'income') {
             acc.totalIncome += amountInTRY;
@@ -142,41 +141,37 @@ export default function HomeScreen() {
     );
   }, [transactions, rates]);
 
-  // Kur oranlarını çekmek için useEffect.
+  // Kur oranlarını çekmek ve kayan bant verisini formatlamak için useEffect.
   useEffect(() => {
     const fetchRates = async () => {
-        const fetchedRates = await getExchangeRates();
-        setRates(fetchedRates);
+      const fetchedRates = await getExchangeRates();
+      setRates(fetchedRates);
 
-        // Kayan bant için veriyi formatla
-        if (fetchedRates) {
-            const tickerItems = [
-                { code: 'USD', name: 'Dolar' },
-                { code: 'EUR', name: 'Euro' },
-                { code: 'XAU', name: 'Altın (Ons)' },
-                { code: 'XAG', name: 'Gümüş (Ons)' },
-                { code: 'RUB', name: 'Ruble' },
-                { code: 'BTC', name: 'Bitcoin' },
-                { code: 'ETH', name: 'Ethereum' },
-                { code: 'XRP', name: 'XRP' },
-            ];
+      if (fetchedRates) {
+        const tickerItems = [
+          { code: 'USD', name: 'Dolar' },
+          { code: 'EUR', name: 'Euro' },
+          { code: 'XAU_GRAM', name: 'Altın/Gr' },
+          { code: 'XAG_GRAM', name: 'Gümüş/Gr' },
+          { code: 'RUB', name: 'Ruble' },
+          { code: 'BTC', name: 'Bitcoin' },
+          { code: 'ETH', name: 'Ethereum' },
+          { code: 'XRP', name: 'XRP' },
+        ];
 
-            const formattedTickerData = tickerItems
-                .filter(item => fetchedRates[item.code]) // Sadece kuru mevcut olanları göster
-                .map(item => {
-                    const rate = fetchedRates[item.code];
-                    // Sayıyı para birimi formatında (örn: 2.100.000,00 ₺) göster
-                    const formattedRate = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rate);
-                    return `${item.name}: ${formattedRate} ₺`;
-                });
-            setTickerData(formattedTickerData);
-        }
+        const formattedTickerData = tickerItems
+            .filter(item => fetchedRates[item.code]) // Sadece kuru mevcut olanları göster
+            .map(item => {
+              const rate = fetchedRates[item.code];
+              const formattedRate = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rate);
+              return `${item.name}: ${formattedRate} ₺`;
+            });
+        setTickerData(formattedTickerData);
+      }
     };
 
     fetchRates();
-    // Verileri her 1 dakikada bir yenilemek için bir interval kuruyoruz.
     const intervalId = setInterval(fetchRates, 60000);
-    // Component kaldırıldığında interval'ı temizliyoruz.
     return () => clearInterval(intervalId);
   }, []);
 
@@ -233,6 +228,16 @@ export default function HomeScreen() {
     return () => unsubscribe();
   }, [user]);
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      // Yönlendirme, ana layout (_layout.tsx) tarafından otomatik olarak yapılacak.
+    } catch (error) {
+      console.error('Error logging out: ', error);
+      Alert.alert('Error', 'Could not log out. Please try again.');
+    }
+  };
+
   // Bir işlemi silmek için kullanılan fonksiyon.
   const handleDeleteTransaction = useCallback(async (id: string) => {
     if (!user) return;
@@ -271,11 +276,9 @@ export default function HomeScreen() {
   return (
       // Ana içeriği ve modal'ı sarmalamak için bir View kullanıyoruz.
       <View style={{ flex: 1 }}>
-        <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background }]}>
-          {/* Bu, ekranın en üstünde yer alan, estetik amaçlı, işlevsiz bir çubuktur. */}
+        <SafeAreaView style={[styles.container, { backgroundColor: Colors.background, paddingTop: 10 }]}>
           <View style={styles.topDecorationBar} />
-
-          {/* Canlı Kur Bilgilerini Gösteren Kayan Bant */}
+          {/* Canlı Kur Bilgilerini Gösteren Kayan Bant - Arka planı Ticker.tsx içinde ayarlandı */}
           <Ticker data={tickerData} />
 
           {/* Para Birimi Seçici */}
@@ -298,7 +301,6 @@ export default function HomeScreen() {
               <ThemedText style={styles.summaryLabel}>Income</ThemedText>
               {rates && (
                   <ThemedText style={styles.summaryAmountIncome}>
-                    {/* Toplam gelir (TRY) / seçili para biriminin kuru */}
                     {displayCurrency.symbol}
                     {(totalIncome / (rates[displayCurrency.code] || 1)).toFixed(2)}
                   </ThemedText>
@@ -308,7 +310,6 @@ export default function HomeScreen() {
               <ThemedText style={styles.summaryLabel}>Expenses</ThemedText>
               {rates && (
                   <ThemedText style={styles.summaryAmountExpense}>
-                    {/* Toplam gider (TRY) / seçili para biriminin kuru */}
                     {displayCurrency.symbol}
                     {Math.abs(totalExpense / (rates[displayCurrency.code] || 1)).toFixed(2)}
                   </ThemedText>
@@ -317,8 +318,7 @@ export default function HomeScreen() {
             <View style={styles.summaryBox}>
               <ThemedText style={styles.summaryLabel}>Balance</ThemedText>
               {rates && (
-                  <ThemedText style={[styles.summaryAmountBalance, { color: balance >= 0 ? '#34c759' : '#ff3b30' }]}>
-                    {/* Bakiye (TRY) / seçili para biriminin kuru */}
+                  <ThemedText style={[styles.summaryAmountBalance, { color: balance >= 0 ? Colors.success : Colors.danger }]}>
                     {displayCurrency.symbol}
                     {(balance / (rates[displayCurrency.code] || 1)).toFixed(2)}
                   </ThemedText>
@@ -330,7 +330,7 @@ export default function HomeScreen() {
           <View style={styles.dropdownContainer}>
             <AnimatedPressable style={styles.dropdownButton} onPress={() => setDateModalVisible(true)}>
               <ThemedText style={styles.dropdownButtonText}>{selectedDateFilterLabel}</ThemedText>
-              <Ionicons name="chevron-down" size={20} color={Colors[colorScheme ?? 'light'].text} />
+              <Ionicons name="chevron-down" size={20} color={Colors.text} />
             </AnimatedPressable>
           </View>
 
@@ -359,30 +359,41 @@ export default function HomeScreen() {
             </ScrollView>
           </View>
 
-          <ThemedView style={styles.titleContainer}>
-            <ThemedText type="title">Recent Transactions</ThemedText>
-          </ThemedView>
+          <View style={styles.titleContainer}>
+            <ThemedText type="title" style={styles.sectionTitle}>Recent Transactions</ThemedText>
+          </View>
 
           {/* Gelir-Gider listesini göstermek için FlatList kullanıyoruz. */}
           <FlatList
-              // data prop'u olarak artık filtrelenmiş listeyi kullanıyoruz.
               data={filteredTransactions}
               keyExtractor={keyExtractor}
               renderItem={renderTransaction}
               windowSize={10} // Performans için ek ayarlar
               initialNumToRender={10}
-              // Eğer hiç işlem yoksa bu mesajı göster.
               ListEmptyComponent={
                 <ThemedText style={{ textAlign: 'center', marginTop: 20 }}>No transactions yet.</ThemedText>
               }
           />
 
           {/* Yeni işlem ekleme butonu. */}
-          <Link href="/add-transaction" asChild>
-            <AnimatedPressable style={styles.fab}>
-              <Ionicons name="add" size={32} color="white" />
-            </AnimatedPressable>
-          </Link>
+          <AnimatedPressable style={styles.fab} onPress={() => router.push('/add-transaction')}>
+            <Ionicons name="add" size={32} color="white" />
+          </AnimatedPressable>
+
+          {/* DÜZELTME: Giriş/Çıkış butonunu ekranın sol üst köşesine taşıyoruz. */}
+          <View style={styles.authButtonContainer}>
+            {user && (
+                user.isAnonymous ? (
+                  <AnimatedPressable onPress={() => router.push('/login')} style={styles.authButtonGreen} hitSlop={10}>
+                    <Ionicons name="log-in-outline" size={24} color="#fff" />
+                  </AnimatedPressable>
+                ) : (
+                  <AnimatedPressable onPress={handleLogout} style={styles.authButtonRed} hitSlop={10}>
+                    <Ionicons name="log-out-outline" size={24} color="#fff" />
+                  </AnimatedPressable>
+                )
+            )}
+          </View>
         </SafeAreaView>
 
         {/* Zaman Filtresi Seçeneklerini Gösteren Modal */}
@@ -393,7 +404,7 @@ export default function HomeScreen() {
             onRequestClose={() => setDateModalVisible(false)} // Android'de geri tuşuna basıldığında modal'ı kapatır.
         >
           <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor: colorScheme === 'dark' ? '#2c2c2e' : '#fff' }]}>
+            <View style={styles.modalContent}>
               <ThemedText type="subtitle" style={{ marginBottom: 20 }}>Select Time Range</ThemedText>
               {dateFilters.map((filter) => (
                   <AnimatedPressable
@@ -407,7 +418,7 @@ export default function HomeScreen() {
                     <ThemedText
                         style={[
                           styles.modalOptionText,
-                          selectedDateFilter === filter.key && styles.modalOptionTextActive
+                          selectedDateFilter === filter.key && styles.modalOptionTextActive,
                         ]}
                     >
                       {filter.label}
@@ -421,16 +432,16 @@ export default function HomeScreen() {
   );
 }
 
-const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
+const getStyles = () => StyleSheet.create({
   container: {
     flex: 1,
   },
   topDecorationBar: {
-    top:-5,  
+    top:-5,
     height: 5,
     backgroundColor: '#48484a', // Koyu gri, ince bir çizgi
     marginHorizontal: 120, // Ortalamak için sağdan ve soldan boşluk
-    marginTop: 8,
+    marginTop: 25,
     borderRadius: 2.5,
   },
   summaryContainer: {
@@ -438,9 +449,9 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     justifyContent: 'space-around',
     paddingVertical: 12,
     marginHorizontal: 16,
-    marginTop: 12, // Üstteki bar ile arasındaki boşluğu ayarlıyoruz
+    marginTop: 16,
     marginBottom: 16,
-    backgroundColor: '#2c2c2e',
+    backgroundColor: Colors.surface,
     borderRadius: 10,
   },
   summaryBox: {
@@ -453,13 +464,13 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
   summaryAmountIncome: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#34c759', // green
+    color: Colors.success,
     marginTop: 4,
   },
   summaryAmountExpense: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#ff3b30', // red
+    color: Colors.danger,
     marginTop: 4,
   },
   summaryAmountBalance: {
@@ -475,7 +486,7 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#2c2c2e',
+    backgroundColor: Colors.surface,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 10,
@@ -493,20 +504,19 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
   },
   modalContent: {
     width: '80%',
-    padding: 20,
+    padding: 24,
     borderRadius: 15,
+    backgroundColor: Colors.surface,
   },
   modalOption: {
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#48484a',
+    paddingVertical: 16,
   },
   modalOptionText: {
     fontSize: 18,
     textAlign: 'center',
   },
   modalOptionTextActive: {
-    color: '#0a7ea4',
+    color: Colors.tint,
     fontWeight: 'bold',
   },
   currencySelectorContainer: {
@@ -518,11 +528,13 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
   currencyButton: {
     paddingVertical: 6,
     paddingHorizontal: 20,
-    backgroundColor: '#2c2c2e',
+    backgroundColor: Colors.surface,
     borderRadius: 15,
   },
   currencyButtonActive: {
-    backgroundColor: '#0a7ea4',
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: Colors.tint,
   },
   currencyButtonText: {
     color: '#fff',
@@ -538,12 +550,14 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
   filterButton: {
     paddingVertical: 8,
     paddingHorizontal: 16,
-    backgroundColor: '#2c2c2e',
+    backgroundColor: Colors.surface,
     borderRadius: 20,
     marginRight: 10,
   },
   filterButtonActive: {
-    backgroundColor: '#0a7ea4',
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: Colors.tint,
   },
   filterButtonText: {
     color: '#fff',
@@ -553,20 +567,26 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     color: '#fff',
   },
   titleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 24, // Varsayılan başlık boyutunu (32) küçülttük.
   },
   transactionItem: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 16,
     marginBottom: 12,
-    backgroundColor: '#2c2c2e', // Koyu tema için liste elemanı rengi
+    backgroundColor: Colors.surface,
     borderRadius: 10,
-    overflow: 'hidden', // Kenar yuvarlaklığının iç elemanları da etkilemesini sağlar.
+    overflow: 'hidden',
   },
   dateContainer: {
-    backgroundColor: '#3a3a3c',
+    backgroundColor: Colors.background,
     paddingHorizontal: 12,
     alignSelf: 'stretch',
     justifyContent: 'center',
@@ -578,8 +598,8 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     textAlign: 'center',
     fontWeight: '600',
   },
-  transactionDetails: { // Açıklama ve miktar için yeni konteyner
-    flex: 1, // Mevcut alanın tamamını kapla
+  transactionDetails: {
+    flex: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -591,16 +611,16 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
   },
   transactionCategory: {
     fontSize: 14,
-    color: '#8e8e93', // Kategori için daha soluk bir renk
+    color: '#8e8e93',
     marginTop: 4,
   },
   assetInfoContainer: {
     marginTop: 6,
     paddingVertical: 4,
     paddingHorizontal: 8,
-    backgroundColor: '#48484a',
+    backgroundColor: Colors.background,
     borderRadius: 6,
-    alignSelf: 'flex-start', // Konteynerin metin kadar yer kaplamasını sağlar.
+    alignSelf: 'flex-start',
   },
   assetInfoText: {
     fontSize: 11,
@@ -609,30 +629,52 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
   },
   incomeText: {
     fontSize: 16,
-    color: '#34c759',
+    color: Colors.success,
     fontWeight: '600',
   },
   expenseText: {
     fontSize: 16,
-    color: '#ff3b30',
+    color: Colors.danger,
     fontWeight: '600',
   },
   deleteButton: {
-    padding: 16, // Butonun tıklama alanını genişletir
+    padding: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
   fab: {
-    // Floating Action Button
     position: 'absolute',
-    bottom: 90,
-    right: 30,
+    bottom: 25, // Butonu ekranın sağ üst köşesine taşıdık
+    right: 20,
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#0a7ea4',
+    backgroundColor: Colors.tint,
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 8,
+    zIndex: 10,
+  },
+  authButtonGreen: {
+    backgroundColor: Colors.success,
+    width: 40,
+    height: 40,
+    borderRadius: 20, // Dairesel yapmak için
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  authButtonRed: {
+    backgroundColor: Colors.danger,
+    width: 40,
+    height: 40,
+    borderRadius: 20, // Dairesel yapmak için
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  authButtonContainer: {
+    position: 'absolute',
+    top: 55,
+    left: 20,
+    zIndex: 10,
   },
 });

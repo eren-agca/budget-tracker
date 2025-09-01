@@ -22,14 +22,12 @@ import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { expenseCategories } from '@/constants/Categories';
 import { db } from '@/firebaseConfig';
 import { useAuth } from '@/context/AuthContext';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
 
 export default function AddTransactionScreen() {
     // Get the router from Expo Router to navigate back after saving.
     const router = useRouter();
     const { user } = useAuth(); // Mevcut kullanıcıyı alıyoruz.
-    const colorScheme = useColorScheme() ?? 'light';
 
     // States for the form fields.
     const [description, setDescription] = useState('');
@@ -44,7 +42,7 @@ export default function AddTransactionScreen() {
     const [loading, setLoading] = useState(false);
 
     // Adjusting colors for styles based on the theme.
-    const styles = getStyles(colorScheme);
+    const styles = getStyles();
 
     // Bu useEffect hook'u, 'type' state'i her değiştiğinde çalışır.
     // İşlem tipi değiştirildiğinde (örn: Gider'den Gelir'e geçildiğinde),
@@ -144,6 +142,14 @@ export default function AddTransactionScreen() {
         }
     };
 
+    // Güvenli renk erişimi için yardımcı fonksiyon
+    const getTextColor = (isActive: boolean = false) => {
+        if (isActive) {
+            return Colors.background; // Aktif butonun arka planı neon olacağı için, ikonun rengi kontrast yaratmalı.
+        }
+        return Colors.text; // Aktif değilse, standart metin rengi.
+    };
+
     return (
         <ThemedView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
@@ -222,17 +228,23 @@ export default function AddTransactionScreen() {
                             {expenseCategories.map((cat) => {
                                 // Uzun metinler için font boyutunu küçültmek amacıyla bir kontrol yapıyoruz.
                                 const isLongText = cat.label.length > 10;
+                                const isSelected = category === cat.label;
+
                                 return (
                                     <Pressable
                                         key={cat.key}
                                         onPress={() => setCategory(cat.label)}
-                                        style={[styles.categoryButton, category === cat.label && styles.categoryButtonActive]}>
-                                        <Ionicons name={cat.icon} size={22} color={category === cat.label ? '#fff' : Colors[colorScheme].text} />
+                                        style={[styles.categoryButton, isSelected && styles.categoryButtonActive]}>
+                                        <Ionicons
+                                            name={cat.icon}
+                                            size={22}
+                                            color={getTextColor(isSelected)}
+                                        />
                                         <ThemedText
                                             style={[
                                                 styles.categoryButtonText,
                                                 isLongText && styles.categoryButtonTextSmall, // Eğer metin uzunsa, küçük font stilini uygula
-                                                category === cat.label && styles.categoryButtonTextActive,
+                                                isSelected && styles.categoryButtonTextActive,
                                             ]}
                                             numberOfLines={1}>{cat.label}</ThemedText>
                                     </Pressable>
@@ -264,115 +276,114 @@ export default function AddTransactionScreen() {
 }
 
 // Temaya göre (açık/koyu mod) dinamik stil oluşturan fonksiyon
-const getStyles = (colorScheme: 'light' | 'dark') =>
-    StyleSheet.create({
-        container: {
-            flex: 1,
-        },
-        scrollContainer: {
-            padding: 20,
-        },
-        typeSelector: {
-            flexDirection: 'row',
-            justifyContent: 'space-around',
-            marginBottom: 20,
-            backgroundColor: colorScheme === 'dark' ? '#2c2c2e' : '#f0f0f0',
-            borderRadius: 10,
-            padding: 4,
-        },
-        typeButton: {
-            flex: 1,
-            paddingVertical: 12,
-            borderRadius: 8,
-            alignItems: 'center',
-        },
-        typeButtonActive: {
-            backgroundColor: '#0a7ea4',
-        },
-        typeButtonText: {
-            color: colorScheme === 'dark' ? '#fff' : '#000',
-            fontWeight: '600',
-        },
-        typeButtonTextActive: {
-            color: '#fff',
-        },
-        input: {
-            backgroundColor: colorScheme === 'dark' ? '#2c2c2e' : '#f0f0f0',
-            color: colorScheme === 'dark' ? '#fff' : '#000',
-            padding: 15,
-            borderRadius: 10,
-            marginBottom: 15,
-            fontSize: 16,
-        },
-        saveButton: {
-            backgroundColor: '#0a7ea4',
-            padding: 18,
-            borderRadius: 10,
-            alignItems: 'center',
-            marginTop: 10,
-        },
-        saveButtonText: {
-            color: 'white',
-            fontSize: 18,
-            fontWeight: 'bold',
-        },
-        label: {
-            marginBottom: 10,
-            fontSize: 16,
-            color: colorScheme === 'dark' ? '#aaa' : '#555',
-        },
-        currencyContainer: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            backgroundColor: colorScheme === 'dark' ? '#2c2c2e' : '#f0f0f0',
-            borderRadius: 10,
-            padding: 4,
-        },
-        currencyButton: {
-            flex: 1,
-            paddingVertical: 12,
-            borderRadius: 8,
-            alignItems: 'center',
-        },
-        currencyButtonActive: {
-            backgroundColor: '#0a7ea4',
-        },
-        currencyButtonText: {
-            fontWeight: 'bold',
-            color: colorScheme === 'dark' ? '#fff' : '#000',
-        },
-        currencyButtonTextActive: {
-            color: '#fff',
-        },
-        categoryContainer: {
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            justifyContent: 'flex-start',
-        },
-        categoryButton: {
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 12, // Dikey ve yatay padding'i tek seferde ayarlıyoruz
-            borderRadius: 10,
-            backgroundColor: colorScheme === 'dark' ? '#2c2c2e' : '#f0f0f0',
-            marginRight: 10, // Butonlar arası yatay boşluk
-            marginBottom: 10, // Butonlar arası dikey boşluk
-            width: 80, // Genişliği küçültüyoruz
-            height: 80, // Yüksekliği küçültüyoruz
-        },
-        categoryButtonActive: {
-            backgroundColor: '#0a7ea4',
-        },
-        categoryButtonText: {
-            marginTop: 6, // İkon ile metin arasındaki boşluğu azaltıyoruz
-            fontSize: 12,
-            fontWeight: '600',
-            color: colorScheme === 'dark' ? '#fff' : '#000',
-        },
-        categoryButtonTextActive: {
-            color: '#fff',
-        },
-        categoryButtonTextSmall: {
-            fontSize: 10, // Uzun metinler için daha küçük font boyutu
-        },
-    });
+const getStyles = () => StyleSheet.create({
+    container: {
+        flex: 1,
+    },
+    scrollContainer: {
+        padding: 20,
+    },
+    typeSelector: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginBottom: 20,
+        backgroundColor: Colors.surface,
+        borderRadius: 10,
+        padding: 4,
+    },
+    typeButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    typeButtonActive: {
+        backgroundColor: Colors.tint,
+    },
+    typeButtonText: {
+        color: Colors.text,
+        fontWeight: '600',
+    },
+    typeButtonTextActive: {
+        color: Colors.background, // Neon yeşil üzerinde koyu renk daha iyi okunur.
+    },
+    input: {
+        backgroundColor: Colors.surface,
+        color: Colors.text,
+        padding: 15,
+        borderRadius: 10,
+        marginBottom: 15,
+        fontSize: 16,
+    },
+    saveButton: {
+        backgroundColor: Colors.tint,
+        padding: 18,
+        borderRadius: 10,
+        alignItems: 'center',
+        marginTop: 10,
+    },
+    saveButtonText: {
+        color: 'white',
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    label: {
+        marginBottom: 10,
+        fontSize: 16,
+        color: Colors.icon,
+    },
+    currencyContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        backgroundColor: Colors.surface,
+        borderRadius: 10,
+        padding: 4,
+    },
+    currencyButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    currencyButtonActive: {
+        backgroundColor: Colors.tint,
+    },
+    currencyButtonText: {
+        fontWeight: 'bold',
+        color: Colors.text,
+    },
+    currencyButtonTextActive: {
+        color: '#fff',
+    },
+    categoryContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'flex-start',
+    },
+    categoryButton: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 12, // Dikey ve yatay padding'i tek seferde ayarlıyoruz
+        borderRadius: 10,
+        backgroundColor: Colors.surface,
+        marginRight: 10, // Butonlar arası yatay boşluk
+        marginBottom: 10, // Butonlar arası dikey boşluk
+        width: 80, // Genişliği küçültüyoruz
+        height: 80, // Yüksekliği küçültüyoruz
+    },
+    categoryButtonActive: {
+        backgroundColor: Colors.tint,
+    },
+    categoryButtonText: {
+        marginTop: 6, // İkon ile metin arasındaki boşluğu azaltıyoruz
+        fontSize: 12,
+        fontWeight: '600',
+        color: Colors.text,
+    },
+    categoryButtonTextActive: {
+        color: Colors.background, // Neon yeşil üzerinde koyu renk daha iyi okunur.
+    },
+    categoryButtonTextSmall: {
+        fontSize: 10, // Uzun metinler için daha küçük font boyutu
+    },
+});
