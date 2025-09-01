@@ -8,12 +8,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { HapticTab } from '@/components/HapticTab';
 import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
+import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function TabLayout() {
+    const colorScheme = useColorScheme() ?? 'light';
+
     return (
         <Tabs
             screenOptions={{
-                tabBarActiveTintColor: Colors.tint,
+                tabBarActiveTintColor: Colors[colorScheme].tint,
                 headerShown: false,
                 tabBarButton: HapticTab,
                 tabBarBackground: TabBarBackground,

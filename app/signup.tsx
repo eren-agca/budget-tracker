@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { View, TextInput, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import {
@@ -47,7 +48,11 @@ export default function SignUpScreen() {
                     createdAt: Timestamp.now(),
                 }, { merge: true }); // merge: true prevents overwriting existing fields
 
-                Alert.alert('Success!', 'Your account has been upgraded and your data is saved.');
+                Toast.show({
+                    type: 'success',
+                    text1: 'Account Upgraded!',
+                    text2: 'Your data is now saved to your new account.'
+                });
             } else {
                 // Case 2: A new user is signing up from scratch.
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -58,7 +63,11 @@ export default function SignUpScreen() {
                     email: newUser.email,
                     createdAt: Timestamp.now(),
                 });
-                Alert.alert('Success!', 'Your account has been created.');
+                Toast.show({
+                    type: 'success',
+                    text1: 'Welcome!',
+                    text2: 'Your account has been created successfully.'
+                });
             }
 
             // After successful sign-up/linking, the onAuthStateChanged listener in _layout
@@ -109,7 +118,7 @@ export default function SignUpScreen() {
                 />
                 <AnimatedPressable style={styles.button} onPress={handleSignUp} disabled={loading}>
                     {loading ? (
-                        <ActivityIndicator color="#fff" />
+                        <ActivityIndicator color={Colors.background} />
                     ) : (
                         <ThemedText style={styles.buttonText}>Sign Up and Save Data</ThemedText>
                     )}
@@ -126,5 +135,5 @@ const getStyles = () => StyleSheet.create({
     subtitle: { fontSize: 16, textAlign: 'center', color: '#8e8e93', marginBottom: 40 },
     input: { backgroundColor: Colors.surface, color: Colors.text, padding: 15, borderRadius: 10, marginBottom: 15, fontSize: 16 },
     button: { backgroundColor: Colors.tint, padding: 18, borderRadius: 10, alignItems: 'center' },
-    buttonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+    buttonText: { color: Colors.background, fontSize: 18, fontWeight: 'bold' },
 });

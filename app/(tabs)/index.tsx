@@ -18,6 +18,7 @@ import { expenseCategories } from '@/constants/Categories';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { Colors } from '@/constants/Colors';
 import { db, auth } from '@/firebaseConfig';
+import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/context/AuthContext';
 
 // Veritabanından gelen işlem verileri için bir arayüz (interface) tanımlıyoruz.
@@ -46,7 +47,7 @@ const TransactionListItem = React.memo(({ item, onDelete, styles }: { item: Tran
     const month = String(timestamp.getMonth() + 1).padStart(2, '0');
     const hours = String(timestamp.getHours()).padStart(2, '0');
     const minutes = String(timestamp.getMinutes()).padStart(2, '0');
-    return `${day}/${month}\n${hours}:${minutes}`;
+    return `${day}/${month} ${hours}:${minutes}`;
   };
 
   return (
@@ -77,8 +78,9 @@ const TransactionListItem = React.memo(({ item, onDelete, styles }: { item: Tran
 export default function HomeScreen() {
   const { user } = useAuth();
   const router = useRouter();
+  const colorScheme = useColorScheme() ?? 'light';
   // OPTİMİZASYON: Stillerin her render'da yeniden oluşturulmasını önlemek için useMemo kullanıyoruz.
-  const styles = useMemo(() => getStyles(), []);
+  const styles = useMemo(() => getStyles(colorScheme), [colorScheme]);
 
   // States
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -86,7 +88,9 @@ export default function HomeScreen() {
   const [rates, setRates] = useState<ExchangeRates | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('all');
-  const [tickerData, setTickerData] = useState<string[]>([]);
+  const [fiatMetalTickerData, setFiatMetalTickerData] = useState<string[]>([]);
+  const [cryptoTickerData, setCryptoTickerData] = useState<string[]>([]);
+  const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
   const [isDateModalVisible, setDateModalVisible] = useState(false);
 
   // Seçilen zaman filtresine göre işlemleri filtreleyen bir useMemo.
@@ -147,27 +151,36 @@ export default function HomeScreen() {
       const fetchedRates = await getExchangeRates();
       setRates(fetchedRates);
 
-      if (fetchedRates) {
-        const tickerItems = [
+      if (!fetchedRates) return;
+
+      const fiatMetalItems = [
           { code: 'USD', name: 'Dolar' },
           { code: 'EUR', name: 'Euro' },
+          { code: 'RUB', name: 'Ruble' },
           { code: 'XAU_GRAM', name: 'Altın/Gr' },
           { code: 'XAG_GRAM', name: 'Gümüş/Gr' },
-          { code: 'RUB', name: 'Ruble' },
+      ];
+
+      const cryptoItems = [
           { code: 'BTC', name: 'Bitcoin' },
           { code: 'ETH', name: 'Ethereum' },
           { code: 'XRP', name: 'XRP' },
-        ];
+      ];
 
-        const formattedTickerData = tickerItems
-            .filter(item => fetchedRates[item.code]) // Sadece kuru mevcut olanları göster
-            .map(item => {
-              const rate = fetchedRates[item.code];
-              const formattedRate = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(rate);
-              return `${item.name}: ${formattedRate} ₺`;
-            });
-        setTickerData(formattedTickerData);
+      const formatData = (items: {code: string, name: string}[]) => {
+        return items
+          .filter(item => fetchedRates[item.code]) // Sadece kuru mevcut olanları göster
+          .map(item => {
+            const rate = fetchedRates[item.code];
+            const isCrypto = ['BTC', 'ETH', 'XRP'].includes(item.code);
+            const options: Intl.NumberFormatOptions = { style: 'currency', currency: 'TRY', minimumFractionDigits: isCrypto ? 0 : 2, maximumFractionDigits: isCrypto ? 0 : 2 };
+            const formattedRate = new Intl.NumberFormat('tr-TR', options).format(rate);
+            return `${item.name}: ${formattedRate}`;
+          });
       }
+
+      setFiatMetalTickerData(formatData(fiatMetalItems));
+      setCryptoTickerData(formatData(cryptoItems));
     };
 
     fetchRates();
@@ -276,23 +289,42 @@ export default function HomeScreen() {
   return (
       // Ana içeriği ve modal'ı sarmalamak için bir View kullanıyoruz.
       <View style={{ flex: 1 }}>
-        <SafeAreaView style={[styles.container, { backgroundColor: Colors.background, paddingTop: 10 }]}>
-          <View style={styles.topDecorationBar} />
-          {/* Canlı Kur Bilgilerini Gösteren Kayan Bant - Arka planı Ticker.tsx içinde ayarlandı */}
-          <Ticker data={tickerData} />
+        <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background, paddingTop: 10 }]}>
+          <View style={styles.tickerContainer}>
+            <Ticker data={fiatMetalTickerData} />
+            <Ticker data={cryptoTickerData} />
+          </View>
 
-          {/* Para Birimi Seçici */}
-          <View style={styles.currencySelectorContainer}>
-            {currencies.map((c) => (
-                <AnimatedPressable
-                    key={c.code}
-                    onPress={() => setDisplayCurrency(c)}
-                    style={[styles.currencyButton, displayCurrency.code === c.code && styles.currencyButtonActive]}>
-                  <ThemedText style={[styles.currencyButtonText, displayCurrency.code === c.code && styles.currencyButtonTextActive]}>
-                    {c.code}
-                  </ThemedText>
-                </AnimatedPressable>
-            ))}
+          {/* YENİ HEADER: Para birimi seçici ve Auth butonunu içerir */}
+          <View style={styles.headerRow}>
+            {/* Para Birimi Seçici (Sola Yaslı) */}
+            <View style={styles.currencySelectorContainer}>
+              {currencies.map((c) => (
+                  <AnimatedPressable
+                      key={c.code}
+                      onPress={() => setDisplayCurrency(c)}
+                      style={[styles.currencyButton, displayCurrency.code === c.code && styles.currencyButtonActive]}>
+                    <ThemedText style={[styles.currencyButtonText, displayCurrency.code === c.code && styles.currencyButtonTextActive]}>
+                      {c.code}
+                    </ThemedText>
+                  </AnimatedPressable>
+              ))}
+            </View>
+
+            {/* Giriş/Çıkış Butonu (Sağa Yaslı) */}
+            <View>
+              {user && (
+                  user.isAnonymous ? (
+                    <AnimatedPressable onPress={() => router.push('/login')} style={styles.authButtonGreen} hitSlop={10}>
+                      <Ionicons name="log-in-outline" size={24} color="#fff" />
+                    </AnimatedPressable>
+                  ) : (
+                    <AnimatedPressable onPress={handleLogout} style={styles.authButtonRed} hitSlop={10}>
+                      <Ionicons name="log-out-outline" size={24} color="#fff" />
+                    </AnimatedPressable>
+                  )
+              )}
+            </View>
           </View>
 
           {/* Toplam Gelir, Gider ve Bakiye'yi gösteren özet barı */}
@@ -318,7 +350,7 @@ export default function HomeScreen() {
             <View style={styles.summaryBox}>
               <ThemedText style={styles.summaryLabel}>Balance</ThemedText>
               {rates && (
-                  <ThemedText style={[styles.summaryAmountBalance, { color: balance >= 0 ? Colors.success : Colors.danger }]}>
+                  <ThemedText style={[styles.summaryAmountBalance, { color: balance >= 0 ? '#34c759' : '#ff3b30' }]}>
                     {displayCurrency.symbol}
                     {(balance / (rates[displayCurrency.code] || 1)).toFixed(2)}
                   </ThemedText>
@@ -326,37 +358,23 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Zaman Filtresi Açılır Listesi */}
-          <View style={styles.dropdownContainer}>
-            <AnimatedPressable style={styles.dropdownButton} onPress={() => setDateModalVisible(true)}>
-              <ThemedText style={styles.dropdownButtonText}>{selectedDateFilterLabel}</ThemedText>
-              <Ionicons name="chevron-down" size={20} color={Colors.text} />
-            </AnimatedPressable>
-          </View>
+          {/* Filtreleme Bölümü */}
+          <View style={styles.filterSectionContainer}>
+            {/* Zaman Filtresi Açılır Listesi */}
+            <View style={styles.dropdownWrapper}>
+                <AnimatedPressable style={styles.dropdownButton} onPress={() => setDateModalVisible(true)}>
+                    <Ionicons name="calendar-outline" size={20} color={Colors[colorScheme].text} />
+                    <ThemedText style={styles.dropdownButtonText} numberOfLines={1}>{selectedDateFilterLabel}</ThemedText>
+                </AnimatedPressable>
+            </View>
 
-          {/* Kategori Filtreleme Barı */}
-          <View style={styles.filterContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {/* 'All' butonu filtresiz durumu temsil eder. */}
-              <AnimatedPressable
-                  onPress={() => setSelectedCategory(null)}
-                  style={[styles.filterButton, selectedCategory === null && styles.filterButtonActive]}>
-                <ThemedText style={[styles.filterButtonText, selectedCategory === null && styles.filterButtonTextActive]}>
-                  All
-                </ThemedText>
-              </AnimatedPressable>
-              {/* Diğer harcama kategorileri için butonlar. */}
-              {expenseCategories.map((cat) => (
-                  <AnimatedPressable
-                      key={cat.key}
-                      onPress={() => setSelectedCategory(cat.label)}
-                      style={[styles.filterButton, selectedCategory === cat.label && styles.filterButtonActive]}>
-                    <ThemedText style={[styles.filterButtonText, selectedCategory === cat.label && styles.filterButtonTextActive]}>
-                      {cat.label}
-                    </ThemedText>
-                  </AnimatedPressable>
-              ))}
-            </ScrollView>
+            {/* Kategori Filtresi Açılır Listesi */}
+            <View style={styles.dropdownWrapper}>
+                <AnimatedPressable style={styles.dropdownButton} onPress={() => setCategoryModalVisible(true)}>
+                    <Ionicons name="pricetag-outline" size={20} color={Colors[colorScheme].text} />
+                    <ThemedText style={styles.dropdownButtonText} numberOfLines={1}>{selectedCategory || 'All Categories'}</ThemedText>
+                </AnimatedPressable>
+            </View>
           </View>
 
           <View style={styles.titleContainer}>
@@ -379,21 +397,6 @@ export default function HomeScreen() {
           <AnimatedPressable style={styles.fab} onPress={() => router.push('/add-transaction')}>
             <Ionicons name="add" size={32} color="white" />
           </AnimatedPressable>
-
-          {/* DÜZELTME: Giriş/Çıkış butonunu ekranın sol üst köşesine taşıyoruz. */}
-          <View style={styles.authButtonContainer}>
-            {user && (
-                user.isAnonymous ? (
-                  <AnimatedPressable onPress={() => router.push('/login')} style={styles.authButtonGreen} hitSlop={10}>
-                    <Ionicons name="log-in-outline" size={24} color="#fff" />
-                  </AnimatedPressable>
-                ) : (
-                  <AnimatedPressable onPress={handleLogout} style={styles.authButtonRed} hitSlop={10}>
-                    <Ionicons name="log-out-outline" size={24} color="#fff" />
-                  </AnimatedPressable>
-                )
-            )}
-          </View>
         </SafeAreaView>
 
         {/* Zaman Filtresi Seçeneklerini Gösteren Modal */}
@@ -404,7 +407,7 @@ export default function HomeScreen() {
             onRequestClose={() => setDateModalVisible(false)} // Android'de geri tuşuna basıldığında modal'ı kapatır.
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+            <View style={[styles.modalContent, { backgroundColor: Colors[colorScheme].surface }]}>
               <ThemedText type="subtitle" style={{ marginBottom: 20 }}>Select Time Range</ThemedText>
               {dateFilters.map((filter) => (
                   <AnimatedPressable
@@ -418,7 +421,7 @@ export default function HomeScreen() {
                     <ThemedText
                         style={[
                           styles.modalOptionText,
-                          selectedDateFilter === filter.key && styles.modalOptionTextActive,
+                          selectedDateFilter === filter.key && styles.modalOptionTextActive
                         ]}
                     >
                       {filter.label}
@@ -428,13 +431,65 @@ export default function HomeScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* Kategori Filtresi Seçeneklerini Gösteren Modal */}
+        <Modal
+            transparent={true}
+            visible={isCategoryModalVisible}
+            animationType="fade"
+            onRequestClose={() => setCategoryModalVisible(false)}
+        >
+            <View style={styles.modalOverlay}>
+                <View style={[styles.modalContent, { backgroundColor: Colors[colorScheme].surface }]}>
+                    <ThemedText type="subtitle" style={{ marginBottom: 10 }}>Select Category</ThemedText>
+                    <ScrollView>
+                        {/* All Categories option */}
+                        <AnimatedPressable
+                            style={styles.categoryModalItem}
+                            onPress={() => {
+                                setSelectedCategory(null);
+                                setCategoryModalVisible(false);
+                            }}
+                        >
+                            <Ionicons name="apps-outline" size={24} color={Colors[colorScheme].text} />
+                            <ThemedText style={styles.categoryModalText}>All Categories</ThemedText>
+                        </AnimatedPressable>
+                        {/* Expense Categories */}
+                        {expenseCategories.map((cat) => (
+                            <AnimatedPressable
+                                key={cat.key}
+                                style={styles.categoryModalItem}
+                                onPress={() => {
+                                    setSelectedCategory(cat.label);
+                                    setCategoryModalVisible(false);
+                                }}
+                            >
+                                <Ionicons name={cat.icon} size={24} color={Colors[colorScheme].text} />
+                                <ThemedText style={styles.categoryModalText}>{cat.label}</ThemedText>
+                            </AnimatedPressable>
+                        ))}
+                    </ScrollView>
+                </View>
+            </View>
+        </Modal>
       </View>
   );
 }
 
-const getStyles = () => StyleSheet.create({
+const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
   container: {
     flex: 1,
+  },
+  tickerContainer: {
+    gap: 4,         // İki bant arasına boşluk ekler.
+    marginBottom: 5, // Bantlar ile altındaki header arasında boşluk bırakır.
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
   },
   topDecorationBar: {
     top:-5,
@@ -451,7 +506,7 @@ const getStyles = () => StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 16,
     marginBottom: 16,
-    backgroundColor: Colors.surface,
+    backgroundColor: '#2c2c2e',
     borderRadius: 10,
   },
   summaryBox: {
@@ -464,13 +519,13 @@ const getStyles = () => StyleSheet.create({
   summaryAmountIncome: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.success,
+    color: '#34c759',
     marginTop: 4,
   },
   summaryAmountExpense: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.danger,
+    color: '#ff3b30',
     marginTop: 4,
   },
   summaryAmountBalance: {
@@ -478,23 +533,29 @@ const getStyles = () => StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 4,
   },
-  dropdownContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  filterSectionContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  dropdownWrapper: {
+    flex: 1,
   },
   dropdownButton: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    backgroundColor: '#2c2c2e',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 10,
+    gap: 8,
   },
   dropdownButtonText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 16,
+    fontSize: 14,
+    flexShrink: 1, // Metnin gerektiğinde küçülmesine izin ver
   },
   modalOverlay: {
     flex: 1,
@@ -506,7 +567,7 @@ const getStyles = () => StyleSheet.create({
     width: '80%',
     padding: 24,
     borderRadius: 15,
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors[colorScheme].surface,
   },
   modalOption: {
     paddingVertical: 16,
@@ -516,54 +577,38 @@ const getStyles = () => StyleSheet.create({
     textAlign: 'center',
   },
   modalOptionTextActive: {
-    color: Colors.tint,
+    color: Colors[colorScheme].tint,
     fontWeight: 'bold',
+  },
+  categoryModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  categoryModalText: {
+    fontSize: 18,
+    marginLeft: 15,
   },
   currencySelectorContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    gap: 12,
+    gap: 8,
   },
   currencyButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 20,
-    backgroundColor: Colors.surface,
-    borderRadius: 15,
+    paddingVertical: 5,
+    paddingHorizontal: 16,
+    backgroundColor: '#2c2c2e',
+    borderRadius: 12,
   },
   currencyButtonActive: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: Colors.tint,
+    borderColor: '#39FF14',
   },
   currencyButtonText: {
     color: '#fff',
     fontWeight: 'bold',
   },
   currencyButtonTextActive: {
-    color: '#fff',
-  },
-  filterContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  filterButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: Colors.surface,
-    borderRadius: 20,
-    marginRight: 10,
-  },
-  filterButtonActive: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: Colors.tint,
-  },
-  filterButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  filterButtonTextActive: {
     color: '#fff',
   },
   titleContainer: {
@@ -581,7 +626,7 @@ const getStyles = () => StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 16,
     marginBottom: 12,
-    backgroundColor: Colors.surface,
+    backgroundColor: '#2c2c2e',
     borderRadius: 10,
     overflow: 'hidden',
   },
@@ -629,12 +674,12 @@ const getStyles = () => StyleSheet.create({
   },
   incomeText: {
     fontSize: 16,
-    color: Colors.success,
+    color: '#34c759',
     fontWeight: '600',
   },
   expenseText: {
     fontSize: 16,
-    color: Colors.danger,
+    color: '#ff3b30',
     fontWeight: '600',
   },
   deleteButton: {
@@ -649,7 +694,7 @@ const getStyles = () => StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: Colors.tint,
+    backgroundColor: '#39FF14',
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 8,
@@ -670,11 +715,5 @@ const getStyles = () => StyleSheet.create({
     borderRadius: 20, // Dairesel yapmak için
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  authButtonContainer: {
-    position: 'absolute',
-    top: 55,
-    left: 20,
-    zIndex: 10,
   },
 });

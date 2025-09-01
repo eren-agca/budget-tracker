@@ -5,15 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
-import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    Pressable,
-    StyleSheet,
-    TextInput,
-    View,
-} from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import Toast from 'react-native-toast-message';
 
 // Importing our custom theme and Firebase components.
 import { ThemedText } from '@/components/ThemedText';
@@ -112,7 +105,11 @@ export default function AddTransactionScreen() {
             await addDoc(collection(db, 'users', user.uid, 'transactions'), transactionData);
 
             // If successful, inform the user and go back to the main screen (by closing the modal).
-            Alert.alert('Success', 'Transaction saved successfully.');
+            Toast.show({
+                type: 'success',
+                text1: 'Success',
+                text2: 'Transaction saved successfully.'
+            });
             router.back();
         } catch (error) {
             // If an error occurs, log it to the console and inform the user.

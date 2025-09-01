@@ -1,3 +1,5 @@
+// C:/Users/sdsof/OneDrive/Desktop/GitHub/budget-tracker/components/Ticker.tsx
+
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Dimensions, LayoutChangeEvent } from 'react-native';
 import Animated, {
@@ -7,7 +9,6 @@ import Animated, {
   withTiming,
   Easing,
   cancelAnimation,
-  interpolate,
   runOnJS,
 } from 'react-native-reanimated';
 import { ThemedText } from './ThemedText';
@@ -20,90 +21,94 @@ interface TickerProps {
 }
 
 export const Ticker: React.FC<TickerProps> = ({ data }) => {
-  const textContainerWidth = useSharedValue(0);
-  const translateX = useSharedValue(0);
+  const translateX = useSharedValue(SCREEN_WIDTH);
+  const textWidth = useSharedValue(0);
 
   // Verileri aralarında ayıraç olacak şekilde birleştiriyoruz.
-  const text = data.join('      •      ');
+  const textContent = data.join('      •      ');
 
   const animatedStyle = useAnimatedStyle(() => {
-    const moveAmount = textContainerWidth.value;
-    if (moveAmount === 0) {
-      return {}; // Genişlik ölçülene kadar animasyon yapma
-    }
     return {
-      // translateX'i 0'dan 1'e anime ediyoruz ve bunu 0'dan -moveAmount'a çeviriyoruz.
-      transform: [{ translateX: interpolate(translateX.value, [0, 1], [0, -moveAmount]) }],
+      transform: [{ translateX: translateX.value }],
     };
   });
 
   const startAnimation = (width: number) => {
-    // Sabit bir kayma hızı için süreyi dinamik olarak hesapla.
-    // Hız = 40 piksel/saniye
-    const speed = 40;
-    const duration = (width / speed) * 1000;
+    // Metnin kat etmesi gereken toplam mesafe (kendi genişliği + ekran genişliği)
+    const totalDistance = width + SCREEN_WIDTH;
+    const speed = 40; // saniyedeki piksel hızı
+    const duration = (totalDistance / speed) * 1000;
 
-    // Animasyonu başlatmadan önce mevcut olanı durdur ve sıfırla.
+    // Animasyonu başlatmadan önce mevcut olanı durdur.
     cancelAnimation(translateX);
-    translateX.value = 0;
-    // Animasyonu sonsuz döngüde başlat
+
+    // Animasyonu her zaman ekranın sağından başlat.
+    translateX.value = SCREEN_WIDTH;
+
+    // Animasyonu sonsuz döngüde çalıştır.
+    // Metin tamamen soldan çıktığında (-width), tekrar sağdan başlar (SCREEN_WIDTH).
     translateX.value = withRepeat(
-      withTiming(1, { duration, easing: Easing.linear }),
-      -1 // sonsuz döngü
+        withTiming(-width, { duration, easing: Easing.linear }),
+        -1, // sonsuz döngü
+        false // başa dön, tersine çevirme
     );
   };
 
   const handleOnLayout = (event: LayoutChangeEvent) => {
     const measuredWidth = event.nativeEvent.layout.width;
-    if (measuredWidth > 0 && textContainerWidth.value === 0) {
-      textContainerWidth.value = measuredWidth;
-      // Reanimated UI thread'inden JS thread'ine güvenli geçiş için runOnJS kullanıyoruz.
+    // Genişliği sadece bir kez, ilk ölçümde ayarla.
+    if (measuredWidth > 0 && textWidth.value === 0) {
+      textWidth.value = measuredWidth;
+      // Reanimated UI thread'inden JS thread'ine güvenli geçiş.
       runOnJS(startAnimation)(measuredWidth);
     }
   };
 
+  // Veri değiştiğinde (API'den yeni veri geldiğinde) animasyonu yeniden başlat.
+  useEffect(() => {
+    textWidth.value = 0;
+    translateX.value = SCREEN_WIDTH;
+    // onLayout yeniden tetiklenerek animasyonu doğru genişlikle başlatacak.
+  }, [textContent]);
+
   if (!data || data.length === 0) {
     return (
-      <View style={styles.container}>
-        <ThemedText style={styles.text}>Loading rates...</ThemedText>
-      </View>
+        <View style={styles.container}>
+          <ThemedText style={styles.text}>Loading rates...</ThemedText>
+        </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Animated.View style={[styles.row, animatedStyle]}>
-        {/* Metni iki kez render ederek kesintisiz bir döngü sağlıyoruz. */}
-        {/* onLayout sadece ilk metinde, çünkü ikisi de aynı genişlikte olacak. */}
-        <ThemedText onLayout={handleOnLayout} style={styles.text} numberOfLines={1}>
-          {text}
-        </ThemedText>
-        {/* İkinci metin, birincisi ekran dışına çıkarken boşluğu doldurur. */}
-        <ThemedText style={styles.text} numberOfLines={1}>
-          {text}
-        </ThemedText>
-      </Animated.View>
-    </View>
+      <View style={styles.container}>
+        <Animated.View style={[styles.textContainer, animatedStyle]}>
+          {/* Artık sadece tek bir ThemedText kullanıyoruz. */}
+          {/* DÜZELTME: onLayout'u, genişliğini ölçmek istediğimiz asıl elemana, yani ThemedText'e taşıyoruz. */}
+          <ThemedText onLayout={handleOnLayout} style={styles.text}>
+            {textContent}
+          </ThemedText>
+        </Animated.View>
+      </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    height: 30,
+    height: 26, // Bantların yüksekliğini azalttık
     backgroundColor: Colors.surface,
     justifyContent: 'center',
-    overflow: 'hidden', // Bu, taşan metnin görünmemesini sağlar.
+    overflow: 'hidden', // Bu, ekran dışına taşan metnin görünmemesini sağlar.
   },
-  row: {
-    // Metinlerin yan yana durmasını sağlar.
-    flexDirection: 'row',
-    // ANAHTAR DÜZELTME: Pozisyonunu serbestçe animate edebilmek için.
+  textContainer: {
+    // Metnin serbestçe hareket edebilmesi için mutlak konumlandırma.
     position: 'absolute',
+    // Bu, View'in içindeki Text'in genişlemesine ve tek satırda kalmasına yardımcı olur.
+    flexDirection: 'row',
   },
   text: {
     fontSize: 14,
     fontWeight: '600',
     color: '#fff',
-    paddingHorizontal: 25, // Metinler arası boşluğu artırıyoruz.
+    // Metnin kendi doğal genişliğini almasına izin veriyoruz.
   },
 });
