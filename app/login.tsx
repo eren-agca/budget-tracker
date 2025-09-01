@@ -9,8 +9,8 @@ import {
     signInWithEmailAndPassword,
     signInAnonymously,
 } from 'firebase/auth';
-import { auth } from '@/firebaseConfig';
-import { Link } from 'expo-router';
+import { auth } from '@/firebaseConfig'; 
+import { Link, useRouter } from 'expo-router';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
@@ -18,6 +18,7 @@ import { useMemo } from 'react';
 
 export default function LoginScreen() {
     const { user } = useAuth(); // Mevcut kullanıcı durumunu alıyoruz.
+    const router = useRouter();
     const styles = useMemo(() => getStyles(), []);
 
     const [email, setEmail] = useState('');
@@ -58,7 +59,8 @@ export default function LoginScreen() {
         setLoading(true);
         try {
             await signInAnonymously(auth);
-            // Yönlendirme, ana layout tarafından otomatik olarak yapılacak.
+            // Başarılı anonim girişten sonra kullanıcıyı manuel olarak ana ekrana yönlendiriyoruz.
+            router.replace('/(tabs)');
         } catch (error: any) {
             Toast.show({
                 type: 'error',

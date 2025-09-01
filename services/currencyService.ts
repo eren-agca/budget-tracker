@@ -8,112 +8,186 @@ export interface ExchangeRates {
 
 // 1. Döviz Kurlarını Çeken Fonksiyon (USD, EUR, RUB)
 const getFiatRates = async (): Promise<ExchangeRates> => {
-  // Birincil API: frankfurter.app (Hızlı ve güvenilir)
+  let rates: ExchangeRates = {};
   try {
-    const response = await fetch('https://api.frankfurter.app/latest?from=TRY&to=USD,EUR,RUB');
+    // Daha sağlam bir yaklaşım: USD'yi temel alıp çapraz kur hesapla.
+    const response = await fetch('https://api.frankfurter.app/latest?from=USD&to=TRY,EUR,RUB');
     if (!response.ok) throw new Error('Frankfurter API request failed');
     const data = await response.json();
-    if (!data.rates) throw new Error('Invalid data from Frankfurter API');
+    if (!data.rates || !data.rates.TRY) throw new Error('Invalid data from Frankfurter API');
 
-    // API, 1 TRY'nin diğer para birimlerindeki değerini verir. Biz tersini alıyoruz.
-    const invertedRates: ExchangeRates = {};
-    for (const key in data.rates) {
-      invertedRates[key] = 1 / data.rates[key];
+    const usdToTry = data.rates.TRY;
+    const usdToEur = data.rates.EUR;
+    const usdToRub = data.rates.RUB;
+
+    rates.USD = usdToTry;
+    if (usdToEur) {
+        // EUR/TRY = (USD/TRY) / (USD/EUR)
+        rates['EUR'] = usdToTry / usdToEur;
     }
-    return invertedRates;
+    if (usdToRub) {
+        // RUB/TRY = (USD/TRY) / (USD/RUB)
+        rates['RUB'] = usdToTry / usdToRub;
+    }
   } catch (error) {
     console.warn('Primary Fiat API (Frankfurter) failed:', error, 'Trying fallback...');
-    // Yedek API: open.er-api.com (Eğer birincil API çalışmazsa devreye girer)
+    // Yedek API: open.er-api.com
     try {
-      const response = await fetch('https://open.er-api.com/v6/latest/TRY');
+      // Bu API zaten USD tabanlıdır.
+      const response = await fetch('https://open.er-api.com/v6/latest/USD');
       if (!response.ok) throw new Error('Fallback Fiat API request failed');
       const data = await response.json();
-      if (!data.rates) throw new Error('Invalid data from Fallback Fiat API');
+      if (!data.rates || !data.rates.TRY) throw new Error('Invalid data from Fallback Fiat API');
 
-      const rates: ExchangeRates = {};
-      if (data.rates.USD) rates['USD'] = 1 / data.rates.USD;
-      if (data.rates.EUR) rates['EUR'] = 1 / data.rates.EUR;
-      if (data.rates.RUB) rates['RUB'] = 1 / data.rates.RUB;
-      return rates;
+      const usdToTry = data.rates.TRY;
+      const usdToEur = data.rates.EUR;
+      const usdToRub = data.rates.RUB;
+
+      // Sadece henüz alınmamış verileri ekle
+      if (!rates.USD) rates.USD = usdToTry;
+      if (usdToEur) { rates['EUR'] = usdToTry / usdToEur; }
+      if (usdToRub) { rates['RUB'] = usdToTry / usdToRub; }
     } catch (fallbackError) {
-      console.error('Could not fetch fiat rates from any source:', fallbackError);
-      return {};
+      console.error('Could not fetch main fiat rates from primary/secondary source:', fallbackError);
     }
   }
+
+  // RUBLE İÇİN ÖZEL YEDEK API
+  // Eğer önceki API'lerden Ruble kuru alınamadıysa, üçüncü bir API'yi dene.
+  if (!rates.RUB) {
+    try {
+      console.log('Fetching RUB from a dedicated fallback API...');
+      // Bu API, 1 RUB'nin diğer para birimlerindeki karşılığını verir.
+      const rubResponse = await fetch('https://open.er-api.com/v6/latest/RUB');
+      if (!rubResponse.ok) throw new Error('RUB Fallback API request failed');
+      const rubData = await rubResponse.json();
+      if (rubData.rates && rubData.rates.TRY) {
+        rates['RUB'] = rubData.rates.TRY;
+      }
+    } catch (rubError) {
+      console.warn('Dedicated RUB fallback API failed:', rubError);
+    }
+  }
+
+  return rates;
 };
 
 // 2. Değerli Metal Kurlarını Çeken Fonksiyon (Altın, Gümüş)
-const getMetalRates = async (): Promise<ExchangeRates> => {
+// DEĞİŞİKLİK: Bu fonksiyon artık gereksiz API çağrılarını önlemek için USD/TRY kurunu parametre olarak alıyor.
+const getMetalRates = async (usdToTryRate: number): Promise<ExchangeRates> => {
   try {
-    // Adım 1: Güvenilir bir kaynaktan USD/TRY kurunu al.
-    let usdToTryRate: number | null = null;
-    try {
-      const primaryResponse = await fetch('https://api.frankfurter.app/latest?from=USD&to=TRY');
-      if (!primaryResponse.ok) throw new Error('Primary USD/TRY fetch failed');
-      const primaryData = await primaryResponse.json();
-      usdToTryRate = primaryData.rates?.TRY;
-    } catch (error) {
-      console.warn('Primary USD/TRY fetch failed, trying fallback...');
-      const fallbackResponse = await fetch('https://open.er-api.com/v6/latest/USD');
-      if (!fallbackResponse.ok) throw new Error('Fallback USD/TRY fetch failed');
-      const fallbackData = await fallbackResponse.json();
-      usdToTryRate = fallbackData.rates?.TRY;
-    }
-
+    // Adım 1: USD/TRY kurunun sağlandığından emin ol.
     if (!usdToTryRate) {
-      throw new Error('Could not fetch USD/TRY rate from any source.');
+      throw new Error('USD/TRY rate was not provided to getMetalRates.');
     }
 
     // Adım 2: Metallerin USD cinsinden fiyatını al.
     const metalResponse = await fetch('https://data-asg.goldprice.org/dbXRates/USD');
+    if (!metalResponse.ok) throw new Error('Metal API request failed');
     const metalData = await metalResponse.json();
 
-    if (!metalData.items || !metalData.items[0] || !metalData.items[0].xauPrice || !metalData.items[0].xagPrice) {
-      console.warn('Metal API response format has changed or is invalid.');
+    if (!metalData.items || !metalData.items[0]) {
+      console.warn('Metal API response format has changed or is invalid (no items).');
       return {};
     }
 
-    const xauPricePerOunceInUsd = metalData.items[0].xauPrice;
-    const xagPricePerOunceInUsd = metalData.items[0].xagPrice;
-
     // Adım 3: Ons fiyatını gram fiyatına çevir ve TRY karşılığını hesapla.
+    const item = metalData.items[0];
+    const rates: ExchangeRates = {};
     const OUNCE_TO_GRAM = 31.1035;
 
-    return {
-      XAU_GRAM: (xauPricePerOunceInUsd / OUNCE_TO_GRAM) * usdToTryRate,
-      XAG_GRAM: (xagPricePerOunceInUsd / OUNCE_TO_GRAM) * usdToTryRate,
-    };
+    // Sadece Altın fiyatını alıyoruz.
+    if (item.xauPrice) {
+      rates['XAU_GRAM'] = (item.xauPrice / OUNCE_TO_GRAM) * usdToTryRate;
+    }
+
+    return rates;
   } catch (error) {
     console.warn('Could not fetch metal rates:', error);
     return {};
   }
 };
 
-// 3. Kripto Para Kurlarını Çeken Fonksiyon (BTC, ETH, XRP)
-const getCryptoRates = async (): Promise<ExchangeRates> => {
+// 3. Kripto Para Kurlarını Çeken Fonksiyon
+// DEĞİŞİKLİK: USD/TRY kurunu parametre olarak alarak yedek bir API kullanma yeteneği ekliyoruz.
+const getCryptoRates = async (usdToTryRate?: number): Promise<ExchangeRates> => {
+  // Birincil API: CoinGecko
   try {
-    const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,ripple&vs_currencies=try');
+    const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=try');
+    if (!response.ok) throw new Error(`CoinGecko API request failed with status ${response.status}`);
     const data = await response.json();
 
     const rates: ExchangeRates = {};
     if (data.bitcoin?.try) rates['BTC'] = data.bitcoin.try;
-    if (data.ethereum?.try) rates['ETH'] = data.ethereum.try;
-    if (data.ripple?.try) rates['XRP'] = data.ripple.try;
 
-    return rates;
+    if (Object.keys(rates).length > 0) {
+      return rates;
+    }
+    throw new Error('Invalid data format from CoinGecko: bitcoin.try missing');
   } catch (error) {
-    console.warn('Could not fetch crypto rates:', error);
-    return {};
+    console.warn(`Primary Crypto API (CoinGecko) failed: ${error}. Trying fallback...`);
+
+    // Yedek API: CoinCap (USD üzerinden)
+    if (!usdToTryRate) {
+      console.error('Cannot use Crypto fallback API without USD/TRY rate.');
+      return {};
+    }
+
+    try {
+      const response = await fetch('https://api.coincap.io/v2/assets?ids=bitcoin');
+      if (!response.ok) throw new Error(`CoinCap API request failed with status ${response.status}`);
+      const data = await response.json();
+
+      const rates: ExchangeRates = {};
+      if (data.data && Array.isArray(data.data)) {
+        data.data.forEach((asset: any) => {
+          if (asset.id === 'bitcoin' && asset.priceUsd) {
+            rates['BTC'] = parseFloat(asset.priceUsd) * usdToTryRate;
+          }
+        });
+      }
+
+      if (Object.keys(rates).length > 0) {
+        return rates;
+      }
+      
+      throw new Error('Invalid data format from CoinCap or bitcoin asset not found');
+    } catch (fallbackError) {
+      console.error(`Crypto fallback API (CoinCap) also failed: ${fallbackError}`);
+      return {};
+    }
   }
 };
 
 // Ana fonksiyon: Tüm kur verilerini birleştirir.
+// DEĞİŞİKLİK: Veri çekme mantığı daha verimli ve sağlam hale getirildi.
 export const getExchangeRates = async (): Promise<ExchangeRates | null> => {
-  const results = await Promise.allSettled([getFiatRates(), getMetalRates(), getCryptoRates()]);
-
   const combinedRates: ExchangeRates = { TRY: 1 };
 
-  results.forEach((result) => {
+  // Adım 1: Önce temel döviz kurlarını al. Bu, metaller ve kripto yedeği için gereklidir.
+  const fiatRates = await getFiatRates();
+  if (fiatRates && Object.keys(fiatRates).length > 0) {
+    Object.assign(combinedRates, fiatRates);
+  } else {
+    // Döviz kurları alınamazsa bile devam et, belki diğerleri çalışır.
+    console.error("Warning: Could not fetch base fiat rates. Metal and Crypto fallback rates will be skipped.");
+  }
+
+  // Adım 2: Metal ve kripto kurlarını paralel olarak al.
+  const usdToTryRate = combinedRates['USD'];
+  const promisesToSettle = [];
+
+  // Kripto kurunu almayı dene. USD kuru varsa yedeği kullanabilir.
+  promisesToSettle.push(getCryptoRates(usdToTryRate));
+  
+  // Sadece USD/TRY kuru varsa metal kurunu almayı dene.
+  if (usdToTryRate) {
+    promisesToSettle.push(getMetalRates(usdToTryRate));
+  }
+
+  const otherResults = await Promise.allSettled(promisesToSettle);
+
+  otherResults.forEach((result) => {
     if (result.status === 'fulfilled' && result.value) {
       Object.assign(combinedRates, result.value);
     }
