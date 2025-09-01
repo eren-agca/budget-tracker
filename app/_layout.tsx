@@ -12,7 +12,6 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/firebaseConfig'; // getAuth yerine doğrudan auth'u import ediyoruz.
 import Toast from 'react-native-toast-message';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
-import { useColorScheme } from '@/hooks/useColorScheme';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -29,7 +28,6 @@ export default function RootLayout() {
 // 2. Ana navigasyon ve kimlik doğrulama mantığını ayrı bir bileşene taşıyoruz.
 // Bu bileşen artık AuthProvider'ın içinde olduğu için useAuth() kancasını güvenle kullanabilir.
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
   const { user, setUser } = useAuth();
   const segments = useSegments();
   const router = useRouter();
@@ -67,11 +65,11 @@ function RootLayoutNav() {
   }, [user, segments, authLoaded, loaded]);
 
   if (!authLoaded || !loaded) {
-    return <View style={{ flex: 1, backgroundColor: colorScheme === 'dark' ? '#000' : '#fff' }} />;
+    return <View style={{ flex: 1, backgroundColor: '#121212' }} />;
   }
 
   return (
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <ThemeProvider value={DarkTheme}>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />

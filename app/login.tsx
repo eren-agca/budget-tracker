@@ -1,7 +1,8 @@
 // C:/Users/sdsof/OneDrive/Desktop/GitHub/budget-tracker/app/login.tsx
 
 import React, { useState } from 'react';
-import { View, TextInput, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import { View, TextInput, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import Toast from 'react-native-toast-message';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import {
@@ -11,13 +12,13 @@ import {
 import { auth } from '@/firebaseConfig';
 import { Link } from 'expo-router';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
+import { useMemo } from 'react';
 
 export default function LoginScreen() {
-    const colorScheme = useColorScheme() ?? 'light';
     const { user } = useAuth(); // Mevcut kullanıcı durumunu alıyoruz.
-    const styles = getStyles(colorScheme);
+    const styles = useMemo(() => getStyles(), []);
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -25,7 +26,11 @@ export default function LoginScreen() {
 
     const handleLogin = async () => {
         if (!email || !password) {
-            Alert.alert('Error', 'Please enter both email and password.');
+            Toast.show({
+                type: 'error',
+                text1: 'Missing Information',
+                text2: 'Please enter both email and password.',
+            });
             return;
         }
         setLoading(true);
@@ -33,7 +38,17 @@ export default function LoginScreen() {
             await signInWithEmailAndPassword(auth, email, password);
             // Yönlendirme, ana layout tarafından otomatik olarak yapılacak.
         } catch (error: any) {
-            Alert.alert('Login Failed', error.message);
+            let errorMessage = 'An unexpected error occurred. Please try again.';
+            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                errorMessage = 'Invalid email or password. Please try again.';
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+            Toast.show({
+                type: 'error',
+                text1: 'Login Failed',
+                text2: errorMessage,
+            });
         } finally {
             setLoading(false);
         }
@@ -45,7 +60,11 @@ export default function LoginScreen() {
             await signInAnonymously(auth);
             // Yönlendirme, ana layout tarafından otomatik olarak yapılacak.
         } catch (error: any) {
-            Alert.alert('Anonymous Sign-In Failed', error.message);
+            Toast.show({
+                type: 'error',
+                text1: 'Sign-In Failed',
+                text2: error.message || 'Could not sign in anonymously.',
+            });
         } finally {
             setLoading(false);
         }
@@ -114,17 +133,16 @@ export default function LoginScreen() {
     );
 }
 
-const getStyles = (colorScheme: 'light' | 'dark') =>
-    StyleSheet.create({
+const getStyles = () => StyleSheet.create({
         container: { flex: 1 },
         content: { flex: 1, justifyContent: 'center', padding: 20 },
         title: { fontSize: 32, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
         subtitle: { fontSize: 16, textAlign: 'center', color: '#8e8e93', marginBottom: 40 },
-        input: { backgroundColor: colorScheme === 'dark' ? '#2c2c2e' : '#f0f0f0', color: colorScheme === 'dark' ? '#fff' : '#000', padding: 15, borderRadius: 10, marginBottom: 15, fontSize: 16 },
-        button: { backgroundColor: '#0a7ea4', padding: 18, borderRadius: 10, alignItems: 'center' },
-        buttonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+        input: { backgroundColor: Colors.surface, color: Colors.text, padding: 15, borderRadius: 10, marginBottom: 15, fontSize: 16 },
+        button: { backgroundColor: Colors.tint, padding: 18, borderRadius: 10, alignItems: 'center' },
+        buttonText: { color: Colors.background, fontSize: 18, fontWeight: 'bold' },
         footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 20 },
-        link: { color: '#0a7ea4', fontWeight: 'bold' },
+        link: { color: Colors.tint, fontWeight: 'bold' },
         dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
         divider: { flex: 1, height: 1, backgroundColor: '#48484a' },
         dividerText: { marginHorizontal: 10, color: '#8e8e93' },

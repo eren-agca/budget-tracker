@@ -398,11 +398,11 @@ const getStyles = () => StyleSheet.create({
     backgroundColor: Colors.tint,
   },
   currencyButtonText: {
-    color: '#fff',
+    color: Colors.text,
     fontWeight: 'bold',
   },
   currencyButtonTextActive: {
-    color: '#fff', // Aktif durumdaki metin rengi aynı kalabilir, stilin var olması hatayı çözer.
+    color: Colors.background,
   },
   emptyContainer: {
     justifyContent: 'center',
@@ -427,7 +427,7 @@ const getStyles = () => StyleSheet.create({
     alignItems: 'center',
   },
   analysisButtonText: {
-    color: 'white',
+    color: Colors.background,
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -438,7 +438,6 @@ const getStyles = () => StyleSheet.create({
     borderRadius: 10,
   },
   analysisResultText: {
-    // Arka plan rengi (tint) ile yüksek kontrast sağlamak için metin rengini beyaz yapıyoruz.
-    color: '#fff',
+    color: Colors.text,
   },
 });

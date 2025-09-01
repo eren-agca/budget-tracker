@@ -18,7 +18,6 @@ import { expenseCategories } from '@/constants/Categories';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { Colors } from '@/constants/Colors';
 import { db, auth } from '@/firebaseConfig';
-import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/context/AuthContext';
 
 // Veritabanından gelen işlem verileri için bir arayüz (interface) tanımlıyoruz.
@@ -78,9 +77,8 @@ const TransactionListItem = React.memo(({ item, onDelete, styles }: { item: Tran
 export default function HomeScreen() {
   const { user } = useAuth();
   const router = useRouter();
-  const colorScheme = useColorScheme() ?? 'light';
   // OPTİMİZASYON: Stillerin her render'da yeniden oluşturulmasını önlemek için useMemo kullanıyoruz.
-  const styles = useMemo(() => getStyles(colorScheme), [colorScheme]);
+  const styles = useMemo(() => getStyles(), []);
 
   // States
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -289,7 +287,7 @@ export default function HomeScreen() {
   return (
       // Ana içeriği ve modal'ı sarmalamak için bir View kullanıyoruz.
       <View style={{ flex: 1 }}>
-        <SafeAreaView style={[styles.container, { backgroundColor: Colors[colorScheme].background, paddingTop: 10 }]}>
+        <SafeAreaView style={[styles.container, { backgroundColor: Colors.background, paddingTop: 10 }]}>
           <View style={styles.tickerContainer}>
             <Ticker data={fiatMetalTickerData} />
             <Ticker data={cryptoTickerData} />
@@ -362,18 +360,18 @@ export default function HomeScreen() {
           <View style={styles.filterSectionContainer}>
             {/* Zaman Filtresi Açılır Listesi */}
             <View style={styles.dropdownWrapper}>
-                <AnimatedPressable style={styles.dropdownButton} onPress={() => setDateModalVisible(true)}>
-                    <Ionicons name="calendar-outline" size={20} color={Colors[colorScheme].text} />
-                    <ThemedText style={styles.dropdownButtonText} numberOfLines={1}>{selectedDateFilterLabel}</ThemedText>
-                </AnimatedPressable>
+              <AnimatedPressable style={styles.dropdownButton} onPress={() => setDateModalVisible(true)}>
+                <Ionicons name="calendar-outline" size={20} color={Colors.text} />
+                <ThemedText style={styles.dropdownButtonText} numberOfLines={1}>{selectedDateFilterLabel}</ThemedText>
+              </AnimatedPressable>
             </View>
 
             {/* Kategori Filtresi Açılır Listesi */}
             <View style={styles.dropdownWrapper}>
-                <AnimatedPressable style={styles.dropdownButton} onPress={() => setCategoryModalVisible(true)}>
-                    <Ionicons name="pricetag-outline" size={20} color={Colors[colorScheme].text} />
-                    <ThemedText style={styles.dropdownButtonText} numberOfLines={1}>{selectedCategory || 'All Categories'}</ThemedText>
-                </AnimatedPressable>
+              <AnimatedPressable style={styles.dropdownButton} onPress={() => setCategoryModalVisible(true)}>
+                <Ionicons name="pricetag-outline" size={20} color={Colors.text} />
+                <ThemedText style={styles.dropdownButtonText} numberOfLines={1}>{selectedCategory || 'All Categories'}</ThemedText>
+              </AnimatedPressable>
             </View>
           </View>
 
@@ -407,7 +405,7 @@ export default function HomeScreen() {
             onRequestClose={() => setDateModalVisible(false)} // Android'de geri tuşuna basıldığında modal'ı kapatır.
         >
           <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { backgroundColor: Colors[colorScheme].surface }]}>
+            <View style={[styles.modalContent, { backgroundColor: Colors.surface }]}>
               <ThemedText type="subtitle" style={{ marginBottom: 20 }}>Select Time Range</ThemedText>
               {dateFilters.map((filter) => (
                   <AnimatedPressable
@@ -421,7 +419,7 @@ export default function HomeScreen() {
                     <ThemedText
                         style={[
                           styles.modalOptionText,
-                          selectedDateFilter === filter.key && styles.modalOptionTextActive
+                          selectedDateFilter === filter.key && { color: Colors.tint, fontWeight: 'bold' }
                         ]}
                     >
                       {filter.label}
@@ -440,7 +438,7 @@ export default function HomeScreen() {
             onRequestClose={() => setCategoryModalVisible(false)}
         >
             <View style={styles.modalOverlay}>
-                <View style={[styles.modalContent, { backgroundColor: Colors[colorScheme].surface }]}>
+                <View style={[styles.modalContent, { backgroundColor: Colors.surface }]}>
                     <ThemedText type="subtitle" style={{ marginBottom: 10 }}>Select Category</ThemedText>
                     <ScrollView>
                         {/* All Categories option */}
@@ -451,7 +449,7 @@ export default function HomeScreen() {
                                 setCategoryModalVisible(false);
                             }}
                         >
-                            <Ionicons name="apps-outline" size={24} color={Colors[colorScheme].text} />
+                            <Ionicons name="apps-outline" size={24} color={Colors.text} />
                             <ThemedText style={styles.categoryModalText}>All Categories</ThemedText>
                         </AnimatedPressable>
                         {/* Expense Categories */}
@@ -464,7 +462,7 @@ export default function HomeScreen() {
                                     setCategoryModalVisible(false);
                                 }}
                             >
-                                <Ionicons name={cat.icon} size={24} color={Colors[colorScheme].text} />
+                                <Ionicons name={cat.icon} size={24} color={Colors.text} />
                                 <ThemedText style={styles.categoryModalText}>{cat.label}</ThemedText>
                             </AnimatedPressable>
                         ))}
@@ -476,7 +474,7 @@ export default function HomeScreen() {
   );
 }
 
-const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
+const getStyles = () => StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -506,7 +504,7 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 16,
     marginBottom: 16,
-    backgroundColor: '#2c2c2e',
+    backgroundColor: Colors.surface,
     borderRadius: 10,
   },
   summaryBox: {
@@ -545,14 +543,14 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
   dropdownButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2c2c2e',
+    backgroundColor: Colors.surface,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 10,
     gap: 8,
   },
   dropdownButtonText: {
-    color: '#fff',
+    color: Colors.text,
     fontWeight: '600',
     fontSize: 14,
     flexShrink: 1, // Metnin gerektiğinde küçülmesine izin ver
@@ -567,7 +565,7 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     width: '80%',
     padding: 24,
     borderRadius: 15,
-    backgroundColor: Colors[colorScheme].surface,
+    backgroundColor: Colors.surface,
   },
   modalOption: {
     paddingVertical: 16,
@@ -577,7 +575,7 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     textAlign: 'center',
   },
   modalOptionTextActive: {
-    color: Colors[colorScheme].tint,
+    color: Colors.tint,
     fontWeight: 'bold',
   },
   categoryModalItem: {
@@ -596,20 +594,20 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
   currencyButton: {
     paddingVertical: 5,
     paddingHorizontal: 16,
-    backgroundColor: '#2c2c2e',
+    backgroundColor: Colors.surface,
     borderRadius: 12,
   },
   currencyButtonActive: {
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: '#39FF14',
+    borderColor: Colors.tint,
   },
   currencyButtonText: {
-    color: '#fff',
+    color: Colors.text,
     fontWeight: 'bold',
   },
   currencyButtonTextActive: {
-    color: '#fff',
+    color: Colors.text,
   },
   titleContainer: {
     flexDirection: 'row',
@@ -626,7 +624,7 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     alignItems: 'center',
     marginHorizontal: 16,
     marginBottom: 12,
-    backgroundColor: '#2c2c2e',
+    backgroundColor: Colors.surface,
     borderRadius: 10,
     overflow: 'hidden',
   },
@@ -694,7 +692,7 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#39FF14',
+    backgroundColor: Colors.tint,
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 8,
@@ -706,7 +704,7 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     height: 40,
     borderRadius: 20, // Dairesel yapmak için
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   authButtonRed: {
     backgroundColor: Colors.danger,
@@ -714,6 +712,6 @@ const getStyles = (colorScheme: 'light' | 'dark') => StyleSheet.create({
     height: 40,
     borderRadius: 20, // Dairesel yapmak için
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
   },
 });
