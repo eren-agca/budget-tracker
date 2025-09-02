@@ -1,5 +1,3 @@
-// Bu dosya, ana ekranda kullanılacak zaman filtresi seçeneklerini tanımlar.
-
 export const dateFilters = [
   { key: 'all', label: 'All' },
   { key: 'thisWeek', label: 'This Week' },

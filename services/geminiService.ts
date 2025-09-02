@@ -1,9 +1,5 @@
-// Bu dosya, Google Gemini API ile iletişimi yönetir.
-
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// API anahtarını ortam değişkenlerinden alıyoruz.
-// BU ÇOK ÖNEMLİDİR: Asla API anahtarını doğrudan koda yazmayın.
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 
 if (!API_KEY) {
@@ -12,7 +8,6 @@ if (!API_KEY) {
 
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-// Gemini'ye gönderilecek olan prompt'u (istek metnini) oluşturan fonksiyon.
 const createPrompt = (transactions: any[]): string => {
   const transactionsString = JSON.stringify(
     transactions.map((t) => ({

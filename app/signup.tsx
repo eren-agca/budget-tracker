@@ -1,5 +1,3 @@
-// C:/Users/sdsof/OneDrive/Desktop/GitHub/budget-tracker/app/signup.tsx
-
 import React, { useState } from 'react';
 import { View, TextInput, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import Toast from 'react-native-toast-message';
@@ -16,8 +14,6 @@ import { useRouter } from 'expo-router';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { Colors } from '@/constants/Colors';
 
-// Stil fonksiyonunu bileşenin dışına taşıyarak her render'da yeniden oluşturulmasını engelliyoruz.
-// Bu küçük bir performans iyileştirmesidir.
 const getStyles = () => StyleSheet.create({
     container: { flex: 1 },
     content: { flex: 1, justifyContent: 'center', padding: 20 },
@@ -59,20 +55,14 @@ export default function SignUpScreen() {
         try {
             const currentUser = auth.currentUser;
 
-            // Case 1: An anonymous user is upgrading their account.
             if (currentUser && currentUser.isAnonymous) {
                 const credential = EmailAuthProvider.credential(email, password);
-                // Link the anonymous account with the new email/password.
-                // This preserves the UID and all associated data.
                 await linkWithCredential(currentUser, credential);
 
-                // Since the user document might not exist yet, we create it here.
-                // setDoc is "upsert": it creates if not exists, or overwrites if it does.
-                // This is safe because we're just adding/updating metadata.
                 await setDoc(doc(db, 'users', currentUser.uid), {
-                    email: email, // Use the email from the form
+                    email: email,
                     createdAt: Timestamp.now(),
-                }, { merge: true }); // merge: true prevents overwriting existing fields
+                }, { merge: true });
 
                 Toast.show({
                     type: 'success',
@@ -80,11 +70,9 @@ export default function SignUpScreen() {
                     text2: 'Your data is now saved to your new account.'
                 });
             } else {
-                // Case 2: A new user is signing up from scratch.
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
                 const newUser = userCredential.user;
 
-                // Create a corresponding user document in Firestore.
                 await setDoc(doc(db, 'users', newUser.uid), {
                     email: newUser.email,
                     createdAt: Timestamp.now(),
@@ -96,15 +84,11 @@ export default function SignUpScreen() {
                 });
             }
 
-            // After successful sign-up/linking, the onAuthStateChanged listener in _layout
-            // will handle the navigation to the main app.
-            // We just need to close the modal.
             if (router.canGoBack()) {
                 router.back();
             }
 
         } catch (error: any) {
-            // Handle common Firebase auth errors
             let errorMessage = 'An unexpected error occurred. Please try again.';
             if (error.code === 'auth/email-already-in-use') {
                 errorMessage = 'This email address is already in use by another account.';

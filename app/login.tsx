@@ -1,5 +1,3 @@
-// C:/Users/sdsof/OneDrive/Desktop/GitHub/budget-tracker/app/login.tsx
-
 import React, { useState } from 'react';
 import { View, TextInput, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
 import Toast from 'react-native-toast-message';
@@ -17,7 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useMemo } from 'react';
 
 export default function LoginScreen() {
-    const { user } = useAuth(); // Mevcut kullanıcı durumunu alıyoruz.
+    const { user } = useAuth();
     const router = useRouter();
     const styles = useMemo(() => getStyles(), []);
 
@@ -37,7 +35,6 @@ export default function LoginScreen() {
         setLoading(true);
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            // Yönlendirme, ana layout tarafından otomatik olarak yapılacak.
         } catch (error: any) {
             let errorMessage = 'An unexpected error occurred. Please try again.';
             if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
@@ -59,7 +56,6 @@ export default function LoginScreen() {
         setLoading(true);
         try {
             await signInAnonymously(auth);
-            // Başarılı anonim girişten sonra kullanıcıyı manuel olarak ana ekrana yönlendiriyoruz.
             router.replace('/(tabs)');
         } catch (error: any) {
             Toast.show({
@@ -115,7 +111,6 @@ export default function LoginScreen() {
                     </Link>
                 </View>
 
-                {/* Eğer mevcut bir kullanıcı yoksa (yani uygulama ilk kez açılıyorsa), anonim giriş seçeneğini göster. */}
                 {!user && (
                     <>
                         <View style={styles.dividerContainer}>

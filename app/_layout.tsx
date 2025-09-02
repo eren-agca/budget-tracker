@@ -1,5 +1,3 @@
-// C:/Users/sdsof/OneDrive/Desktop/GitHub/budget-tracker/app/_layout.tsx
-
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
@@ -13,10 +11,8 @@ import { auth } from '@/firebaseConfig'; // getAuth yerine doğrudan auth'u impo
 import Toast from 'react-native-toast-message';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-// 1. AuthProvider'ı en dış sarmalayıcı olarak kullanıyoruz.
 export default function RootLayout() {
   return (
       <AuthProvider>
@@ -25,8 +21,6 @@ export default function RootLayout() {
   );
 }
 
-// 2. Ana navigasyon ve kimlik doğrulama mantığını ayrı bir bileşene taşıyoruz.
-// Bu bileşen artık AuthProvider'ın içinde olduğu için useAuth() kancasını güvenle kullanabilir.
 function RootLayoutNav() {
   const { user, setUser } = useAuth();
   const segments = useSegments();
@@ -38,7 +32,6 @@ function RootLayoutNav() {
   });
 
   useEffect(() => {
-    // Kullanıcının oturum durumundaki değişiklikleri dinle.
     const unsubscribe = onAuthStateChanged(auth, (authenticatedUser) => {
       setUser(authenticatedUser);
       setAuthLoaded(true);
@@ -52,13 +45,10 @@ function RootLayoutNav() {
 
     const isAuthRoute = segments[0] === 'login' || segments[0] === 'signup';
 
-    // Eğer kullanıcı e-posta ile giriş yapmışsa ve bir auth rotasındaysa, ana sayfaya yönlendir.
-    // Bu, anonim kullanıcının kayıt sayfasına erişmesine izin verir.
     if (user && !user.isAnonymous && isAuthRoute) {
       router.replace('/(tabs)');
     }
-    // Eğer kullanıcı yoksa ve giriş/kayıt ekranında değilse, giriş ekranına yönlendir.
-    else if (!user && !isAuthRoute && segments[0] !== undefined) { // `undefined` check to prevent redirect on initial load
+    else if (!user && !isAuthRoute && segments[0] !== undefined) {
       router.replace('/login');
     }
     SplashScreen.hideAsync();
@@ -77,8 +67,7 @@ function RootLayoutNav() {
           <Stack.Screen name="add-transaction" options={{ presentation: 'modal', title: 'New Transaction' }} />
           <Stack.Screen name="+not-found" />
         </Stack>
-        <StatusBar style="auto" />
-        {/* Toast bildirimlerinin tüm uygulamanın üzerinde görünmesini sağlar. */}
+        <StatusBar style="auto" />        
         <Toast />
       </ThemeProvider>
   );

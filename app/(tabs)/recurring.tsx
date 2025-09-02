@@ -1,7 +1,3 @@
-// C:/Users/sdsof/OneDrive/Desktop/GitHub/budget-tracker/app/(tabs)/recurring.tsx
-
-// Bu dosya, kullanıcıların sabit (tekrarlayan) gelirlerini yönettiği ekranı içerir.
-
 import React, { useEffect, useMemo, useState } from 'react'
 import { View, StyleSheet, FlatList, Alert, TextInput, Pressable, SafeAreaView } from 'react-native';
 import { collection, addDoc, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
@@ -14,7 +10,6 @@ import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { Colors } from '@/constants/Colors';
 
-// Tekrarlayan gelirler için arayüz tanımı.
 interface RecurringIncome {
     id: string;
     amount: number;
@@ -25,7 +20,6 @@ interface RecurringIncome {
 
 export default function RecurringScreen() {
     const { user } = useAuth();
-    // Stilleri sadece bir kez oluşturmak için useMemo kullanıyoruz.
     const styles = useMemo(() => getStyles(), []);
 
     const [recurringIncomes, setRecurringIncomes] = useState<RecurringIncome[]>([]);
@@ -34,7 +28,6 @@ export default function RecurringScreen() {
     const [dayOfMonth, setDayOfMonth] = useState('');
     const [transactionCurrency, setTransactionCurrency] = useState<Currency>(defaultCurrency);
 
-    // Firestore'dan kaydedilmiş sabit gelirleri çeker.
     useEffect(() => {
         if (!user) return;
 
@@ -48,7 +41,6 @@ export default function RecurringScreen() {
         return () => unsubscribe();
     }, [user]);
 
-    // Yeni bir sabit gelir ekleme fonksiyonu.
     const handleAddRecurringIncome = async () => {
         const numericAmount = parseFloat(amount);
         const numericDay = parseInt(dayOfMonth, 10);
@@ -66,9 +58,8 @@ export default function RecurringScreen() {
                 category,
                 currency: transactionCurrency.code,
                 dayOfMonth: numericDay,
-                lastAdded: null, // Otomatik ekleme mantığı için bu alanı null olarak başlatıyoruz.
+                lastAdded: null,
             });
-            // Formu temizle
             setAmount('');
             setCategory('');
             setDayOfMonth('');
@@ -79,7 +70,6 @@ export default function RecurringScreen() {
         }
     };
 
-    // Bir sabit geliri silme fonksiyonu.
     const handleDelete = async (id: string) => {
         try {
             if (!user) throw new Error("User not authenticated");
@@ -91,7 +81,6 @@ export default function RecurringScreen() {
         }
     };
 
-    // Miktar alanına sadece sayısal değer girilmesini sağlar.
     const handleAmountChange = (text: string) => {
         const numericRegex = /^\d*([.,])?\d*$/;
         if (numericRegex.test(text) || text === '') {
@@ -99,13 +88,10 @@ export default function RecurringScreen() {
         }
     };
 
-    // Bu bileşen, FlatList'in başlığı olarak render edilecek.
-    // Formu ve diğer üst bileşenleri içerir.
     const ListHeader = () => (
         <>
             <View style={styles.topDecorationBar} />
             <ThemedText type="title" style={styles.header}>Add Recurring Income</ThemedText>
-            {/* Yeni Sabit Gelir Ekleme Formu */}
             <View style={styles.formContainer}>
                 <TextInput
                     placeholder="Source (e.g., Salary)"
@@ -152,7 +138,6 @@ export default function RecurringScreen() {
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: Colors.background }]}>
-            {/* Kaydedilmiş Sabit Gelirler Listesi */}
             <FlatList
                 data={recurringIncomes}
                 keyExtractor={(item) => item.id}
@@ -184,14 +169,13 @@ export default function RecurringScreen() {
     );
 }
 
-// Bu ekran için stiller.
 const getStyles = () => StyleSheet.create({
     container: { flex: 1 },
     topDecorationBar: {
         top:-5,
         height: 5,
-        backgroundColor: '#48484a', // Koyu gri, ince bir çizgi
-        marginHorizontal: 120, // Ortalamak için sağdan ve soldan boşluk
+        backgroundColor: '#48484a',
+        marginHorizontal: 120,
         marginTop: 25,
         borderRadius: 2.5,
     },
@@ -207,7 +191,7 @@ const getStyles = () => StyleSheet.create({
     currencyButtonActive: { backgroundColor: Colors.tint },
     currencyButtonText: { fontWeight: 'bold', color: Colors.text },
     currencyButtonTextActive: {
-        color: '#fff', // Aktif durumdaki metin rengi
+        color: '#fff',
     },
     addButton: { backgroundColor: Colors.success, padding: 15, borderRadius: 10, alignItems: 'center' },
     addButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold' },

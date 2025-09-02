@@ -1,6 +1,4 @@
-// C:/Users/sdsof/OneDrive/Desktop/GitHub/budget-tracker/components/Ticker.tsx
-
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet, Dimensions, LayoutChangeEvent } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -9,70 +7,69 @@ import Animated, {
   withTiming,
   Easing,
   cancelAnimation,
+  runOnJS,
 } from 'react-native-reanimated';
 import { ThemedText } from './ThemedText';
 import { Colors } from '@/constants/Colors';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 interface TickerProps {
   data: string[];
+  height?: number;
+  speed?: number;
 }
 
-export const Ticker: React.FC<TickerProps> = ({ data }) => {
-  // Animasyon için Reanimated'ın paylaşılan değerini kullanıyoruz.
-  const translateX = useSharedValue(SCREEN_WIDTH);
-  // Metnin ölçülen genişliğini tutmak için bir React state'i kullanıyoruz.
-  // Bu, animasyon mantığını daha sağlam ve öngörülebilir hale getirir.
-  const [textWidth, setTextWidth] = useState(0);
+export const Ticker: React.FC<TickerProps> = ({
+                                                data,
+                                                height = 26,
+                                                speed = 40,
+                                              }) => {
+  const textWidth = useSharedValue(0);
+  const translateX = useSharedValue(0);
 
-  // Verileri aralarında ayıraç olacak şekilde birleştiriyoruz.
-  const textContent = data.join('  •  ');
+  const textContent = data.join('      •      ');
 
-  // Animasyonlu stili oluşturuyoruz.
   const animatedStyle = useAnimatedStyle(() => {
+    if (textWidth.value === 0) {
+      return {};
+    }
     return {
       transform: [{ translateX: translateX.value }],
     };
   });
 
-  // Metnin genişliği ölçüldüğünde (onLayout) bu fonksiyon çalışır.
-  const handleOnLayout = (event: LayoutChangeEvent) => {
-    setTextWidth(event.nativeEvent.layout.width);
+  const startAnimation = (width: number) => {
+    const duration = (width / speed) * 1000;
+
+    translateX.value = 0;
+    translateX.value = withRepeat(
+        withTiming(-width, { duration, easing: Easing.linear }),
+        -1
+    );
   };
 
-  // Bu useEffect, metnin genişliği (textWidth) değiştiğinde animasyonu başlatır veya durdurur.
-  useEffect(() => {
-    if (textWidth > 0) {
-      const totalDistance = textWidth + SCREEN_WIDTH;
-      const speed = 40; // saniyedeki piksel hızı
-      const duration = (totalDistance / speed) * 1000;
-
-      // Animasyonu her zaman ekranın sağından başlat.
-      translateX.value = SCREEN_WIDTH;
-      // Animasyonu sonsuz döngüde çalıştır.
-      translateX.value = withRepeat(
-        withTiming(-textWidth, { duration, easing: Easing.linear }),
-        -1, // sonsuz döngü
-        false // başa dön, tersine çevirme
-      );
+  const handleOnLayout = (event: LayoutChangeEvent) => {
+    const measuredWidth = event.nativeEvent.layout.width;
+    if (measuredWidth > 0 && textWidth.value === 0) {
+      textWidth.value = measuredWidth;
+      runOnJS(startAnimation)(measuredWidth);
     }
-    return () => cancelAnimation(translateX);
-  }, [textWidth, translateX]); // textWidth değiştiğinde bu effect yeniden çalışır.
+  };
 
   if (!data || data.length === 0) {
     return (
-        <View style={[styles.container, { justifyContent: 'center' }]}>
-          <ThemedText style={styles.text}>Loading rates...</ThemedText>
+        <View style={[styles.container, { height }]}>
+          <ThemedText style={styles.text}>Loading...</ThemedText>
         </View>
     );
   }
 
   return (
-      <View style={styles.container}>
-        <Animated.View style={[styles.textContainer, animatedStyle]}>
-          {/* DÜZELTME: numberOfLines={1} ekleyerek metnin alt satıra kaymasını kesin olarak engelliyoruz. */}
-          <ThemedText onLayout={handleOnLayout} style={styles.text} numberOfLines={2}>
+      <View style={[styles.container, { height }]}>
+        <Animated.View style={[styles.row, { height }, animatedStyle]}>          
+          <ThemedText onLayout={handleOnLayout} style={styles.text}>
+            {textContent}
+          </ThemedText>
+          <ThemedText style={styles.text}>
             {textContent}
           </ThemedText>
         </Animated.View>
@@ -82,20 +79,18 @@ export const Ticker: React.FC<TickerProps> = ({ data }) => {
 
 const styles = StyleSheet.create({
   container: {
-    height: 25, // Bantların yüksekliğini azalttık
     backgroundColor: Colors.surface,
-    overflow: 'hidden', // Bu, ekran dışına taşan metnin görünmemesini sağlar.
+    overflow: 'hidden',
   },
-  textContainer: {
-    // Metnin serbestçe hareket edebilmesi için mutlak konumlandırma.
+  row: {
+    flexDirection: 'row',
     position: 'absolute',
-    // `numberOfLines={1}` kullandığımız için, bu konteynerin genişliği artık
-    // otomatik olarak içindeki tek satırlık metnin genişliğine eşit olacaktır.
+    alignItems: 'center',
   },
   text: {
     fontSize: 14,
     fontWeight: '600',
     color: Colors.text,
-    // Metnin kendi doğal genişliğini almasına izin veriyoruz.
+    paddingHorizontal: 10,
   },
 });

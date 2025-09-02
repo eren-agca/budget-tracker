@@ -1,4 +1,3 @@
-// app/(tabs)/index.tsx - Ticker sorunu düzeltilmiş nihai hal
 
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -7,7 +6,6 @@ import { signOut } from 'firebase/auth';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, Modal, SafeAreaView, ScrollView, StyleSheet, View, ListRenderItem, Pressable } from 'react-native';
 
-// Kendi oluşturduğumuz tema bileşenlerini import ediyoruz.
 import { ThemedText } from '@/components/ThemedText';
 import { Ticker } from '@/components/Ticker';
 import { ThemedView } from '@/components/ThemedView';
@@ -20,26 +18,25 @@ import { Colors } from '@/constants/Colors';
 import { db, auth } from '@/firebaseConfig';
 import { useAuth } from '@/context/AuthContext';
 
-// Veritabanından gelen işlem verileri için bir arayüz (interface) tanımlıyoruz.
+
 interface Transaction {
     id: string;
     description: string;
     amount: number;
     category: string;
-    purchaseRate?: number; // Alım anındaki kur (örn: 1 gram altın = 2500 TL)
-    assetQuantity?: number; // Alınan varlık miktarı (örn: 2 gram)
-    currency: 'TRY' | 'USD' | 'EUR' | 'RUB'; // Her işlemin kendi para birimi var.
+    purchaseRate?: number; 
+    assetQuantity?: number;
+    currency: 'TRY' | 'USD' | 'EUR' | 'RUB'; 
     type: 'income' | 'expense';
-    date: Date; // Firestore Timestamp'i Date objesine çevireceğiz.
+    date: Date; 
 }
 
-// OPTİMİZASYON: Liste elemanını ayrı bir bileşen haline getiriyoruz.
-// React.memo, bu bileşenin propları değişmediği sürece yeniden render edilmesini engeller.
+
 const TransactionListItem = React.memo(({ item, onDelete, styles }: { item: Transaction, onDelete: (id: string) => void, styles: any }) => {
-    // Her bir işlem için doğru para birimi sembolünü buluyoruz.
+   
     const itemCurrency = currencies.find((c) => c.code === item.currency) || { symbol: item.currency };
 
-    // Firestore Timestamp objesini "GG/AA\nSS:DD" formatında bir string'e çeviren fonksiyon.
+    
     const formatDate = (timestamp: Date) => {
         if (!(timestamp instanceof Date)) return '';
         const day = String(timestamp.getDate()).padStart(2, '0');
@@ -58,7 +55,7 @@ const TransactionListItem = React.memo(({ item, onDelete, styles }: { item: Tran
                 <View style={{ flex: 1, paddingRight: 8 }}>
                     <ThemedText style={styles.transactionDescription} numberOfLines={1}>{item.description}</ThemedText>
                     <ThemedText style={styles.transactionCategory} numberOfLines={1}>{item.category}</ThemedText>
-                    {/* Eğer bu bir yatırım işlemiyse, miktar ve alım kurunu göster. */}
+                   
                     {item.category === 'Savings' && item.purchaseRate != null && item.assetQuantity != null && (
                         <View style={styles.assetInfoContainer}>
                             <ThemedText style={styles.assetInfoText}>
@@ -77,20 +74,20 @@ const TransactionListItem = React.memo(({ item, onDelete, styles }: { item: Tran
 export default function HomeScreen() {
     const { user } = useAuth();
     const router = useRouter();
-    // OPTİMİZASYON: Stillerin her render'da yeniden oluşturulmasını önlemek için useMemo kullanıyoruz.
+    
     const styles = useMemo(() => getStyles(), []);
 
-    // States
+    
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [displayCurrency, setDisplayCurrency] = useState<Currency>(defaultCurrency);
     const [rates, setRates] = useState<ExchangeRates | null>(null);
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [selectedDateFilter, setSelectedDateFilter] = useState<string>('all');
-    const [tickerData, setTickerData] = useState<string[]>([]);
+    const [fiatMetalTickerData, setFiatMetalTickerData] = useState<string[]>([]);
+    const [cryptoTickerData, setCryptoTickerData] = useState<string[]>([]);
     const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
     const [isDateModalVisible, setDateModalVisible] = useState(false);
 
-    // Seçilen zaman filtresine göre işlemleri filtreleyen bir useMemo.
     const dateFilteredTransactions = useMemo(() => {
         const now = new Date();
         if (selectedDateFilter === 'all') {
@@ -122,8 +119,7 @@ export default function HomeScreen() {
         return transactions.filter((t) => t.date && t.date >= startDate);
     }, [transactions, selectedDateFilter]);
 
-    // Bu useMemo hook'u, TÜM transactions dizisine göre özet değerleri hesaplar.
-    // Bu sayede zaman filtresi, üstteki özet kartını etkilemez.
+  
     const { totalIncome, totalExpense, balance } = useMemo(() => {
         if (!rates) return { totalIncome: 0, totalExpense: 0, balance: 0 };
         return transactions.reduce(
@@ -133,7 +129,7 @@ export default function HomeScreen() {
                 if (curr.type === 'income') {
                     acc.totalIncome += amountInTRY;
                 } else {
-                    acc.totalExpense += amountInTRY; // Giderler zaten negatif olduğu için direkt ekliyoruz.
+                    acc.totalExpense += amountInTRY; 
                 }
                 acc.balance = acc.totalIncome + acc.totalExpense;
                 return acc;
@@ -142,81 +138,64 @@ export default function HomeScreen() {
         );
     }, [transactions, rates]);
 
-    // DÜZELTME: Kur oranlarını çekmek ve kayan bant verisini formatlamak için useEffect.
     useEffect(() => {
         const fetchRates = async () => {
-            console.log('🔄 Starting to fetch rates...');
-
             try {
                 const fetchedRates = await getExchangeRates();
-                console.log('📊 Fetched rates result:', fetchedRates);
 
                 if (!fetchedRates) {
-                    console.log('❌ No rates received from API');
                     setRates({});
-                    setTickerData(['No rate data available']);
+                    setFiatMetalTickerData(['Rate data temporarily unavailable']);
+                    setCryptoTickerData([]);
                     return;
                 }
 
                 setRates(fetchedRates);
 
-                // DÜZELTME: Daha kısa ve net format
-                const allItems = [
+                const fiatMetalItems = [
                     { code: 'USD', name: 'USD' },
                     { code: 'EUR', name: 'EUR' },
                     { code: 'RUB', name: 'RUB' },
                     { code: 'XAU_GRAM', name: 'GOLD' },
-                    { code: 'BTC', name: 'BTC' },
+                    { code: 'XAG_GRAM', name: 'SILVER' },
                 ];
 
-                const formattedTickerData = allItems
-                    .filter(item => {
-                        const hasRate = fetchedRates[item.code] && fetchedRates[item.code] > 0;
-                        console.log(`💱 ${item.code}: ${hasRate ? fetchedRates[item.code] : 'NOT AVAILABLE'}`);
-                        return hasRate;
-                    })
+                const cryptoItems = [
+                    { code: 'BTC', name: 'BTC' },
+                    { code: 'ETH', name: 'ETH' },
+                    { code: 'XRP', name: 'XRP' },
+                ];
+
+                const formatData = (items: {code: string, name: string}[]) => items
+                    .filter(item => fetchedRates[item.code] && fetchedRates[item.code] > 0)
                     .map(item => {
                         const rate = fetchedRates[item.code];
-                        let formatted: string;
-
-                        if (rate > 1000) {
-                            formatted = `${item.name}: ${Math.round(rate).toLocaleString('tr-TR')}₺`;
-                        } else if (rate > 1) {
-                            formatted = `${item.name}: ${rate.toFixed(2)}₺`;
-                        } else {
-                            formatted = `${item.name}: ${rate.toFixed(4)}₺`;
-                        }
-
-                        console.log(`📝 Formatted ${item.code}: ${formatted}`);
-                        return formatted;
+                        const isCrypto = ['BTC', 'ETH', 'XRP'].includes(item.code);
+                        const options: Intl.NumberFormatOptions = { style: 'currency', currency: 'TRY', minimumFractionDigits: isCrypto ? 0 : 2, maximumFractionDigits: isCrypto ? 0 : 2 };
+                        const formattedRate = new Intl.NumberFormat('tr-TR', options).format(rate);
+                        return `${item.name}: ${formattedRate}`;
                     });
 
-                console.log('🎯 Final ticker data array:', formattedTickerData);
-                console.log('🎯 Ticker data length:', formattedTickerData.length);
-
-                // Eğer hiç veri yoksa fallback göster
-                if (formattedTickerData.length === 0) {
-                    setTickerData(['Rate data temporarily unavailable']);
-                } else {
-                    setTickerData(formattedTickerData);
-                }
+                setFiatMetalTickerData(formatData(fiatMetalItems));
+                setCryptoTickerData(formatData(cryptoItems));
 
             } catch (error) {
                 console.error('🚨 Error in fetchRates:', error);
                 setRates({});
-                setTickerData(['Error loading rates']);
+                setFiatMetalTickerData(['Error loading rates']);
+                setCryptoTickerData([]);
             }
         };
 
-        // İlk çalıştırma
+      
         fetchRates();
 
-        // Periyodik güncelleme
+        
         const intervalId = setInterval(fetchRates, 60000);
         return () => clearInterval(intervalId);
     }, []);
 
-    // Sabit gelirleri kontrol edip ekleyen useEffect.
+  
     useEffect(() => {
         if (!user) return;
         const checkRecurringIncomes = async () => {
@@ -252,7 +231,7 @@ export default function HomeScreen() {
         return () => clearTimeout(timeoutId);
     }, [user]);
 
-    // Bu useEffect hook'u, kullanıcıya özel işlemleri çeker.
+    
     useEffect(() => {
         if (!user) return;
         const q = query(collection(db, 'users', user.uid, 'transactions'), orderBy('date', 'desc'));
@@ -272,14 +251,14 @@ export default function HomeScreen() {
     const handleLogout = async () => {
         try {
             await signOut(auth);
-            // Yönlendirme, ana layout (_layout.tsx) tarafından otomatik olarak yapılacak.
+            
         } catch (error) {
             console.error('Error logging out: ', error);
             Alert.alert('Error', 'Could not log out. Please try again.');
         }
     };
 
-    // Bir işlemi silmek için kullanılan fonksiyon.
+    
     const handleDeleteTransaction = useCallback(async (id: string) => {
         if (!user) return;
         try {
@@ -290,7 +269,7 @@ export default function HomeScreen() {
         }
     }, [user]);
 
-    // Hem zaman hem de kategori filtresinden geçmiş nihai listeyi oluşturan useMemo.
+    
     const filteredTransactions = useMemo(() => {
         if (!selectedCategory) {
             return dateFilteredTransactions;
@@ -300,10 +279,10 @@ export default function HomeScreen() {
         );
     }, [dateFilteredTransactions, selectedCategory]);
 
-    // Seçili olan zaman filtresinin etiketini (label) buluyoruz.
+    
     const selectedDateFilterLabel = dateFilters.find(f => f.key === selectedDateFilter)?.label || 'All';
 
-    // OPTİMİZASYON: renderItem fonksiyonunu useCallback ile sarmalıyoruz.
+    
     const renderTransaction: ListRenderItem<Transaction> = useCallback(({ item }) => (
         <TransactionListItem
             item={item}
@@ -314,28 +293,19 @@ export default function HomeScreen() {
 
     const keyExtractor = useCallback((item: Transaction) => item.id, []);
 
-    // DEBUG: Ticker verilerini konsola yazdır
-    useEffect(() => {
-        console.log('🎬 Current ticker data in component:', tickerData);
-    }, [tickerData]);
-
     return (
-        // Ana içeriği ve modal'ı sarmalamak için bir View kullanıyoruz.
+       
         <View style={{ flex: 1 }}>
-            <SafeAreaView style={[styles.container, { backgroundColor: Colors.background, paddingTop: 10 }]}>
+          <SafeAreaView style={[styles.container, { backgroundColor: Colors.background }]}>
+           
+            <View style={styles.tickerContainer}>
+              <Ticker key={`fiat-${fiatMetalTickerData.join()}`} data={fiatMetalTickerData} />
+              <Ticker key={`crypto-${cryptoTickerData.join()}`} data={cryptoTickerData} />
+            </View>
 
-                {/* DÜZELTME: Ticker Container - Şartlı rendering eklendi */}
-                <View style={styles.tickerContainer}>
-                    <Ticker
-                        data={tickerData.length > 0 ? tickerData : []}
-                        speed={45}
-                        height={32}
-                    />
-                </View>
-
-                {/* YENİ HEADER: Para birimi seçici ve Auth butonunu içerir */}
+             
                 <View style={styles.headerRow}>
-                    {/* Para Birimi Seçici (Sola Yaslı) */}
+                    
                     <View style={styles.currencySelectorContainer}>
                         {currencies.map((c) => (
                             <AnimatedPressable
@@ -349,7 +319,7 @@ export default function HomeScreen() {
                         ))}
                     </View>
 
-                    {/* Giriş/Çıkış Butonu (Sağa Yaslı) */}
+                    
                     <View>
                         {user && (
                             user.isAnonymous ? (
@@ -365,7 +335,7 @@ export default function HomeScreen() {
                     </View>
                 </View>
 
-                {/* Toplam Gelir, Gider ve Bakiye'yi gösteren özet barı */}
+                
                 <View style={styles.summaryContainer}>
                     <View style={styles.summaryBox}>
                         <ThemedText style={styles.summaryLabel}>Income</ThemedText>
@@ -396,9 +366,9 @@ export default function HomeScreen() {
                     </View>
                 </View>
 
-                {/* Filtreleme Bölümü */}
+               
                 <View style={styles.filterSectionContainer}>
-                    {/* Zaman Filtresi Açılır Listesi */}
+                   
                     <View style={styles.dropdownWrapper}>
                         <AnimatedPressable style={styles.dropdownButton} onPress={() => setDateModalVisible(true)}>
                             <Ionicons name="calendar-outline" size={20} color={Colors.text} />
@@ -406,7 +376,7 @@ export default function HomeScreen() {
                         </AnimatedPressable>
                     </View>
 
-                    {/* Kategori Filtresi Açılır Listesi */}
+                    
                     <View style={styles.dropdownWrapper}>
                         <AnimatedPressable style={styles.dropdownButton} onPress={() => setCategoryModalVisible(true)}>
                             <Ionicons name="pricetag-outline" size={20} color={Colors.text} />
@@ -419,30 +389,30 @@ export default function HomeScreen() {
                     <ThemedText type="title" style={styles.sectionTitle}>Recent Transactions</ThemedText>
                 </View>
 
-                {/* Gelir-Gider listesini göstermek için FlatList kullanıyoruz. */}
+                
                 <FlatList
                     data={filteredTransactions}
                     keyExtractor={keyExtractor}
                     renderItem={renderTransaction}
-                    windowSize={10} // Performans için ek ayarlar
+                    windowSize={10} 
                     initialNumToRender={10}
                     ListEmptyComponent={
                         <ThemedText style={{ textAlign: 'center', marginTop: 20 }}>No transactions yet.</ThemedText>
                     }
                 />
 
-                {/* Yeni işlem ekleme butonu. */}
+            
                 <AnimatedPressable style={styles.fab} onPress={() => router.push('/add-transaction')}>
                     <Ionicons name="add" size={32} color="white" />
                 </AnimatedPressable>
             </SafeAreaView>
 
-            {/* Zaman Filtresi Seçeneklerini Gösteren Modal */}
+            
             <Modal
                 transparent={true}
                 visible={isDateModalVisible}
                 animationType="fade"
-                onRequestClose={() => setDateModalVisible(false)} // Android'de geri tuşuna basıldığında modal'ı kapatır.
+                onRequestClose={() => setDateModalVisible(false)} 
             >
                 <View style={styles.modalOverlay}>
                     <View style={[styles.modalContent, { backgroundColor: Colors.surface }]}>
@@ -470,7 +440,7 @@ export default function HomeScreen() {
                 </View>
             </Modal>
 
-            {/* Kategori Filtresi Seçeneklerini Gösteren Modal */}
+         
             <Modal
                 transparent={true}
                 visible={isCategoryModalVisible}
@@ -518,11 +488,12 @@ const getStyles = () => StyleSheet.create({
     container: {
         flex: 1,
     },
-    // DÜZELTME: Ticker container stilleri güncellendi
+    
     tickerContainer: {
         marginTop: 10,
-        marginBottom: 12,
-        marginHorizontal: 16,
+        marginBottom: 12, 
+        gap: 4,
+        
     },
     headerRow: {
         flexDirection: 'row',
@@ -534,8 +505,8 @@ const getStyles = () => StyleSheet.create({
     topDecorationBar: {
         top:-5,
         height: 5,
-        backgroundColor: '#48484a', // Koyu gri, ince bir çizgi
-        marginHorizontal: 120, // Ortalamak için sağdan ve soldan boşluk
+        backgroundColor: '#48484a',
+        marginHorizontal: 120, 
         marginTop: 25,
         borderRadius: 2.5,
     },
@@ -595,7 +566,7 @@ const getStyles = () => StyleSheet.create({
         color: Colors.text,
         fontWeight: '600',
         fontSize: 14,
-        flexShrink: 1, // Metnin gerektiğinde küçülmesine izin ver
+        flexShrink: 1, 
     },
     modalOverlay: {
         flex: 1,
@@ -659,7 +630,7 @@ const getStyles = () => StyleSheet.create({
         paddingBottom: 8,
     },
     sectionTitle: {
-        fontSize: 24, // Varsayılan başlık boyutunu (32) küçülttük.
+        fontSize: 24, 
     },
     transactionItem: {
         flexDirection: 'row',
