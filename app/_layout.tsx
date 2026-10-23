@@ -1,4 +1,4 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -60,14 +60,14 @@ function RootLayoutNav() {
 
   return (
       <ThemeProvider value={DarkTheme}>
-        <Stack>
+        <Stack screenOptions={{ contentStyle: { backgroundColor: '#0E0E10' } }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
-          <Stack.Screen name="signup" options={{ presentation: 'modal', title: 'Create Account' }} />
-          <Stack.Screen name="add-transaction" options={{ presentation: 'modal', title: 'New Transaction' }} />
+          <Stack.Screen name="signup" options={{ presentation: 'modal', headerShown: false }} />
+          <Stack.Screen name="add-transaction" options={{ presentation: 'modal', headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>
-        <StatusBar style="auto" />        
+        <StatusBar style="light" />        
         <Toast />
       </ThemeProvider>
   );

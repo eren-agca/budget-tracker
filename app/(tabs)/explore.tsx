@@ -1,18 +1,28 @@
 import { collection, onSnapshot, query } from 'firebase/firestore';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Dimensions, SafeAreaView, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Dimensions,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { PieChart } from 'react-native-chart-kit';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 
 import { ExchangeRates, getExchangeRates } from '@/services/currencyService';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { db } from '@/firebaseConfig';
 import { useAuth } from '@/context/AuthContext';
 import { analyzeTransactionsWithGemini } from '@/services/geminiService';
+import { expenseCategories } from '@/constants/Categories';
 
 interface Transaction {
   id: string;
@@ -24,6 +34,14 @@ interface Transaction {
   date: any;
 }
 
+interface BreakdownItem {
+  category: string;
+  amount: number;
+  percentage: number;
+  color: string;
+  icon: any;
+}
+
 interface PieChartData {
   name: string;
   population: number;
@@ -32,18 +50,30 @@ interface PieChartData {
   legendFontSize: number;
 }
 
+const PALETTE = [
+  '#39FF14', // Neon Green
+  '#2DD4BF', // Teal
+  '#60A5FA', // Blue
+  '#F59E0B', // Amber
+  '#EC4899', // Pink
+  '#8B5CF6', // Purple
+  '#10B981', // Emerald
+  '#F87171', // Coral Red
+];
+
 export default function ExploreScreen() {
   const { user } = useAuth();
-  const styles = useMemo(() => getStyles(), []);
+  const insets = useSafeAreaInsets();
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [displayCurrency, setDisplayCurrency] = useState<Currency>(defaultCurrency);
   const [rates, setRates] = useState<ExchangeRates | null>(null);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'expense' | 'income'>('expense');
 
-  const pieAnimationProgress = useSharedValue(0);
-  const barAnimationProgress = useSharedValue(0);
+  const chartAnimationProgress = useSharedValue(0);
 
   useEffect(() => {
     if (!user) return;
@@ -67,329 +97,545 @@ export default function ExploreScreen() {
     fetchRates();
   }, []);
 
-  const expenseChartData = useMemo((): PieChartData[] => {
+  // Compute breakdown list and chart data for selected type
+  const { breakdownList, chartData, totalSum } = useMemo(() => {
     if (!rates || transactions.length === 0 || !rates[displayCurrency.code]) {
-      return [];
+      return { breakdownList: [], chartData: [], totalSum: 0 };
     }
 
-    const expenses = transactions.filter((t) => t.type === 'expense');
-    if (expenses.length === 0) {
-      return [];
+    const filtered = transactions.filter((t) => t.type === activeTab);
+    if (filtered.length === 0) {
+      return { breakdownList: [], chartData: [], totalSum: 0 };
     }
 
-    const expenseByCategory = expenses.reduce((acc, curr) => {
-      const category = curr.category || 'Uncategorized';
-      if (!acc[category]) {
-        acc[category] = 0;
-      }
+    const categoryMap: Record<string, number> = {};
+    let totalInTRY = 0;
+
+    filtered.forEach((curr) => {
+      const category = curr.category || 'Other';
       const rate = rates[curr.currency] || 1;
       const amountInTRY = Math.abs(curr.amount) * rate;
-      acc[category] += amountInTRY;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const colorPalette = ['#60A5FA', '#F87171', '#4ADE80', '#FBBF24', '#A78BFA', '#2DD4BF'];
-
-    return Object.keys(expenseByCategory).map((category, index) => {
-      const totalInCategoryInTRY = expenseByCategory[category];
-      const totalInDisplayCurrency = totalInCategoryInTRY / (rates[displayCurrency.code] || 1);
-      return {
-        name: `${displayCurrency.symbol}${totalInDisplayCurrency.toFixed(0)} ${category}`,
-        population: totalInDisplayCurrency,
-        color: colorPalette[index % colorPalette.length],
-        legendFontColor: Colors.text,
-        legendFontSize: 14,
-      };
+      categoryMap[category] = (categoryMap[category] || 0) + amountInTRY;
+      totalInTRY += amountInTRY;
     });
-  }, [transactions, rates, displayCurrency]);
 
-  const incomeChartData = useMemo((): PieChartData[] => {
-    if (!rates || transactions.length === 0 || !rates[displayCurrency.code]) {
-      return [];
-    }
+    const displayRate = rates[displayCurrency.code] || 1;
+    const totalInDisplay = totalInTRY / displayRate;
 
-    const incomes = transactions.filter((t) => t.type === 'income');
-    if (incomes.length === 0) {
-      return [];
-    }
+    const sortedCategories = Object.keys(categoryMap).sort(
+      (a, b) => categoryMap[b] - categoryMap[a]
+    );
 
-    const incomeByCategory = incomes.reduce((acc, curr) => {
-      const category = curr.category || 'Uncategorized';
-      if (!acc[category]) {
-        acc[category] = 0;
-      }
-      const rate = rates[curr.currency] || 1;
-      const amountInTRY = curr.amount * rate;
-      acc[category] += amountInTRY;
-      return acc;
-    }, {} as Record<string, number>);
+    const list: BreakdownItem[] = [];
+    const chart: PieChartData[] = [];
 
-    const colorPalette = ['#34C759', '#52D769', '#28A745', '#84E198', '#A3E9B3'];
+    sortedCategories.forEach((cat, index) => {
+      const catAmountDisplay = categoryMap[cat] / displayRate;
+      const percentage = totalInDisplay > 0 ? (catAmountDisplay / totalInDisplay) * 100 : 0;
+      const color = PALETTE[index % PALETTE.length];
 
-    return Object.keys(incomeByCategory).map((category, index) => {
-      const totalInCategoryInTRY = incomeByCategory[category];
-      const totalInDisplayCurrency = totalInCategoryInTRY / (rates[displayCurrency.code] || 1);
-      return {
-        name: `${displayCurrency.symbol}${totalInDisplayCurrency.toFixed(0)} ${category}`,
-        population: totalInDisplayCurrency,
-        color: colorPalette[index % colorPalette.length], 
+      const matchIcon = expenseCategories.find(
+        (c) => c.label.toLowerCase() === cat.toLowerCase() || c.key.toLowerCase() === cat.toLowerCase()
+      );
+      const icon = matchIcon?.icon || (activeTab === 'income' ? 'cash-outline' : 'pricetag-outline');
+
+      list.push({
+        category: cat,
+        amount: catAmountDisplay,
+        percentage,
+        color,
+        icon,
+      });
+
+      chart.push({
+        name: cat,
+        population: catAmountDisplay,
+        color,
         legendFontColor: Colors.text,
-        legendFontSize: 14,
-      };
+        legendFontSize: 12,
+      });
     });
-  }, [transactions, rates, displayCurrency]);
+
+    return { breakdownList: list, chartData: chart, totalSum: totalInDisplay };
+  }, [transactions, rates, displayCurrency, activeTab]);
 
   useEffect(() => {
     if (!loading) {
-      pieAnimationProgress.value = withTiming(expenseChartData.length > 0 ? 1 : 0, { duration: 600 });
-      barAnimationProgress.value = withTiming(incomeChartData.length > 0 ? 1 : 0, { duration: 600 });
+      chartAnimationProgress.value = 0;
+      chartAnimationProgress.value = withTiming(1, { duration: 500 });
     }
-  }, [loading, expenseChartData, incomeChartData]);
+  }, [loading, activeTab]);
 
-  const animatedPieStyle = useAnimatedStyle(() => ({
-    opacity: pieAnimationProgress.value,
-    transform: [{ scale: pieAnimationProgress.value }],
+  const animatedChartStyle = useAnimatedStyle(() => ({
+    opacity: chartAnimationProgress.value,
+    transform: [{ scale: 0.95 + chartAnimationProgress.value * 0.05 }],
   }));
-
-  const animatedBarStyle = useAnimatedStyle(() => ({
-    opacity: barAnimationProgress.value,
-    transform: [{ scale: barAnimationProgress.value }],
-  }));
-
-  const chartConfig = {
-    backgroundGradientFrom: Colors.background,
-    backgroundGradientTo: Colors.background,
-    color: (opacity = 1) => `rgba(255, 255, 255, 0)`,
-  };
 
   const handleAnalysis = async () => {
     setIsAnalyzing(true);
     setAnalysis(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     const result = await analyzeTransactionsWithGemini(transactions);
     setAnalysis(result);
     setIsAnalyzing(false);
   };
 
-  const ChartPlaceholder = () => (
-      <View style={styles.emptyContainer}>
-        <ActivityIndicator size="large" color={Colors.text} />
-      </View>
-  );
+  const screenWidth = Dimensions.get('window').width;
 
   return (
-      <SafeAreaView style={[styles.container, { backgroundColor: Colors.background }]}>
-        <ScrollView>
-          <View style={styles.topDecorationBar} />
-
-          <View style={styles.titleContainer}>
-            <ThemedText type="subtitle">Display Currency</ThemedText>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}>
+        
+        {/* Top Header */}
+        <View style={styles.headerRow}>
+          <View>
+            <ThemedText style={styles.screenSubtitle}>FINANCIAL ANALYTICS</ThemedText>
+            <ThemedText style={styles.screenTitle}>Insights</ThemedText>
           </View>
-          <View style={styles.currencySelectorContainer}>
-            {currencies.map((c) => (
+
+          {/* Currency Switcher */}
+          <View style={styles.currencyPillsMini}>
+            {currencies.map((c) => {
+              const isActive = displayCurrency.code === c.code;
+              return (
                 <AnimatedPressable
-                    key={c.code}
-                    onPress={() => setDisplayCurrency(c)}
-                    style={[styles.currencyButton, displayCurrency.code === c.code && styles.currencyButtonActive]}>
-                  <ThemedText style={[styles.currencyButtonText, displayCurrency.code === c.code && styles.currencyButtonTextActive]}>
+                  key={c.code}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    setDisplayCurrency(c);
+                  }}
+                  style={[styles.currencyPillMini, isActive && styles.currencyPillMiniActive]}>
+                  <ThemedText style={[styles.currencyPillMiniText, isActive && styles.currencyPillMiniTextActive]}>
                     {c.code}
                   </ThemedText>
                 </AnimatedPressable>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Expenses / Income Segmented Switcher */}
+        <View style={styles.segmentedControl}>
+          <AnimatedPressable
+            style={[styles.segmentButton, activeTab === 'expense' && styles.segmentButtonActiveExpense]}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              setActiveTab('expense');
+            }}>
+            <Ionicons
+              name="arrow-up"
+              size={14}
+              color={activeTab === 'expense' ? '#FFF' : '#8E8E93'}
+            />
+            <ThemedText style={[styles.segmentButtonText, activeTab === 'expense' && styles.segmentButtonTextActive]}>
+              Expenses
+            </ThemedText>
+          </AnimatedPressable>
+
+          <AnimatedPressable
+            style={[styles.segmentButton, activeTab === 'income' && styles.segmentButtonActiveIncome]}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              setActiveTab('income');
+            }}>
+            <Ionicons
+              name="arrow-down"
+              size={14}
+              color={activeTab === 'income' ? '#000' : '#8E8E93'}
+            />
+            <ThemedText
+              style={[
+                styles.segmentButtonText,
+                activeTab === 'income' && { color: '#000', fontWeight: '800' },
+              ]}>
+              Income
+            </ThemedText>
+          </AnimatedPressable>
+        </View>
+
+        {/* Chart Card */}
+        <View style={styles.chartCard}>
+          <View style={styles.chartCardHeader}>
+            <ThemedText style={styles.chartCardTitle}>
+              {activeTab === 'expense' ? 'Spending Breakdown' : 'Income Breakdown'}
+            </ThemedText>
+            <ThemedText style={activeTab === 'expense' ? styles.totalExpenseText : styles.totalIncomeText}>
+              {displayCurrency.symbol}
+              {totalSum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </ThemedText>
+          </View>
+
+          {loading ? (
+            <View style={styles.chartPlaceholder}>
+              <ActivityIndicator size="large" color={Colors.tint} />
+            </View>
+          ) : chartData.length > 0 ? (
+            <Animated.View style={[styles.chartContainer, animatedChartStyle]}>
+              <PieChart
+                data={chartData}
+                width={screenWidth - 64}
+                height={200}
+                chartConfig={{
+                  backgroundGradientFrom: 'transparent',
+                  backgroundGradientTo: 'transparent',
+                  color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                }}
+                accessor="population"
+                backgroundColor="transparent"
+                paddingLeft="15"
+                center={[screenWidth / 4 - 30, 0]}
+                hasLegend={false}
+              />
+            </Animated.View>
+          ) : (
+            <View style={styles.chartPlaceholder}>
+              <Ionicons name="pie-chart-outline" size={40} color="#444" />
+              <ThemedText style={styles.noDataText}>
+                No {activeTab} data available to display chart.
+              </ThemedText>
+            </View>
+          )}
+        </View>
+
+        {/* Detailed Category Rows with Progress Bars */}
+        {breakdownList.length > 0 && (
+          <View style={styles.breakdownSection}>
+            <ThemedText style={styles.breakdownHeading}>Top Categories</ThemedText>
+            {breakdownList.map((item) => (
+              <View key={item.category} style={styles.breakdownRow}>
+                <View style={[styles.categoryIconWrap, { backgroundColor: `${item.color}20` }]}>
+                  <Ionicons name={item.icon} size={18} color={item.color} />
+                </View>
+
+                <View style={styles.breakdownCenter}>
+                  <View style={styles.breakdownTitleRow}>
+                    <ThemedText style={styles.breakdownCategoryName}>{item.category}</ThemedText>
+                    <ThemedText style={styles.breakdownAmount}>
+                      {displayCurrency.symbol}
+                      {item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </ThemedText>
+                  </View>
+
+                  {/* Progress Bar */}
+                  <View style={styles.progressTrack}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { width: `${Math.min(item.percentage, 100)}%`, backgroundColor: item.color },
+                      ]}
+                    />
+                  </View>
+
+                  <ThemedText style={styles.breakdownPercentText}>{item.percentage.toFixed(1)}%</ThemedText>
+                </View>
+              </View>
             ))}
           </View>
+        )}
 
-          <ThemedView style={styles.titleContainer}>
-            <ThemedText type="title">Expense Breakdown</ThemedText>
-          </ThemedView>
+        {/* AI Financial Analysis Card */}
+        <View style={styles.aiCard}>
+          <View style={styles.aiCardTop}>
+            <View style={styles.aiBadge}>
+              <Ionicons name="sparkles" size={16} color={Colors.tint} />
+              <ThemedText style={styles.aiBadgeText}>AI FINANCIAL ASSISTANT</ThemedText>
+            </View>
 
-          {loading ? (
-              <ChartPlaceholder />
-          ) : expenseChartData.length > 0 ? (
-              <Animated.View style={animatedPieStyle}>
-                <PieChart
-                    data={expenseChartData}
-                    width={Dimensions.get('window').width}
-                    height={220}
-                    chartConfig={chartConfig}
-                    accessor={'population'}
-                    backgroundColor={'transparent'}
-                    paddingLeft={'15'}
-                    center={[10, 0]}
-                    hasLegend={false}
-                />
-              </Animated.View>
-          ) : (
-              <View style={styles.emptyContainer}>
-                <ThemedText>No expense data to display a chart.</ThemedText>
-              </View>
-          )}
-
-          {expenseChartData.length > 0 && (
-              <View style={styles.legendContainer}>
-                {expenseChartData.map((item) => (
-                    <View key={`expense-${item.name}`} style={styles.legendItem}>
-                      <View style={[styles.legendSwatch, { backgroundColor: item.color }]} />
-                      <ThemedText style={styles.legendText} numberOfLines={2}>{item.name}</ThemedText>
-                    </View>
-                ))}
-              </View>
-          )}
-
-          <ThemedView style={styles.titleContainer}>
-            <ThemedText type="title">Income Breakdown</ThemedText>
-          </ThemedView>
-
-          {loading ? (
-              <ChartPlaceholder />
-          ) : incomeChartData.length > 0 ? (
-              <Animated.View style={animatedBarStyle}>
-                <PieChart
-                    data={incomeChartData}
-                    width={Dimensions.get('window').width}
-                    height={220}
-                    chartConfig={chartConfig}
-                    accessor={'population'}
-                    backgroundColor={'transparent'}
-                    paddingLeft={'15'}
-                    center={[10, 0]}
-                    hasLegend={false}
-                />
-              </Animated.View>
-          ) : (
-              <View style={styles.emptyContainer}>
-                <ThemedText>No income data to display a chart.</ThemedText>
-              </View>
-          )}
-
-          {incomeChartData.length > 0 && (
-              <View style={styles.legendContainer}>
-                {incomeChartData.map((item) => (
-                    <View key={`income-${item.name}`} style={styles.legendItem}>
-                      <View style={[styles.legendSwatch, { backgroundColor: item.color }]} />
-                      <ThemedText style={styles.legendText} numberOfLines={2}>{item.name}</ThemedText>
-                    </View>
-                ))}
-              </View>
-          )}
-
-          <View style={styles.analysisContainer}>
-            <AnimatedPressable style={styles.analysisButton} onPress={handleAnalysis} disabled={isAnalyzing}>
+            <AnimatedPressable
+              style={styles.aiAnalyzeButton}
+              onPress={handleAnalysis}
+              disabled={isAnalyzing}>
               {isAnalyzing ? (
-                  <ActivityIndicator color="#fff" />
+                <ActivityIndicator size="small" color="#000" />
               ) : (
-                  <ThemedText style={styles.analysisButtonText}>Analyze My Spending</ThemedText>
+                <>
+                  <Ionicons name="flash" size={14} color="#000" />
+                  <ThemedText style={styles.aiAnalyzeButtonText}>Analyze</ThemedText>
+                </>
               )}
             </AnimatedPressable>
-
-            {analysis && (
-                <View style={styles.analysisResultBox}>
-                  <ThemedText style={styles.analysisResultText}>{analysis}</ThemedText>
-                </View>
-            )}
           </View>
-        </ScrollView>
-      </SafeAreaView>
+
+          <ThemedText style={styles.aiCardDescription}>
+            Get intelligent insights, anomaly detection, and smart budget advice powered by Google Gemini.
+          </ThemedText>
+
+          {analysis && (
+            <View style={styles.analysisBox}>
+              <ThemedText style={styles.analysisResultText}>{analysis}</ThemedText>
+            </View>
+          )}
+        </View>
+
+      </ScrollView>
+    </View>
   );
 }
 
-const getStyles = () => StyleSheet.create({
-  container: {
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#0E0E10',
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  screenSubtitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#8E8E93',
+    letterSpacing: 1,
+  },
+  screenTitle: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+    marginTop: 2,
+  },
+  currencyPillsMini: {
+    flexDirection: 'row',
+    backgroundColor: '#191A1F',
+    borderRadius: 12,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  currencyPillMini: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 9,
+  },
+  currencyPillMiniActive: {
+    backgroundColor: '#26282E',
+    borderWidth: 1,
+    borderColor: 'rgba(57, 255, 20, 0.4)',
+  },
+  currencyPillMiniText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#8E8E93',
+  },
+  currencyPillMiniTextActive: {
+    color: Colors.tint,
+  },
+  segmentedControl: {
+    flexDirection: 'row',
+    backgroundColor: '#18191E',
+    borderRadius: 14,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.07)',
+    marginBottom: 16,
+  },
+  segmentButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 11,
+    gap: 6,
+  },
+  segmentButtonActiveExpense: {
+    backgroundColor: '#26282E',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 59, 48, 0.4)',
+  },
+  segmentButtonActiveIncome: {
+    backgroundColor: Colors.tint,
+  },
+  segmentButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#8E8E93',
+  },
+  segmentButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  chartCard: {
+    backgroundColor: '#191A1F',
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 18,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  chartCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    marginBottom: 12,
+  },
+  chartCardTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#9E9EA4',
+    letterSpacing: 0.3,
+  },
+  totalExpenseText: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: Colors.expense,
+  },
+  totalIncomeText: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: Colors.income,
+  },
+  chartContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 4,
+  },
+  chartPlaceholder: {
+    height: 180,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  noDataText: {
+    fontSize: 13,
+    color: '#6E6E73',
+  },
+  breakdownSection: {
+    marginBottom: 20,
+  },
+  breakdownHeading: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 12,
+    letterSpacing: -0.2,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#191A1F',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  categoryIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  breakdownCenter: {
     flex: 1,
   },
-  titleContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-    alignSelf: 'flex-start',
-    backgroundColor: 'transparent',
-  },
-  currencySelectorContainer: {
+  breakdownTitleRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 16,
-    gap: 12,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
   },
-    topDecorationBar: {
-        top:-5,
-        height: 5,
-        backgroundColor: '#48484a',
-        marginHorizontal: 120,
-        marginTop: 25,
-        borderRadius: 2.5,
-    },
-  legendContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    marginTop: 12,
+  breakdownCategoryName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#F2F2F2',
+  },
+  breakdownAmount: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  progressTrack: {
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  breakdownPercentText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  aiCard: {
+    backgroundColor: '#191A1F',
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(57, 255, 20, 0.3)',
     marginBottom: 24,
   },
-  legendItem: {
+  aiCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  aiBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '50%',
-    marginBottom: 8,
+    gap: 6,
   },
-  legendSwatch: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
+  aiBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.tint,
+    letterSpacing: 0.8,
   },
-  legendText: {
+  aiAnalyzeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.tint,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 14,
+    gap: 5,
+  },
+  aiAnalyzeButtonText: {
     fontSize: 12,
-    flexShrink: 1,
+    fontWeight: '800',
+    color: '#000',
   },
-  currencyButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 20,
-    backgroundColor: Colors.surface,
-    borderRadius: 15,
+  aiCardDescription: {
+    fontSize: 12,
+    color: '#8E8E93',
+    lineHeight: 18,
   },
-  currencyButtonActive: {
-    backgroundColor: Colors.tint,
-  },
-  currencyButtonText: {
-    color: Colors.text,
-    fontWeight: 'bold',
-  },
-  currencyButtonTextActive: {
-    color: Colors.background,
-  },
-  emptyContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 50,
-    minHeight: 220,
-  },
-  chartStyle: {
-    marginVertical: 8,
-    borderRadius: 16,
-    alignSelf: 'center',
-  },
-  analysisContainer: {
-    marginHorizontal: 16,
-    marginTop: 24,
-    marginBottom: 48,
-  },
-  analysisButton: {
-    backgroundColor: Colors.tint,
-    padding: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  analysisButtonText: {
-    color: Colors.background,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  analysisResultBox: {
-    marginTop: 16,
-    padding: 16,
-    backgroundColor: Colors.surface,
-    borderRadius: 10,
+  analysisBox: {
+    backgroundColor: '#121215',
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
   analysisResultText: {
-    color: Colors.text,
+    fontSize: 13,
+    color: '#D1D1D6',
+    lineHeight: 20,
   },
 });

@@ -1,12 +1,11 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, Dimensions, LayoutChangeEvent } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, LayoutChangeEvent } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withRepeat,
   withTiming,
   Easing,
-  cancelAnimation,
   runOnJS,
 } from 'react-native-reanimated';
 import { ThemedText } from './ThemedText';
@@ -16,17 +15,19 @@ interface TickerProps {
   data: string[];
   height?: number;
   speed?: number;
+  badgeLabel?: string;
 }
 
 export const Ticker: React.FC<TickerProps> = ({
-                                                data,
-                                                height = 26,
-                                                speed = 40,
-                                              }) => {
+  data,
+  height = 28,
+  speed = 36,
+  badgeLabel,
+}) => {
   const textWidth = useSharedValue(0);
   const translateX = useSharedValue(0);
 
-  const textContent = data.join('      •      ');
+  const textContent = data.join('      ◆      ');
 
   const animatedStyle = useAnimatedStyle(() => {
     if (textWidth.value === 0) {
@@ -39,11 +40,9 @@ export const Ticker: React.FC<TickerProps> = ({
 
   const startAnimation = (width: number) => {
     const duration = (width / speed) * 1000;
-
-    translateX.value = 0;
     translateX.value = withRepeat(
-        withTiming(-width, { duration, easing: Easing.linear }),
-        -1
+      withTiming(-width, { duration, easing: Easing.linear }),
+      -1
     );
   };
 
@@ -57,15 +56,22 @@ export const Ticker: React.FC<TickerProps> = ({
 
   if (!data || data.length === 0) {
     return (
-        <View style={[styles.container, { height }]}>
-          <ThemedText style={styles.text}>Loading...</ThemedText>
-        </View>
+      <View style={[styles.container, { height }]}>
+        <ThemedText style={styles.textLoading}>Loading market rates...</ThemedText>
+      </View>
     );
   }
 
   return (
-      <View style={[styles.container, { height }]}>
-        <Animated.View style={[styles.row, { height }, animatedStyle]}>          
+    <View style={[styles.container, { height }]}>
+      {badgeLabel ? (
+        <View style={styles.badge}>
+          <View style={styles.liveDot} />
+          <ThemedText style={styles.badgeText}>{badgeLabel}</ThemedText>
+        </View>
+      ) : null}
+      <View style={styles.marqueeMask}>
+        <Animated.View style={[styles.row, { height }, animatedStyle]}>
           <ThemedText onLayout={handleOnLayout} style={styles.text}>
             {textContent}
           </ThemedText>
@@ -74,13 +80,49 @@ export const Ticker: React.FC<TickerProps> = ({
           </ThemedText>
         </Animated.View>
       </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: Colors.surface,
+    backgroundColor: '#161618',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
     overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: 'rgba(57, 255, 20, 0.12)',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(57, 255, 20, 0.25)',
+    gap: 5,
+    zIndex: 2,
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.tint,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: Colors.tint,
+    letterSpacing: 0.8,
+  },
+  marqueeMask: {
+    flex: 1,
+    overflow: 'hidden',
+    height: '100%',
+    justifyContent: 'center',
   },
   row: {
     flexDirection: 'row',
@@ -88,9 +130,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   text: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    color: Colors.text,
-    paddingHorizontal: 10,
+    color: '#D1D1D6',
+    paddingHorizontal: 12,
+    letterSpacing: 0.3,
+  },
+  textLoading: {
+    fontSize: 12,
+    color: '#636366',
+    paddingHorizontal: 12,
   },
 });
