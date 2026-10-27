@@ -152,6 +152,7 @@ export default function AddTransactionScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}>
         
         {/* Segmented Type Toggle (Expense / Income) */}

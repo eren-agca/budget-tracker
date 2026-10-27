@@ -58,37 +58,85 @@ const getFiatRates = async (): Promise<ExchangeRates> => {
   return rates;
 };
 
+// In-memory cache with 5-minute TTL to prevent rate limits and redundant network calls
+let cachedRates: ExchangeRates | null = null;
+let lastCacheTime = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 const getMetalRates = async (usdToTryRate: number): Promise<ExchangeRates> => {
-  try {
-    if (!usdToTryRate) {
-      throw new Error('USD/TRY rate was not provided to getMetalRates.');
-    }
-
-    const metalResponse = await fetch('https://data-asg.goldprice.org/dbXRates/USD');
-    if (!metalResponse.ok) throw new Error('Metal API request failed');
-    const metalData = await metalResponse.json();
-
-    if (!metalData.items || !metalData.items[0]) {
-      console.warn('Metal API response format has changed or is invalid (no items).');
-      return {};
-    }
-
-    const item = metalData.items[0];
-    const rates: ExchangeRates = {};
-    const OUNCE_TO_GRAM = 31.1035;
-
-    if (item.xauPrice) {
-      rates['XAU_GRAM'] = (item.xauPrice / OUNCE_TO_GRAM) * usdToTryRate;
-    }
-    if (item.xagPrice) {
-      rates['XAG_GRAM'] = (item.xagPrice / OUNCE_TO_GRAM) * usdToTryRate;
-    }
-
-    return rates;
-  } catch (error) {
-    console.warn('Could not fetch metal rates:', error);
+  if (!usdToTryRate) {
     return {};
   }
+
+  const rates: ExchangeRates = {};
+  const OUNCE_TO_GRAM = 31.1035;
+
+  // 1. Primary: api.gold-api.com (Dedicated free real-time spot metal API)
+  try {
+    const [goldRes, silverRes] = await Promise.all([
+      fetch('https://api.gold-api.com/price/XAU'),
+      fetch('https://api.gold-api.com/price/XAG'),
+    ]);
+
+    if (goldRes.ok && silverRes.ok) {
+      const goldData = await goldRes.json();
+      const silverData = await silverRes.json();
+
+      if (goldData && typeof goldData.price === 'number') {
+        rates['XAU_GRAM'] = Number(((goldData.price / OUNCE_TO_GRAM) * usdToTryRate).toFixed(2));
+      }
+      if (silverData && typeof silverData.price === 'number') {
+        rates['XAG_GRAM'] = Number(((silverData.price / OUNCE_TO_GRAM) * usdToTryRate).toFixed(2));
+      }
+
+      if (rates['XAU_GRAM'] && rates['XAG_GRAM']) {
+        return rates;
+      }
+    }
+  } catch (error) {
+    console.warn('Primary Gold API (gold-api.com) failed, trying fallback...', error);
+  }
+
+  // 2. Secondary fallback: jsdelivr currency-api
+  try {
+    const fallbackRes = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json');
+    if (fallbackRes.ok) {
+      const data = await fallbackRes.json();
+      if (data?.usd?.xau) {
+        const ounceGoldInUsd = 1 / data.usd.xau;
+        rates['XAU_GRAM'] = Number(((ounceGoldInUsd / OUNCE_TO_GRAM) * usdToTryRate).toFixed(2));
+      }
+      if (data?.usd?.xag) {
+        const ounceSilverInUsd = 1 / data.usd.xag;
+        rates['XAG_GRAM'] = Number(((ounceSilverInUsd / OUNCE_TO_GRAM) * usdToTryRate).toFixed(2));
+      }
+
+      if (rates['XAU_GRAM']) {
+        return rates;
+      }
+    }
+  } catch (fallbackError) {
+    console.warn('Secondary metal fallback (currency-api) failed:', fallbackError);
+  }
+
+  // 3. Tertiary fallback: goldprice.org
+  try {
+    const metalResponse = await fetch('https://data-asg.goldprice.org/dbXRates/USD');
+    if (metalResponse.ok) {
+      const metalData = await metalResponse.json();
+      const item = metalData.items?.[0];
+      if (item?.xauPrice) {
+        rates['XAU_GRAM'] = Number(((item.xauPrice / OUNCE_TO_GRAM) * usdToTryRate).toFixed(2));
+      }
+      if (item?.xagPrice) {
+        rates['XAG_GRAM'] = Number(((item.xagPrice / OUNCE_TO_GRAM) * usdToTryRate).toFixed(2));
+      }
+    }
+  } catch (tertiaryError) {
+    console.warn('Tertiary metal API (goldprice.org) failed:', tertiaryError);
+  }
+
+  return rates;
 };
 
 const getCryptoRates = async (usdToTryRate?: number): Promise<ExchangeRates> => {
@@ -146,7 +194,14 @@ const getCryptoRates = async (usdToTryRate?: number): Promise<ExchangeRates> => 
   }
 };
 
-export const getExchangeRates = async (): Promise<ExchangeRates | null> => {
+export const getExchangeRates = async (forceRefresh = false): Promise<ExchangeRates | null> => {
+  const now = Date.now();
+
+  // Return cached rates if fresh within TTL to avoid hitting API rate limits
+  if (!forceRefresh && cachedRates && now - lastCacheTime < CACHE_TTL_MS) {
+    return cachedRates;
+  }
+
   const combinedRates: ExchangeRates = { TRY: 1 };
 
   const fiatRates = await getFiatRates();
@@ -173,12 +228,15 @@ export const getExchangeRates = async (): Promise<ExchangeRates | null> => {
     }
   });
 
-  console.log('Fetched and combined rates:', combinedRates);
-
   if (Object.keys(combinedRates).length <= 1) {
     console.error('Error fetching exchange rates: All API calls failed.');
-    return null;
+    // If we have a stale cache, fall back to it gracefully rather than returning null
+    return cachedRates;
   }
+
+  // Update in-memory cache
+  cachedRates = combinedRates;
+  lastCacheTime = now;
 
   return combinedRates;
 };

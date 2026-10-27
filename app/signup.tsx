@@ -145,6 +145,7 @@ export default function SignUpScreen() {
           style={styles.flex}>
           <ScrollView
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.scrollContent}>
             
             {/* Header info */}

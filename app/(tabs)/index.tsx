@@ -237,13 +237,14 @@ export default function HomeScreen() {
             .map((item) => {
               const rate = fetchedRates[item.code];
               const isCrypto = ['BTC', 'ETH', 'XRP'].includes(item.code);
-              const options: Intl.NumberFormatOptions = {
-                style: 'currency',
-                currency: 'TRY',
-                minimumFractionDigits: isCrypto ? 0 : 2,
-                maximumFractionDigits: isCrypto ? 0 : 2,
-              };
-              const formattedRate = new Intl.NumberFormat('tr-TR', options).format(rate);
+              let formattedRate = '';
+              if (isCrypto) {
+                formattedRate = `₺${Math.round(rate).toLocaleString('tr-TR')}`;
+              } else {
+                const parts = rate.toFixed(2).split('.');
+                const integerFormatted = Number(parts[0]).toLocaleString('tr-TR');
+                formattedRate = `₺${integerFormatted},${parts[1]}`;
+              }
               return `${item.name} ${formattedRate}`;
             });
 
@@ -256,7 +257,7 @@ export default function HomeScreen() {
     };
 
     fetchRates();
-    const intervalId = setInterval(fetchRates, 60000);
+    const intervalId = setInterval(fetchRates, 300000); // 5 minutes polling to respect API limits
     return () => clearInterval(intervalId);
   }, []);
 
@@ -292,7 +293,59 @@ export default function HomeScreen() {
         }
       }
     };
-    const timeoutId = setTimeout(checkRecurringIncomes, 3000);
+
+    const checkInstallments = async () => {
+      try {
+        const installmentsQuery = query(collection(db, 'users', user.uid, 'installments'));
+        const querySnapshot = await getDocs(installmentsQuery);
+        const today = new Date();
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
+
+        for (const docSnap of querySnapshot.docs) {
+          const inst = docSnap.data();
+          if (inst.completed || (inst.remainingInstallments != null && inst.remainingInstallments <= 0)) {
+            continue;
+          }
+
+          const lastCharged = inst.lastCharged ? inst.lastCharged.toDate() : null;
+          const isDayDue = today.getDate() >= (inst.dueDay || 1);
+          const notChargedThisMonth =
+            !lastCharged || lastCharged.getMonth() !== currentMonth || lastCharged.getFullYear() !== currentYear;
+
+          if (isDayDue && notChargedThisMonth) {
+            const transactionDate = new Date(currentYear, currentMonth, inst.dueDay || today.getDate());
+            const nextPaid = (inst.paidInstallments || 0) + 1;
+            const nextRemaining = (inst.remainingInstallments ?? inst.totalInstallments) - 1;
+
+            await addDoc(collection(db, 'users', user.uid, 'transactions'), {
+              amount: -Math.abs(inst.monthlyAmount),
+              category: 'Debt',
+              currency: inst.currency || 'TRY',
+              description: `${inst.bank || 'Bank'} - ${inst.title} (${nextPaid}/${inst.totalInstallments}. Taksit)`,
+              type: 'expense',
+              date: Timestamp.fromDate(transactionDate),
+            });
+
+            await updateDoc(doc(db, 'users', user.uid, 'installments', docSnap.id), {
+              paidInstallments: nextPaid,
+              remainingInstallments: Math.max(0, nextRemaining),
+              completed: nextRemaining <= 0,
+              lastCharged: Timestamp.now(),
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error auto-checking installments:', err);
+      }
+    };
+
+    const runChecks = async () => {
+      await checkRecurringIncomes();
+      await checkInstallments();
+    };
+
+    const timeoutId = setTimeout(runChecks, 3000);
     return () => clearTimeout(timeoutId);
   }, [user]);
 
@@ -458,8 +511,16 @@ export default function HomeScreen() {
               </View>
 
               <View style={styles.heroAmountRow}>
-                <ThemedText style={styles.heroCurrencySymbol}>{displayCurrency.symbol}</ThemedText>
-                <ThemedText style={styles.heroAmountText}>{formatAmount(balance)}</ThemedText>
+                <ThemedText style={styles.heroCurrencySymbol}>
+                  {balance < 0 ? `-${displayCurrency.symbol}` : displayCurrency.symbol}
+                </ThemedText>
+                <ThemedText
+                  style={styles.heroAmountText}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.55}>
+                  {formatAmount(Math.abs(balance))}
+                </ThemedText>
               </View>
 
               {/* Integrated Currency Switcher */}
@@ -567,21 +628,11 @@ export default function HomeScreen() {
             </View>
             <ThemedText style={styles.emptyTitle}>No Transactions Found</ThemedText>
             <ThemedText style={styles.emptySubtitle}>
-              Tap the green '+' button below to add your first income or expense.
+              Tap the '+' button in the bottom bar to add your first income or expense.
             </ThemedText>
           </View>
         }
       />
-
-      {/* Floating Action Button (FAB) in Thumb Zone */}
-      <AnimatedPressable
-        style={[styles.fab, { bottom: insets.bottom + 84 }]}
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-          router.push('/add-transaction');
-        }}>
-        <Ionicons name="add" size={30} color="#000" />
-      </AnimatedPressable>
 
       {/* Date Filter Modal */}
       <Modal
@@ -774,17 +825,23 @@ const styles = StyleSheet.create({
   },
   heroAmountRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     marginBottom: 16,
+    overflow: 'visible',
+    minHeight: 48,
   },
   heroCurrencySymbol: {
     fontSize: 26,
+    lineHeight: 34,
     fontWeight: '700',
     color: Colors.tint,
-    marginRight: 4,
+    marginRight: 6,
+    alignSelf: 'center',
   },
   heroAmountText: {
-    fontSize: 36,
+    flex: 1,
+    fontSize: 38,
+    lineHeight: 48,
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: -0.5,
@@ -1029,28 +1086,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: Colors.tint,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.tint,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.5,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 8,
-      },
-    }),
-    zIndex: 99,
-  },
+
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.72)',

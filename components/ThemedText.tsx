@@ -11,11 +11,19 @@ export function ThemedText({
   type = 'default',
   ...rest
 }: ThemedTextProps) {
+  const flatStyle = StyleSheet.flatten(style);
+  const hasCustomFontSize = flatStyle?.fontSize !== undefined && flatStyle.fontSize !== 16;
+  const hasCustomLineHeight = flatStyle?.lineHeight !== undefined;
+
+  const defaultStyle = (hasCustomFontSize || hasCustomLineHeight)
+    ? undefined
+    : styles.default;
+
   return (
     <Text
       style={[
         { color: Colors.text },
-        type === 'default' ? styles.default : undefined,
+        type === 'default' ? defaultStyle : undefined,
         type === 'title' ? styles.title : undefined,
         type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
         type === 'subtitle' ? styles.subtitle : undefined,
