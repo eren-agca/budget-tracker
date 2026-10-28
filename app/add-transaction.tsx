@@ -118,14 +118,16 @@ export default function AddTransactionScreen() {
   };
 
   const handleAmountChange = (text: string) => {
-    const numericRegex = /^\d*([.,])?\d*$/;
+    if (text.length > 12) return;
+    const numericRegex = /^\d*([.,]\d{0,2})?$/;
     if (numericRegex.test(text) || text === '') {
       setAmount(text);
     }
   };
 
   const handleRateChange = (text: string) => {
-    const numericRegex = /^\d*([.,])?\d*$/;
+    if (text.length > 12) return;
+    const numericRegex = /^\d*([.,]\d{0,2})?$/;
     if (numericRegex.test(text) || text === '') {
       setPurchaseRate(text);
     }
@@ -191,6 +193,7 @@ export default function AddTransactionScreen() {
               onChangeText={handleAmountChange}
               style={styles.amountInput}
               keyboardType="numeric"
+              maxLength={12}
               placeholderTextColor="#444"
               autoFocus={true}
             />
@@ -209,7 +212,7 @@ export default function AddTransactionScreen() {
                   }}
                   style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
                   <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
-                    {c.code}
+                    {c.label}
                   </ThemedText>
                 </AnimatedPressable>
               );
@@ -227,6 +230,7 @@ export default function AddTransactionScreen() {
                 value={description}
                 onChangeText={setDescription}
                 style={styles.fieldInput}
+                maxLength={60}
                 placeholderTextColor="#636366"
               />
             </View>

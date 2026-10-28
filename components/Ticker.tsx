@@ -16,6 +16,7 @@ interface TickerProps {
   height?: number;
   speed?: number;
   badgeLabel?: string;
+  isError?: boolean;
 }
 
 export const Ticker: React.FC<TickerProps> = ({
@@ -23,9 +24,12 @@ export const Ticker: React.FC<TickerProps> = ({
   height = 30,
   speed = 36,
   badgeLabel,
+  isError,
 }) => {
   const textWidth = useSharedValue(0);
   const translateX = useSharedValue(0);
+
+  const isUnavailable = isError || (data.length === 1 && data[0].includes('devre dışı'));
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -66,8 +70,8 @@ export const Ticker: React.FC<TickerProps> = ({
     <View onLayout={onLayout} style={styles.tickerGroup}>
       {data.map((item, idx) => (
         <View key={`${prefix}-${idx}`} style={styles.tickerItem}>
-          <ThemedText style={styles.text}>{item}</ThemedText>
-          <ThemedText style={styles.separator}>◆</ThemedText>
+          <ThemedText style={[styles.text, isUnavailable && styles.textUnavailable]}>{item}</ThemedText>
+          <ThemedText style={[styles.separator, isUnavailable && styles.separatorUnavailable]}>◆</ThemedText>
         </View>
       ))}
     </View>
@@ -76,9 +80,9 @@ export const Ticker: React.FC<TickerProps> = ({
   return (
     <View style={[styles.container, { height }]}>
       {badgeLabel ? (
-        <View style={styles.badge}>
-          <View style={styles.liveDot} />
-          <ThemedText style={styles.badgeText}>{badgeLabel}</ThemedText>
+        <View style={[styles.badge, isUnavailable && styles.badgeUnavailable]}>
+          <View style={[styles.liveDot, isUnavailable && styles.liveDotUnavailable]} />
+          <ThemedText style={[styles.badgeText, isUnavailable && styles.badgeTextUnavailable]}>{badgeLabel}</ThemedText>
         </View>
       ) : null}
       <View style={styles.marqueeMask}>
@@ -180,5 +184,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     includeFontPadding: false,
     textAlignVertical: 'center',
+  },
+  badgeUnavailable: {
+    backgroundColor: 'rgba(255, 159, 10, 0.12)',
+    borderRightColor: 'rgba(255, 159, 10, 0.22)',
+  },
+  liveDotUnavailable: {
+    backgroundColor: '#FF9F0A',
+  },
+  badgeTextUnavailable: {
+    color: '#FF9F0A',
+  },
+  textUnavailable: {
+    color: '#FFB340',
+  },
+  separatorUnavailable: {
+    color: 'rgba(255, 159, 10, 0.4)',
   },
 });

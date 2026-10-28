@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { ComponentProps, useEffect, useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,6 +7,8 @@ import {
   TextInput,
   Platform,
   KeyboardAvoidingView,
+  Modal,
+  TouchableOpacity,
 } from 'react-native';
 import {
   collection,
@@ -20,6 +22,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import Toast from 'react-native-toast-message';
 
 import { db } from '@/firebaseConfig';
 import { ThemedText } from '@/components/ThemedText';
@@ -32,7 +35,7 @@ export interface RecurringIncome {
   id: string;
   amount: number;
   category: string;
-  currency: 'TRY' | 'USD' | 'EUR' | 'RUB';
+  currency: 'TRY' | 'USD' | 'EUR' | 'GBP';
   dayOfMonth: number;
 }
 
@@ -45,12 +48,57 @@ export interface Installment {
   totalInstallments: number;
   paidInstallments: number;
   remainingInstallments: number;
-  currency: 'TRY' | 'USD' | 'EUR' | 'RUB';
+  currency: 'TRY' | 'USD' | 'EUR' | 'GBP';
   dueDay: number;
   lastCharged?: any;
   createdAt?: any;
   completed: boolean;
 }
+
+export interface Subscription {
+  id: string;
+  name: string;
+  amount: number;
+  currency: 'TRY' | 'USD' | 'EUR' | 'GBP';
+  billingCycle: 'monthly' | 'yearly';
+  dueDay: number;
+  bank?: string;
+  category?: string;
+  iconName?: string;
+  color?: string;
+  isActive: boolean;
+  lastCharged?: any;
+  createdAt?: any;
+}
+
+export interface PresetSubscription {
+  name: string;
+  category: string;
+  defaultCurrency: 'TRY' | 'USD' | 'EUR' | 'GBP';
+  icon: ComponentProps<typeof Ionicons>['name'];
+  color: string;
+}
+
+export const PRESET_SUBSCRIPTIONS: PresetSubscription[] = [
+  { name: 'Netflix', category: 'Dizi / Film', defaultCurrency: 'TRY', icon: 'film-outline', color: '#E50914' },
+  { name: 'Spotify', category: 'Müzik', defaultCurrency: 'TRY', icon: 'musical-notes-outline', color: '#1DB954' },
+  { name: 'YouTube Premium', category: 'Video / Müzik', defaultCurrency: 'TRY', icon: 'play-outline', color: '#FF0000' },
+  { name: 'ChatGPT Plus', category: 'Yapay Zeka', defaultCurrency: 'USD', icon: 'hardware-chip-outline', color: '#10A37F' },
+  { name: 'iCloud+', category: 'Bulut Depolama', defaultCurrency: 'TRY', icon: 'cloud-outline', color: '#007AFF' },
+  { name: 'Disney+', category: 'Dizi / Film', defaultCurrency: 'TRY', icon: 'tv-outline', color: '#113CCF' },
+  { name: 'Amazon Prime', category: 'Alışveriş / Dizi', defaultCurrency: 'TRY', icon: 'cart-outline', color: '#00A8E1' },
+  { name: 'BluTV', category: 'Dizi / Film', defaultCurrency: 'TRY', icon: 'videocam-outline', color: '#00D2D3' },
+  { name: 'Gain', category: 'Dizi / Film', defaultCurrency: 'TRY', icon: 'film-outline', color: '#D92546' },
+  { name: 'Apple Music', category: 'Müzik', defaultCurrency: 'TRY', icon: 'disc-outline', color: '#FA243C' },
+  { name: 'Google One', category: 'Bulut Depolama', defaultCurrency: 'TRY', icon: 'cloud-upload-outline', color: '#4285F4' },
+  { name: 'Claude Pro', category: 'Yapay Zeka', defaultCurrency: 'USD', icon: 'sparkles-outline', color: '#D97706' },
+  { name: 'Midjourney', category: 'Yapay Zeka', defaultCurrency: 'USD', icon: 'color-palette-outline', color: '#6366F1' },
+  { name: 'GitHub Copilot', category: 'Yazılım', defaultCurrency: 'USD', icon: 'code-slash-outline', color: '#8957E5' },
+  { name: 'PlayStation Plus', category: 'Oyun', defaultCurrency: 'TRY', icon: 'game-controller-outline', color: '#00439C' },
+  { name: 'Xbox Game Pass', category: 'Oyun', defaultCurrency: 'TRY', icon: 'game-controller-outline', color: '#107C10' },
+  { name: 'Spor Salonu (Gym)', category: 'Sağlık & Spor', defaultCurrency: 'TRY', icon: 'fitness-outline', color: '#10B981' },
+  { name: 'Özel / Diğer', category: 'Genel', defaultCurrency: 'TRY', icon: 'apps-outline', color: '#39FF14' },
+];
 
 const COMMON_BANKS = [
   'Garanti BBVA',
@@ -63,6 +111,40 @@ const COMMON_BANKS = [
   'VakıfBank',
 ];
 
+const ALL_BANKS = [
+  'Akbank',
+  'Albaraka Türk',
+  'Alternatif Bank',
+  'Anadolubank',
+  'Burgan Bank',
+  'CEPTETEB',
+  'DenizBank',
+  'Enpara.com',
+  'Fibabanka',
+  'Garanti BBVA',
+  'Halkbank',
+  'Hayat Finans',
+  'HSBC',
+  'ICBC Turkey',
+  'ING',
+  'İş Bankası',
+  'Kuveyt Türk',
+  'Odeabank',
+  'Papara',
+  'Paycell',
+  'QNB',
+  'Şekerbank',
+  'TEB (Türk Ekonomi Bankası)',
+  'TOM Bank / Hadi',
+  'Türkiye Finans',
+  'VakıfBank',
+  'Vakıf Katılım',
+  'Yapı Kredi',
+  'Ziraat Bankası',
+  'Ziraat Katılım',
+  'Diğer',
+];
+
 const QUICK_INSTALLMENTS = ['3', '6', '9', '12'];
 
 export default function RecurringScreen() {
@@ -70,7 +152,23 @@ export default function RecurringScreen() {
   const insets = useSafeAreaInsets();
 
   // Active Segment Tab
-  const [activeTab, setActiveTab] = useState<'income' | 'installment'>('installment');
+  const [activeTab, setActiveTab] = useState<'installment' | 'subscription' | 'income'>('installment');
+
+  // --- Subscriptions State ---
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [isSubFormExpanded, setIsSubFormExpanded] = useState(true);
+  const [subName, setSubName] = useState('Netflix');
+  const [subAmount, setSubAmount] = useState('');
+  const [subCurrency, setSubCurrency] = useState<Currency>(defaultCurrency);
+  const [subBillingCycle, setSubBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const [subDueDay, setSubDueDay] = useState('');
+  const [subBank, setSubBank] = useState('');
+  const [subCategory, setSubCategory] = useState('Dizi / Film');
+  const [subIcon, setSubIcon] = useState<ComponentProps<typeof Ionicons>['name']>('film-outline');
+  const [subColor, setSubColor] = useState('#E50914');
+  const [selectedPreset, setSelectedPreset] = useState<string | null>('Netflix');
+  const [subToDelete, setSubToDelete] = useState<Subscription | null>(null);
+  const [subToPay, setSubToPay] = useState<Subscription | null>(null);
 
   // --- Recurring Incomes State ---
   const [recurringIncomes, setRecurringIncomes] = useState<RecurringIncome[]>([]);
@@ -89,6 +187,15 @@ export default function RecurringScreen() {
   const [instPaidCount, setInstPaidCount] = useState('0');
   const [instDueDay, setInstDueDay] = useState('');
   const [instCurrency, setInstCurrency] = useState<Currency>(defaultCurrency);
+  const [isBankModalVisible, setBankModalVisible] = useState(false);
+  const [bankModalTarget, setBankModalTarget] = useState<'installment' | 'subscription'>('installment');
+  const [bankSearchQuery, setBankSearchQuery] = useState('');
+
+  const filteredBanks = useMemo(() => {
+    if (!bankSearchQuery.trim()) return ALL_BANKS;
+    const q = bankSearchQuery.toLowerCase().trim();
+    return ALL_BANKS.filter((b) => b.toLowerCase().includes(q));
+  }, [bankSearchQuery]);
 
   // Subscribe to Recurring Incomes
   useEffect(() => {
@@ -123,6 +230,56 @@ export default function RecurringScreen() {
     return () => unsubscribe();
   }, [user]);
 
+  // Subscribe to Subscriptions
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = onSnapshot(collection(db, 'users', user.uid, 'subscriptions'), (snapshot) => {
+      const list: Subscription[] = [];
+      snapshot.forEach((d) => {
+        list.push({ id: d.id, ...d.data() } as Subscription);
+      });
+      list.sort((a, b) => {
+        if (a.isActive === b.isActive) {
+          return (a.dueDay || 0) - (b.dueDay || 0);
+        }
+        return a.isActive ? -1 : 1;
+      });
+      setSubscriptions(list);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  // --- Calculations for Subscriptions ---
+  const activeSubscriptions = useMemo(() => {
+    return subscriptions.filter((s) => s.isActive !== false);
+  }, [subscriptions]);
+
+  const subMonthlyTotalTRY = useMemo(() => {
+    return activeSubscriptions.reduce((sum, item) => {
+      const monthly = item.billingCycle === 'yearly' ? item.amount / 12 : item.amount;
+      if (item.currency === 'TRY' || !item.currency) {
+        return sum + monthly;
+      }
+      return sum;
+    }, 0);
+  }, [activeSubscriptions]);
+
+  const foreignSubSummary = useMemo(() => {
+    const map: Record<string, number> = {};
+    activeSubscriptions.forEach((item) => {
+      if (item.currency && item.currency !== 'TRY') {
+        const monthly = item.billingCycle === 'yearly' ? item.amount / 12 : item.amount;
+        map[item.currency] = (map[item.currency] || 0) + monthly;
+      }
+    });
+    const entries = Object.entries(map);
+    if (entries.length === 0) return '';
+    return entries.map(([curr, amt]) => {
+      const sym = currencies.find((c) => c.code === curr)?.symbol || curr;
+      return `+ ${sym}${amt.toFixed(0)}/ay`;
+    }).join(' ');
+  }, [activeSubscriptions]);
+
   // --- Calculations for Installments ---
   const parsedTotal = parseFloat(instTotalAmount.replace(',', '.')) || 0;
   const parsedCount = parseInt(instTotalCount, 10) || 1;
@@ -146,23 +303,223 @@ export default function RecurringScreen() {
     }, 0);
   }, [activeInstallments]);
 
-  // --- Handlers: Recurring Income ---
-  const handleAddRecurringIncome = async () => {
-    const numericAmount = parseFloat(amount.replace(',', '.'));
-    const numericDay = parseInt(dayOfMonth, 10);
+  // --- Handlers: Subscriptions ---
+  const handleSelectPreset = (preset: PresetSubscription) => {
+    Haptics.selectionAsync().catch(() => {});
+    setSelectedPreset(preset.name);
+    setSubName(preset.name === 'Özel / Diğer' ? '' : preset.name);
+    setSubCategory(preset.category);
+    setSubIcon(preset.icon);
+    setSubColor(preset.color);
+    const matchingCurr = currencies.find((c) => c.code === preset.defaultCurrency) || defaultCurrency;
+    setSubCurrency(matchingCurr);
+  };
 
-    if (!category || isNaN(numericAmount) || isNaN(numericDay) || numericDay < 1 || numericDay > 31) {
-      Alert.alert('Eksik Bilgi', 'Lütfen geçerli bir gelir kaynağı, tutar ve gün (1-31) girin.');
+  const handleAddSubscription = async () => {
+    const trimmedName = subName.trim();
+    const numericAmount = parseFloat(subAmount.replace(',', '.'));
+    const numericDueDay = parseInt(subDueDay, 10);
+
+    if (!trimmedName) {
+      Toast.show({
+        type: 'error',
+        text1: 'Eksik Bilgi',
+        text2: 'Lütfen servis veya platform adını girin.',
+      });
+      return;
+    }
+
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Geçersiz Tutar',
+        text2: 'Lütfen geçerli bir abonelik tutarı girin.',
+      });
+      return;
+    }
+
+    if (isNaN(numericDueDay) || numericDueDay < 1 || numericDueDay > 31) {
+      Toast.show({
+        type: 'error',
+        text1: 'Geçersiz Çekilme Günü',
+        text2: 'Lütfen 1 ile 31 arasında bir ödeme günü girin.',
+      });
       return;
     }
 
     try {
       if (!user) throw new Error('User not authenticated');
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+
+      const today = new Date();
+      const isDueToday = numericDueDay === today.getDate();
+
+      await addDoc(collection(db, 'users', user.uid, 'subscriptions'), {
+        name: trimmedName,
+        amount: numericAmount,
+        currency: subCurrency.code,
+        billingCycle: subBillingCycle,
+        dueDay: numericDueDay,
+        bank: subBank || 'Belirtilmedi',
+        category: subCategory || 'Abonelik',
+        iconName: subIcon || 'play-circle-outline',
+        color: subColor || Colors.tint,
+        isActive: true,
+        createdAt: Timestamp.now(),
+        lastCharged: isDueToday ? Timestamp.now() : null,
+      });
+
+      if (isDueToday) {
+        await addDoc(collection(db, 'users', user.uid, 'transactions'), {
+          amount: -Math.abs(numericAmount),
+          category: 'Subscriptions',
+          currency: subCurrency.code,
+          description: `${trimmedName} (Abonelik Ödemesi)`,
+          type: 'expense',
+          date: Timestamp.now(),
+        });
+      }
+
+      Toast.show({
+        type: 'success',
+        text1: isDueToday ? 'Abonelik Kaydedildi & İşlendi 🎉' : 'Abonelik Kaydedildi',
+        text2: isDueToday
+          ? `${trimmedName} bugün ödeme günü (${today.getDate()}) olduğu için ana sayfadaki harcamalara da eklendi.`
+          : `${trimmedName} (${subCurrency.symbol}${numericAmount}) başarıyla eklendi.`,
+      });
+
+      setSubName('');
+      setSubAmount('');
+      setSubDueDay('');
+      setSubBank('');
+      setSelectedPreset(null);
+    } catch (err) {
+      console.error('Error adding subscription:', err);
+      Toast.show({
+        type: 'error',
+        text1: 'Hata',
+        text2: 'Abonelik kaydedilemedi.',
+      });
+    }
+  };
+
+  const handleToggleSubStatus = async (item: Subscription) => {
+    try {
+      if (!user) return;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      const nextActive = !item.isActive;
+      await updateDoc(doc(db, 'users', user.uid, 'subscriptions', item.id), {
+        isActive: nextActive,
+      });
+      Toast.show({
+        type: 'info',
+        text1: nextActive ? 'Abonelik Aktif Edildi' : 'Abonelik Duraklatıldı',
+        text2: `${item.name} ${nextActive ? 'aktif giderlerinize eklendi.' : 'duraklatıldı, toplamlara katılmayacak.'}`,
+      });
+    } catch (err) {
+      console.error('Error toggling subscription:', err);
+    }
+  };
+
+  const handleConfirmPaySub = async () => {
+    if (!subToPay || !user) return;
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      const currSymbol = currencies.find((c) => c.code === subToPay.currency)?.symbol || subToPay.currency;
+
+      await addDoc(collection(db, 'users', user.uid, 'transactions'), {
+        amount: -Math.abs(subToPay.amount),
+        category: 'Subscriptions',
+        currency: subToPay.currency || 'TRY',
+        description: `${subToPay.name} (Abonelik Ödemesi)`,
+        type: 'expense',
+        date: Timestamp.now(),
+      });
+
+      await updateDoc(doc(db, 'users', user.uid, 'subscriptions', subToPay.id), {
+        lastCharged: Timestamp.now(),
+      });
+
+      const name = subToPay.name;
+      const amt = subToPay.amount;
+      setSubToPay(null);
+
+      Toast.show({
+        type: 'success',
+        text1: 'Ödeme Harcamalara Eklendi',
+        text2: `${name} (${currSymbol}${amt}) bakiyenizden düşüldü.`,
+      });
+    } catch (err) {
+      console.error('Error paying subscription:', err);
+      Toast.show({
+        type: 'error',
+        text1: 'Hata',
+        text2: 'Abonelik ödemesi işlenemedi.',
+      });
+    }
+  };
+
+  const handleConfirmDeleteSub = async () => {
+    if (!subToDelete || !user) return;
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      const name = subToDelete.name;
+      await deleteDoc(doc(db, 'users', user.uid, 'subscriptions', subToDelete.id));
+      setSubToDelete(null);
+      Toast.show({
+        type: 'success',
+        text1: 'Abonelik Silindi',
+        text2: `${name} aboneliğiniz kaldırıldı.`,
+      });
+    } catch (err) {
+      console.error('Error deleting subscription:', err);
+      Toast.show({
+        type: 'error',
+        text1: 'Hata',
+        text2: 'Abonelik silinemedi.',
+      });
+    }
+  };
+
+  // --- Handlers: Recurring Income ---
+  const handleAddRecurringIncome = async () => {
+    const numericAmount = parseFloat(amount.replace(',', '.'));
+    const numericDay = parseInt(dayOfMonth, 10);
+
+    if (!category.trim()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Eksik Bilgi',
+        text2: 'Lütfen düzenli gelir kaynağını girin (örn. Maaş, Kira).',
+      });
+      return;
+    }
+
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Geçersiz Tutar',
+        text2: 'Lütfen geçerli bir gelir tutarı girin.',
+      });
+      return;
+    }
+
+    if (isNaN(numericDay) || numericDay < 1 || numericDay > 31) {
+      Toast.show({
+        type: 'error',
+        text1: 'Geçersiz Yatış Günü',
+        text2: 'Lütfen 1 ile 31 arasında bir ödeme günü girin.',
+      });
+      return;
+    }
+
+    try {
+      if (!user) throw new Error('User not authenticated');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
       await addDoc(collection(db, 'users', user.uid, 'recurringIncomes'), {
         amount: numericAmount,
-        category,
+        category: category.trim(),
         currency: incomeCurrency.code,
         dayOfMonth: numericDay,
         lastAdded: null,
@@ -172,9 +529,19 @@ export default function RecurringScreen() {
       setCategory('');
       setDayOfMonth('');
       setIncomeCurrency(defaultCurrency);
+
+      Toast.show({
+        type: 'success',
+        text1: 'Düzenli Gelir Kaydedildi 🎉',
+        text2: `${category.trim()} geliri her ayın ${numericDay}. günü için tanımlandı.`,
+      });
     } catch (error) {
       console.error('Error adding recurring income: ', error);
-      Alert.alert('Hata', 'Düzenli gelir kaydedilemedi.');
+      Toast.show({
+        type: 'error',
+        text1: 'Hata',
+        text2: 'Düzenli gelir kaydedilemedi.',
+      });
     }
   };
 
@@ -191,7 +558,11 @@ export default function RecurringScreen() {
             await deleteDoc(doc(db, 'users', user.uid, 'recurringIncomes', id));
           } catch (error) {
             console.error('Error deleting recurring income: ', error);
-            Alert.alert('Hata', 'Gelir silinemedi.');
+            Toast.show({
+              type: 'error',
+              text1: 'Hata',
+              text2: 'Gelir silinemedi.',
+            });
           }
         },
       },
@@ -206,33 +577,57 @@ export default function RecurringScreen() {
     const numericDueDay = parseInt(instDueDay, 10);
 
     if (!instTitle.trim()) {
-      Alert.alert('Eksik Bilgi', 'Lütfen harcama veya ürün adını girin (örn. iPhone 15, Dyson).');
+      Toast.show({
+        type: 'error',
+        text1: 'Eksik Bilgi',
+        text2: 'Lütfen harcama veya ürün adını girin (örn. iPhone 15, Dyson).',
+      });
       return;
     }
     if (!instBank.trim()) {
-      Alert.alert('Eksik Bilgi', 'Lütfen kartın ait olduğu bankayı seçin veya girin.');
+      Toast.show({
+        type: 'error',
+        text1: 'Eksik Bilgi',
+        text2: 'Lütfen kartın ait olduğu bankayı seçin veya girin.',
+      });
       return;
     }
     if (isNaN(numericTotal) || numericTotal <= 0) {
-      Alert.alert('Geçersiz Tutar', 'Lütfen geçerli bir toplam taksit tutarı girin.');
+      Toast.show({
+        type: 'error',
+        text1: 'Geçersiz Tutar',
+        text2: 'Lütfen geçerli bir toplam taksit tutarı girin.',
+      });
       return;
     }
     if (isNaN(numericCount) || numericCount < 1) {
-      Alert.alert('Geçersiz Taksit', 'Taksit sayısı en az 1 olmalıdır.');
+      Toast.show({
+        type: 'error',
+        text1: 'Geçersiz Taksit',
+        text2: 'Taksit sayısı en az 1 olmalıdır.',
+      });
       return;
     }
     if (numericPaid >= numericCount) {
-      Alert.alert('Hata', 'Ödenmiş taksit sayısı toplam taksit sayısından küçük olmalıdır.');
+      Toast.show({
+        type: 'error',
+        text1: 'Hatalı Taksit Sayısı',
+        text2: 'Ödenmiş taksit sayısı toplam taksit sayısından küçük olmalıdır.',
+      });
       return;
     }
     if (isNaN(numericDueDay) || numericDueDay < 1 || numericDueDay > 31) {
-      Alert.alert('Geçersiz Son Ödeme Günü', 'Lütfen 1 ile 31 arasında bir gün girin.');
+      Toast.show({
+        type: 'error',
+        text1: 'Geçersiz Son Ödeme Günü',
+        text2: 'Lütfen 1 ile 31 arasında bir gün girin.',
+      });
       return;
     }
 
     try {
       if (!user) throw new Error('User not authenticated');
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
       const monthlyAmount = Number((numericTotal / numericCount).toFixed(2));
       const remainingInstallments = numericCount - numericPaid;
@@ -261,13 +656,18 @@ export default function RecurringScreen() {
       setInstCurrency(defaultCurrency);
       setIsFormExpanded(false);
 
-      Alert.alert(
-        'Taksit Kaydedildi 🎉',
-        `Aylık ${instCurrency.symbol}${monthlyAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} tutarındaki taksitiniz kaydedildi. Her ayın ${numericDueDay}. gününde otomatik bakiyenizden düşülecektir.`
-      );
+      Toast.show({
+        type: 'success',
+        text1: 'Taksit Kaydedildi 🎉',
+        text2: `Aylık ${instCurrency.symbol}${monthlyAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} tutarındaki taksitiniz her ayın ${numericDueDay}. günü için tanımlandı.`,
+      });
     } catch (error) {
       console.error('Error adding installment:', error);
-      Alert.alert('Hata', 'Taksit kaydedilirken bir hata oluştu.');
+      Toast.show({
+        type: 'error',
+        text1: 'Hata',
+        text2: 'Taksit kaydedilirken bir hata oluştu.',
+      });
     }
   };
 
@@ -339,9 +739,71 @@ export default function RecurringScreen() {
   };
 
   const formatNumberInput = (text: string, setter: (val: string) => void) => {
-    const numericRegex = /^\d*([.,])?\d*$/;
+    if (text.length > 12) return;
+    const numericRegex = /^\d*([.,]\d{0,2})?$/;
     if (numericRegex.test(text) || text === '') {
       setter(text);
+    }
+  };
+
+  const handleDayInput = (text: string, setter: (val: string) => void) => {
+    const digits = text.replace(/[^0-9]/g, '');
+    if (!digits) {
+      setter('');
+      return;
+    }
+    const num = parseInt(digits, 10);
+    if (num > 31) {
+      setter('31');
+    } else if (digits === '0') {
+      setter('');
+    } else {
+      setter(num.toString());
+    }
+  };
+
+  const handleDayBlur = (val: string, setter: (val: string) => void) => {
+    if (!val) return;
+    const num = parseInt(val, 10);
+    if (isNaN(num) || num < 1) {
+      setter('1');
+    } else if (num > 31) {
+      setter('31');
+    } else {
+      setter(num.toString());
+    }
+  };
+
+  const handleTotalCountInput = (text: string) => {
+    const digits = text.replace(/[^0-9]/g, '');
+    if (!digits) {
+      setInstTotalCount('');
+      return;
+    }
+    const num = parseInt(digits, 10);
+    if (num > 60) {
+      setInstTotalCount('60');
+    } else if (digits === '0') {
+      setInstTotalCount('');
+    } else {
+      setInstTotalCount(num.toString());
+    }
+  };
+
+  const handlePaidCountInput = (text: string) => {
+    const digits = text.replace(/[^0-9]/g, '');
+    if (!digits) {
+      setInstPaidCount('');
+      return;
+    }
+    const num = parseInt(digits, 10);
+    const total = parseInt(instTotalCount, 10);
+    if (!isNaN(total) && total > 1 && num >= total) {
+      setInstPaidCount((total - 1).toString());
+    } else if (num > 60) {
+      setInstPaidCount('59');
+    } else {
+      setInstPaidCount(num.toString());
     }
   };
 
@@ -370,16 +832,38 @@ export default function RecurringScreen() {
             style={[styles.segmentButton, activeTab === 'installment' && styles.segmentButtonActive]}>
             <Ionicons
               name="card-outline"
-              size={16}
+              size={15}
               color={activeTab === 'installment' ? Colors.tint : '#8E8E93'}
-              style={{ marginRight: 6 }}
+              style={{ marginRight: 5 }}
             />
             <ThemedText style={[styles.segmentText, activeTab === 'installment' && styles.segmentTextActive]}>
-              Taksitler & Kartlar
+              Taksitler
             </ThemedText>
             <View style={[styles.segmentBadge, activeTab === 'installment' && styles.segmentBadgeActive]}>
               <ThemedText style={[styles.segmentBadgeText, activeTab === 'installment' && styles.segmentBadgeTextActive]}>
                 {activeInstallments.length}
+              </ThemedText>
+            </View>
+          </AnimatedPressable>
+
+          <AnimatedPressable
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              setActiveTab('subscription');
+            }}
+            style={[styles.segmentButton, activeTab === 'subscription' && styles.segmentButtonActive]}>
+            <Ionicons
+              name="play-circle-outline"
+              size={15}
+              color={activeTab === 'subscription' ? Colors.tint : '#8E8E93'}
+              style={{ marginRight: 5 }}
+            />
+            <ThemedText style={[styles.segmentText, activeTab === 'subscription' && styles.segmentTextActive]}>
+              Abonelikler
+            </ThemedText>
+            <View style={[styles.segmentBadge, activeTab === 'subscription' && styles.segmentBadgeActive]}>
+              <ThemedText style={[styles.segmentBadgeText, activeTab === 'subscription' && styles.segmentBadgeTextActive]}>
+                {activeSubscriptions.length}
               </ThemedText>
             </View>
           </AnimatedPressable>
@@ -392,12 +876,12 @@ export default function RecurringScreen() {
             style={[styles.segmentButton, activeTab === 'income' && styles.segmentButtonActive]}>
             <Ionicons
               name="trending-up-outline"
-              size={16}
+              size={15}
               color={activeTab === 'income' ? Colors.income : '#8E8E93'}
-              style={{ marginRight: 6 }}
+              style={{ marginRight: 5 }}
             />
             <ThemedText style={[styles.segmentText, activeTab === 'income' && styles.segmentTextActive]}>
-              Düzenli Gelirler
+              Gelirler
             </ThemedText>
             <View style={[styles.segmentBadge, activeTab === 'income' && styles.segmentBadgeActive]}>
               <ThemedText style={[styles.segmentBadgeText, activeTab === 'income' && styles.segmentBadgeTextActive]}>
@@ -464,29 +948,43 @@ export default function RecurringScreen() {
                     value={instTitle}
                     onChangeText={setInstTitle}
                     style={styles.textInput}
+                    maxLength={50}
                     placeholderTextColor="#636366"
                   />
                 </View>
 
-                {/* Bank Selection */}
+                {/* Bank Selection - Modal Selector */}
                 <ThemedText style={styles.inputLabel}>BANKA / KREDİ KARTI</ThemedText>
-                <View style={styles.inputWrap}>
-                  <Ionicons name="card-outline" size={18} color="#8E8E93" style={styles.inputIcon} />
-                  <TextInput
-                    placeholder="Banka Adı (örn: Garanti BBVA, İş Bankası)"
-                    value={instBank}
-                    onChangeText={setInstBank}
-                    style={styles.textInput}
-                    placeholderTextColor="#636366"
-                  />
-                </View>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  style={[styles.bankSelectorButton, instBank ? styles.bankSelectorButtonActive : null]}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    setBankSearchQuery('');
+                    setBankModalVisible(true);
+                  }}>
+                  <View style={styles.bankSelectorLeft}>
+                    <View style={[styles.bankIconCircle, instBank ? styles.bankIconCircleActive : null]}>
+                      <Ionicons
+                        name="card-outline"
+                        size={18}
+                        color={instBank ? Colors.tint : '#8E8E93'}
+                      />
+                    </View>
+                    <ThemedText style={[styles.bankSelectorText, instBank ? styles.bankSelectorTextActive : null]}>
+                      {instBank || 'Banka veya Kredi Kartı Seçin'}
+                    </ThemedText>
+                  </View>
+                  <Ionicons name="chevron-down" size={17} color={instBank ? Colors.tint : '#8E8E93'} />
+                </TouchableOpacity>
 
                 {/* Quick Bank Chips */}
                 <View style={styles.chipRow}>
                   {COMMON_BANKS.map((b) => {
                     const isSelected = instBank === b;
                     return (
-                      <AnimatedPressable
+                      <TouchableOpacity
+                        activeOpacity={0.7}
                         key={b}
                         onPress={() => {
                           Haptics.selectionAsync().catch(() => {});
@@ -496,7 +994,7 @@ export default function RecurringScreen() {
                         <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
                           {b}
                         </ThemedText>
-                      </AnimatedPressable>
+                      </TouchableOpacity>
                     );
                   })}
                 </View>
@@ -515,7 +1013,7 @@ export default function RecurringScreen() {
                         }}
                         style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
                         <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
-                          {c.code} ({c.symbol})
+                          {c.label} ({c.symbol})
                         </ThemedText>
                       </AnimatedPressable>
                     );
@@ -534,6 +1032,7 @@ export default function RecurringScreen() {
                         onChangeText={(t) => formatNumberInput(t, setInstTotalAmount)}
                         style={styles.textInput}
                         keyboardType="numeric"
+                        maxLength={12}
                         placeholderTextColor="#636366"
                       />
                     </View>
@@ -546,7 +1045,7 @@ export default function RecurringScreen() {
                       <TextInput
                         placeholder="Örn: 6"
                         value={instTotalCount}
-                        onChangeText={(t) => setInstTotalCount(t.replace(/[^0-9]/g, ''))}
+                        onChangeText={handleTotalCountInput}
                         style={styles.textInput}
                         keyboardType="number-pad"
                         maxLength={2}
@@ -585,7 +1084,7 @@ export default function RecurringScreen() {
                       <TextInput
                         placeholder="0"
                         value={instPaidCount}
-                        onChangeText={(t) => setInstPaidCount(t.replace(/[^0-9]/g, ''))}
+                        onChangeText={handlePaidCountInput}
                         style={styles.textInput}
                         keyboardType="number-pad"
                         maxLength={2}
@@ -601,7 +1100,8 @@ export default function RecurringScreen() {
                       <TextInput
                         placeholder="Gün (1-31)"
                         value={instDueDay}
-                        onChangeText={(t) => setInstDueDay(t.replace(/[^0-9]/g, ''))}
+                        onChangeText={(t) => handleDayInput(t, setInstDueDay)}
+                        onBlur={() => handleDayBlur(instDueDay, setInstDueDay)}
                         style={styles.textInput}
                         keyboardType="number-pad"
                         maxLength={2}
@@ -766,6 +1266,419 @@ export default function RecurringScreen() {
           </>
         )}
 
+        {/* ================= SUBSCRIPTIONS TAB ================= */}
+        {activeTab === 'subscription' && (
+          <>
+            {/* KPI Dashboard Banner */}
+            <View style={styles.kpiContainer}>
+              <View style={styles.kpiCard}>
+                <ThemedText style={styles.kpiLabel}>AYLIK ABONELİK YÜKÜ</ThemedText>
+                <ThemedText style={[styles.kpiValue, { color: '#FF375F' }]}>
+                  -₺{subMonthlyTotalTRY.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </ThemedText>
+                <ThemedText style={styles.kpiSub}>
+                  {foreignSubSummary ? `${activeSubscriptions.length} aktif • ${foreignSubSummary}` : `${activeSubscriptions.length} aktif servis`}
+                </ThemedText>
+              </View>
+
+              <View style={styles.kpiCard}>
+                <ThemedText style={styles.kpiLabel}>YILLIK TAHMİNİ MALİYET</ThemedText>
+                <ThemedText style={[styles.kpiValue, { color: '#BF5AF2' }]}>
+                  ₺{(subMonthlyTotalTRY * 12).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </ThemedText>
+                <ThemedText style={styles.kpiSub}>Yıllık projeksiyon</ThemedText>
+              </View>
+            </View>
+
+            {/* Collapsible New Subscription Form */}
+            <View style={styles.formCard}>
+              <View style={styles.formToggleRow}>
+                <View style={styles.formCardTitleRow}>
+                  <Ionicons name="sparkles" size={18} color={Colors.tint} />
+                  <ThemedText style={styles.formCardTitle}>Yeni Abonelik Tanımla</ThemedText>
+                </View>
+                <AnimatedPressable
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    setIsSubFormExpanded(!isSubFormExpanded);
+                  }}
+                  style={styles.toggleCollapseBtn}>
+                  <ThemedText style={styles.toggleCollapseText}>
+                    {isSubFormExpanded ? 'Gizle' : '+ Formu Aç'}
+                  </ThemedText>
+                  <Ionicons
+                    name={isSubFormExpanded ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color={Colors.tint}
+                    style={{ marginLeft: 4 }}
+                  />
+                </AnimatedPressable>
+              </View>
+
+              {isSubFormExpanded && (
+                <View style={{ marginTop: 14 }}>
+                  {/* Quick Preset Selector */}
+                  <ThemedText style={styles.inputLabel}>HIZLI SERVİS SEÇİN</ThemedText>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.presetScrollContent}
+                    style={{ marginBottom: 14 }}>
+                    {PRESET_SUBSCRIPTIONS.map((preset) => {
+                      const isSelected = selectedPreset === preset.name;
+                      return (
+                        <TouchableOpacity
+                          key={preset.name}
+                          activeOpacity={0.7}
+                          onPress={() => handleSelectPreset(preset)}
+                          style={[
+                            styles.presetChip,
+                            isSelected && {
+                              borderColor: preset.color,
+                              backgroundColor: `${preset.color}22`,
+                            },
+                          ]}>
+                          <View
+                            style={[
+                              styles.presetDot,
+                              { backgroundColor: preset.color },
+                              isSelected && { transform: [{ scale: 1.25 }] },
+                            ]}
+                          />
+                          <ThemedText
+                            style={[
+                              styles.presetChipText,
+                              isSelected && { color: '#FFFFFF', fontWeight: '700' },
+                            ]}>
+                            {preset.name}
+                          </ThemedText>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+
+                  {/* Service Name Input */}
+                  <ThemedText style={styles.inputLabel}>PLATFORM / SERVİS ADI</ThemedText>
+                  <View style={styles.inputWrap}>
+                    <Ionicons
+                      name={(subIcon as any) || 'play-circle-outline'}
+                      size={18}
+                      color={subColor || Colors.tint}
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      placeholder="Örn: Netflix, Spotify, ChatGPT Plus..."
+                      value={subName}
+                      onChangeText={(t) => {
+                        setSubName(t);
+                        setSelectedPreset(null);
+                      }}
+                      style={styles.textInput}
+                      maxLength={40}
+                      placeholderTextColor="#636366"
+                    />
+                  </View>
+
+                  {/* Category & Billing Cycle Row */}
+                  <View style={styles.inputsRow}>
+                    <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
+                      <ThemedText style={styles.inputLabel}>KATEGORİ</ThemedText>
+                      <View style={styles.inputWrap}>
+                        <Ionicons name="pricetag-outline" size={16} color="#8E8E93" style={styles.inputIcon} />
+                        <TextInput
+                          placeholder="Örn: Dizi / Film, Müzik"
+                          value={subCategory}
+                          onChangeText={setSubCategory}
+                          style={styles.textInput}
+                          maxLength={30}
+                          placeholderTextColor="#636366"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={[styles.inputGroupCol, { flex: 1 }]}>
+                      <ThemedText style={styles.inputLabel}>ÖDEME DÖNGÜSÜ</ThemedText>
+                      <View style={styles.cycleToggleRow}>
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            Haptics.selectionAsync().catch(() => {});
+                            setSubBillingCycle('monthly');
+                          }}
+                          style={[
+                            styles.cyclePill,
+                            subBillingCycle === 'monthly' && styles.cyclePillActive,
+                          ]}>
+                          <ThemedText
+                            style={[
+                              styles.cyclePillText,
+                              subBillingCycle === 'monthly' && styles.cyclePillTextActive,
+                            ]}>
+                            Aylık
+                          </ThemedText>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            Haptics.selectionAsync().catch(() => {});
+                            setSubBillingCycle('yearly');
+                          }}
+                          style={[
+                            styles.cyclePill,
+                            subBillingCycle === 'yearly' && styles.cyclePillActive,
+                          ]}>
+                          <ThemedText
+                            style={[
+                              styles.cyclePillText,
+                              subBillingCycle === 'yearly' && styles.cyclePillTextActive,
+                            ]}>
+                            Yıllık
+                          </ThemedText>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Currency Switcher */}
+                  <ThemedText style={styles.inputLabel}>PARA BİRİMİ</ThemedText>
+                  <View style={styles.currencyGroup}>
+                    {currencies.map((c) => {
+                      const isActive = subCurrency.code === c.code;
+                      return (
+                        <AnimatedPressable
+                          key={c.code}
+                          onPress={() => {
+                            Haptics.selectionAsync().catch(() => {});
+                            setSubCurrency(c);
+                          }}
+                          style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
+                          <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
+                            {c.label}
+                          </ThemedText>
+                        </AnimatedPressable>
+                      );
+                    })}
+                  </View>
+
+                  {/* Amount & Due Day Row */}
+                  <View style={styles.inputsRow}>
+                    <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
+                      <ThemedText style={styles.inputLabel}>
+                        {subBillingCycle === 'yearly' ? 'YILLIK TUTAR' : 'AYLIK TUTAR'}
+                      </ThemedText>
+                      <View style={styles.inputWrap}>
+                        <ThemedText style={styles.inputPrefix}>{subCurrency.symbol}</ThemedText>
+                        <TextInput
+                          placeholder="Örn: 229,99"
+                          value={subAmount}
+                          onChangeText={(t) => formatNumberInput(t, setSubAmount)}
+                          style={styles.textInput}
+                          keyboardType="numeric"
+                          maxLength={12}
+                          placeholderTextColor="#636366"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={[styles.inputGroupCol, { flex: 1 }]}>
+                      <ThemedText style={styles.inputLabel}>ÇEKİLME GÜNÜ</ThemedText>
+                      <View style={styles.inputWrap}>
+                        <Ionicons name="today-outline" size={17} color="#8E8E93" style={styles.inputIcon} />
+                        <TextInput
+                          placeholder="Gün (1-31)"
+                          value={subDueDay}
+                          onChangeText={(t) => handleDayInput(t, setSubDueDay)}
+                          onBlur={() => handleDayBlur(subDueDay, setSubDueDay)}
+                          style={styles.textInput}
+                          keyboardType="number-pad"
+                          maxLength={2}
+                          placeholderTextColor="#636366"
+                        />
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Optional Bank / Card Selector */}
+                  <ThemedText style={styles.inputLabel}>ÖDENEN KART / BANKA (OPSİYONEL)</ThemedText>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    style={[styles.bankSelectorButton, subBank ? styles.bankSelectorButtonActive : null]}
+                    onPress={() => {
+                      Haptics.selectionAsync().catch(() => {});
+                      setBankModalTarget('subscription');
+                      setBankSearchQuery('');
+                      setBankModalVisible(true);
+                    }}>
+                    <View style={styles.bankSelectorLeft}>
+                      <View style={[styles.bankIconCircle, subBank ? styles.bankIconCircleActive : null]}>
+                        <Ionicons
+                          name="card-outline"
+                          size={18}
+                          color={subBank ? Colors.tint : '#8E8E93'}
+                        />
+                      </View>
+                      <ThemedText style={[styles.bankSelectorText, subBank ? styles.bankSelectorTextActive : null]}>
+                        {subBank || 'Banka veya Kredi Kartı Seçin'}
+                      </ThemedText>
+                    </View>
+                    <Ionicons name="chevron-down" size={17} color={subBank ? Colors.tint : '#8E8E93'} />
+                  </TouchableOpacity>
+
+                  {/* Quick Bank Chips */}
+                  <View style={styles.chipRow}>
+                    {COMMON_BANKS.map((b) => {
+                      const isSelected = subBank === b;
+                      return (
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          key={b}
+                          onPress={() => {
+                            Haptics.selectionAsync().catch(() => {});
+                            setSubBank(isSelected ? '' : b);
+                          }}
+                          style={[styles.chip, isSelected && styles.chipActive]}>
+                          <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                            {b}
+                          </ThemedText>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {/* Add Subscription Button */}
+                  <AnimatedPressable
+                    style={[styles.addButton, { backgroundColor: Colors.tint, marginTop: 6 }]}
+                    onPress={handleAddSubscription}>
+                    <Ionicons name="add" size={20} color="#000" />
+                    <ThemedText style={[styles.addButtonText, { color: '#000' }]}>
+                      Aboneliği Kaydet
+                    </ThemedText>
+                  </AnimatedPressable>
+                </View>
+              )}
+            </View>
+
+            {/* Subscriptions List Section Header */}
+            <View style={styles.sectionHeaderRow}>
+              <ThemedText style={styles.sectionTitle}>Kayıtlı Abonelikler</ThemedText>
+              <View style={styles.countBadge}>
+                <ThemedText style={styles.countBadgeText}>{subscriptions.length}</ThemedText>
+              </View>
+            </View>
+
+            {/* Subscriptions List */}
+            {subscriptions.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconCircle}>
+                  <Ionicons name="play-circle-outline" size={34} color="#555" />
+                </View>
+                <ThemedText style={styles.emptyTitle}>Kayıtlı Abonelik Yok</ThemedText>
+                <ThemedText style={styles.emptySubtitle}>
+                  Netflix, Spotify, iCloud gibi düzenli servislerinizi ekleyin, aylık sabit gider yükünüzü ve yaklaşan ödemelerinizi tek bakışta görün.
+                </ThemedText>
+              </View>
+            ) : (
+              subscriptions.map((item) => {
+                const itemCurrency = currencies.find((c) => c.code === item.currency) || { symbol: item.currency || '₺' };
+                const brandColor = item.color || Colors.tint;
+
+                return (
+                  <View
+                    key={item.id}
+                    style={[styles.subCard, !item.isActive && styles.subCardPaused]}>
+                    <View style={styles.subCardTop}>
+                      <View
+                        style={[
+                          styles.subBrandIcon,
+                          {
+                            backgroundColor: `${brandColor}20`,
+                            borderColor: `${brandColor}40`,
+                          },
+                        ]}>
+                        <Ionicons
+                          name={(item.iconName as any) || 'play-circle-outline'}
+                          size={22}
+                          color={brandColor}
+                        />
+                      </View>
+
+                      <View style={styles.subCenter}>
+                        <View style={styles.subTitleRow}>
+                          <ThemedText style={styles.subTitle}>{item.name}</ThemedText>
+                          {!item.isActive && (
+                            <View style={styles.pausedBadge}>
+                              <ThemedText style={styles.pausedBadgeText}>Duraklatıldı</ThemedText>
+                            </View>
+                          )}
+                        </View>
+                        <ThemedText style={styles.subMeta}>
+                          {item.bank && item.bank !== 'Belirtilmedi' ? `${item.bank} • ` : ''}
+                          {item.category || 'Abonelik'} • {item.billingCycle === 'yearly' ? 'Yıllık' : 'Aylık'}
+                        </ThemedText>
+                        <View style={styles.dueDayPill}>
+                          <Ionicons name="calendar-outline" size={12} color="#8E8E93" style={{ marginRight: 4 }} />
+                          <ThemedText style={styles.dueDayPillText}>
+                            Her ayın {item.dueDay}. günü
+                          </ThemedText>
+                        </View>
+                      </View>
+
+                      <View style={styles.subRight}>
+                        <ThemedText style={styles.subAmount}>
+                          -{itemCurrency.symbol}
+                          {item.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </ThemedText>
+                        <ThemedText style={styles.subBillingPeriod}>
+                          {item.billingCycle === 'yearly' ? '/ yıl' : '/ ay'}
+                        </ThemedText>
+                      </View>
+                    </View>
+
+                    {/* Action Row */}
+                    <View style={styles.subActionRow}>
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        style={styles.subPayBtn}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          setSubToPay(item);
+                        }}>
+                        <Ionicons name="flash" size={13} color="#000" style={{ marginRight: 5 }} />
+                        <ThemedText style={styles.subPayBtnText}>Şimdi İşle</ThemedText>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        style={[styles.subPauseBtn, !item.isActive && styles.subResumeBtn]}
+                        onPress={() => handleToggleSubStatus(item)}>
+                        <Ionicons
+                          name={item.isActive ? 'pause-outline' : 'play-outline'}
+                          size={13}
+                          color={item.isActive ? '#8E8E93' : Colors.tint}
+                          style={{ marginRight: 4 }}
+                        />
+                        <ThemedText style={[styles.subPauseBtnText, !item.isActive && { color: Colors.tint }]}>
+                          {item.isActive ? 'Duraklat' : 'Aktif Et'}
+                        </ThemedText>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        style={styles.subDeleteBtn}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          setSubToDelete(item);
+                        }}>
+                        <Ionicons name="trash-outline" size={16} color="#8E8E93" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })
+            )}
+          </>
+        )}
+
         {/* ================= RECURRING INCOMES TAB ================= */}
         {activeTab === 'income' && (
           <>
@@ -784,6 +1697,7 @@ export default function RecurringScreen() {
                   value={category}
                   onChangeText={setCategory}
                   style={styles.textInput}
+                  maxLength={40}
                   placeholderTextColor="#636366"
                 />
               </View>
@@ -802,7 +1716,7 @@ export default function RecurringScreen() {
                       }}
                       style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
                       <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
-                        {c.code}
+                        {c.label}
                       </ThemedText>
                     </AnimatedPressable>
                   );
@@ -821,6 +1735,7 @@ export default function RecurringScreen() {
                       onChangeText={(t) => formatNumberInput(t, setAmount)}
                       style={styles.textInput}
                       keyboardType="numeric"
+                      maxLength={12}
                       placeholderTextColor="#636366"
                     />
                   </View>
@@ -833,7 +1748,8 @@ export default function RecurringScreen() {
                     <TextInput
                       placeholder="Gün (1-31)"
                       value={dayOfMonth}
-                      onChangeText={(t) => setDayOfMonth(t.replace(/[^0-9]/g, ''))}
+                      onChangeText={(t) => handleDayInput(t, setDayOfMonth)}
+                      onBlur={() => handleDayBlur(dayOfMonth, setDayOfMonth)}
                       style={styles.textInput}
                       keyboardType="number-pad"
                       maxLength={2}
@@ -907,6 +1823,202 @@ export default function RecurringScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Bank Selection Bottom Sheet Modal */}
+      <Modal
+        transparent={true}
+        visible={isBankModalVisible}
+        animationType="slide"
+        onRequestClose={() => setBankModalVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setBankModalVisible(false)}
+          />
+          <View style={[styles.modalSheet, { maxHeight: '78%', paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.modalHeaderRow}>
+              <ThemedText style={styles.modalSheetTitle}>Banka / Kart Seçin</ThemedText>
+              <TouchableOpacity
+                onPress={() => setBankModalVisible(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close-circle" size={24} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Bank Search Input */}
+            <View style={styles.modalSearchWrap}>
+              <Ionicons name="search-outline" size={17} color="#8E8E93" style={styles.modalSearchIcon} />
+              <TextInput
+                placeholder="Banka ara (örn: Ziraat, Garanti)..."
+                value={bankSearchQuery}
+                onChangeText={setBankSearchQuery}
+                style={styles.modalSearchInput}
+                maxLength={30}
+                placeholderTextColor="#636366"
+                autoCorrect={false}
+              />
+              {bankSearchQuery.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setBankSearchQuery('')}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="close-circle-sharp" size={17} color="#8E8E93" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={{ marginTop: 8 }}>
+              {filteredBanks.map((bankName) => {
+                const isSelected = bankModalTarget === 'installment' ? instBank === bankName : subBank === bankName;
+                return (
+                  <TouchableOpacity
+                    key={bankName}
+                    activeOpacity={0.7}
+                    style={[styles.modalItemRow, isSelected && styles.modalItemRowActive]}
+                    onPress={() => {
+                      Haptics.selectionAsync().catch(() => {});
+                      if (bankModalTarget === 'installment') {
+                        setInstBank(bankName);
+                      } else {
+                        setSubBank(bankName);
+                      }
+                      setBankModalVisible(false);
+                    }}>
+                    <View style={styles.modalItemLeft}>
+                      <View style={[styles.modalBankIcon, isSelected && styles.modalBankIconActive]}>
+                        <Ionicons
+                          name={bankName === 'Diğer' ? 'ellipsis-horizontal' : 'business-outline'}
+                          size={18}
+                          color={isSelected ? Colors.tint : '#8E8E93'}
+                        />
+                      </View>
+                      <ThemedText style={[styles.modalItemText, isSelected && styles.modalItemTextActive]}>
+                        {bankName}
+                      </ThemedText>
+                    </View>
+                    {isSelected && <Ionicons name="checkmark-circle" size={20} color={Colors.tint} />}
+                  </TouchableOpacity>
+                );
+              })}
+              {filteredBanks.length === 0 && (
+                <View style={styles.modalEmptyWrap}>
+                  <ThemedText style={styles.modalEmptyText}>Eşleşen banka bulunamadı</ThemedText>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Subscription Pay Confirm Modal */}
+      <Modal
+        transparent={true}
+        visible={!!subToPay}
+        animationType="slide"
+        onRequestClose={() => setSubToPay(null)}>
+        <View style={styles.actionModalOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setSubToPay(null)}
+          />
+          <View style={[styles.actionModalSheet, { paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.actionModalHeader}>
+              <View style={[styles.actionModalIconBadge, { backgroundColor: 'rgba(57, 255, 20, 0.15)' }]}>
+                <Ionicons name="checkmark-circle" size={28} color={Colors.tint} />
+              </View>
+              <ThemedText style={styles.actionModalTitle}>Abonelik Ödemesini Kaydet</ThemedText>
+              <ThemedText style={styles.actionModalDesc}>
+                Bu ödemeyi Harcamalar (Subscriptions) listenize hemen ekleyip bakiyenizden düşmek istiyor musunuz?
+              </ThemedText>
+            </View>
+
+            {subToPay && (
+              <View style={styles.actionModalPreviewCard}>
+                <View style={styles.previewLeft}>
+                  <ThemedText style={styles.previewTitle}>{subToPay.name}</ThemedText>
+                  <ThemedText style={styles.previewSub}>
+                    {subToPay.category} • Her ayın {subToPay.dueDay}. günü
+                  </ThemedText>
+                </View>
+                <ThemedText style={[styles.previewAmount, { color: '#FF453A' }]}>
+                  -{currencies.find((c) => c.code === subToPay.currency)?.symbol || subToPay.currency}
+                  {subToPay.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </ThemedText>
+              </View>
+            )}
+
+            <View style={styles.actionModalBtnRow}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                style={styles.actionModalCancelBtn}
+                onPress={() => setSubToPay(null)}>
+                <ThemedText style={styles.actionModalCancelBtnText}>Vazgeç</ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.actionModalConfirmBtn}
+                onPress={handleConfirmPaySub}>
+                <Ionicons name="card" size={17} color="#000" style={{ marginRight: 6 }} />
+                <ThemedText style={styles.actionModalConfirmBtnText}>Öde ve Kaydet</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Subscription Delete Confirm Modal */}
+      <Modal
+        transparent={true}
+        visible={!!subToDelete}
+        animationType="slide"
+        onRequestClose={() => setSubToDelete(null)}>
+        <View style={styles.actionModalOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setSubToDelete(null)}
+          />
+          <View style={[styles.actionModalSheet, { paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.actionModalHeader}>
+              <View style={[styles.actionModalIconBadge, { backgroundColor: 'rgba(255, 69, 58, 0.15)' }]}>
+                <Ionicons name="trash" size={26} color="#FF453A" />
+              </View>
+              <ThemedText style={styles.actionModalTitle}>Aboneliği Kaldır</ThemedText>
+              <ThemedText style={styles.actionModalDesc}>
+                {`"${subToDelete?.name}" abonelik kaydını silmek istediğinize emin misiniz? Daha önce kaydedilen harcama geçmişiniz korunur.`}
+              </ThemedText>
+            </View>
+
+            <View style={styles.actionModalBtnRow}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                style={styles.actionModalCancelBtn}
+                onPress={() => setSubToDelete(null)}>
+                <ThemedText style={styles.actionModalCancelBtnText}>Vazgeç</ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={[styles.actionModalConfirmBtn, { backgroundColor: '#FF453A' }]}
+                onPress={handleConfirmDeleteSub}>
+                <Ionicons name="trash" size={17} color="#FFF" style={{ marginRight: 6 }} />
+                <ThemedText style={[styles.actionModalConfirmBtnText, { color: '#FFF' }]}>Sil</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -959,7 +2071,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(57, 255, 20, 0.3)',
   },
   segmentText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: '#8E8E93',
   },
@@ -967,9 +2079,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   segmentBadge: {
-    marginLeft: 6,
+    marginLeft: 4,
     backgroundColor: '#1E1F24',
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 8,
   },
@@ -1478,5 +2590,419 @@ const styles = StyleSheet.create({
     color: '#6E6E73',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  bankSelectorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#131417',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  bankSelectorButtonActive: {
+    borderColor: 'rgba(57, 255, 20, 0.4)',
+    backgroundColor: 'rgba(57, 255, 20, 0.04)',
+  },
+  bankSelectorLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  bankIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bankIconCircleActive: {
+    backgroundColor: 'rgba(57, 255, 20, 0.12)',
+  },
+  bankSelectorText: {
+    fontSize: 14,
+    color: '#8E8E93',
+    fontWeight: '500',
+  },
+  bankSelectorTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#1A1B20',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 12,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.09)',
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#3C3C40',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  modalSheetTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#F2F2F2',
+  },
+  modalSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#131417',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  modalSearchIcon: {
+    marginRight: 8,
+  },
+  modalSearchInput: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 14,
+    padding: 0,
+  },
+  modalItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  modalItemRowActive: {
+    backgroundColor: 'rgba(57, 255, 20, 0.08)',
+  },
+  modalItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modalBankIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBankIconActive: {
+    backgroundColor: 'rgba(57, 255, 20, 0.12)',
+  },
+  modalItemText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#D1D1D6',
+  },
+  modalItemTextActive: {
+    color: Colors.tint,
+    fontWeight: '700',
+  },
+  modalEmptyWrap: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  modalEmptyText: {
+    fontSize: 14,
+    color: '#6E6E73',
+  },
+
+  // Subscriptions & Action Modals Styles
+  presetScrollContent: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+  presetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#141519',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    gap: 7,
+  },
+  presetDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  presetChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  cycleToggleRow: {
+    flexDirection: 'row',
+    backgroundColor: '#121215',
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    padding: 3,
+    height: 46,
+    alignItems: 'center',
+  },
+  cyclePill: {
+    flex: 1,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+  },
+  cyclePillActive: {
+    backgroundColor: '#24262E',
+  },
+  cyclePillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  cyclePillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  subCard: {
+    backgroundColor: '#191A20',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  subCardPaused: {
+    opacity: 0.55,
+  },
+  subCardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+  },
+  subBrandIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+  },
+  subCenter: {
+    flex: 1,
+    marginRight: 8,
+  },
+  subTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 3,
+  },
+  subTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  pausedBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  pausedBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#8E8E93',
+  },
+  subMeta: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginBottom: 6,
+  },
+  subRight: {
+    alignItems: 'flex-end',
+  },
+  subAmount: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#FF453A',
+  },
+  subBillingPeriod: {
+    fontSize: 11,
+    color: '#8E8E93',
+    marginTop: 2,
+  },
+  subActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+    paddingTop: 12,
+  },
+  subPayBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.tint,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  subPayBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#000000',
+  },
+  subPauseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#141519',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  subResumeBtn: {
+    borderColor: 'rgba(57, 255, 20, 0.3)',
+  },
+  subPauseBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  subDeleteBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#141519',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  actionModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  actionModalSheet: {
+    backgroundColor: '#191A20',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 12,
+    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  actionModalHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  actionModalIconBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  actionModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  actionModalDesc: {
+    fontSize: 13,
+    color: '#8E8E93',
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 10,
+  },
+  actionModalPreviewCard: {
+    backgroundColor: '#121215',
+    borderRadius: 14,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  previewLeft: {
+    flex: 1,
+  },
+  previewTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  previewSub: {
+    fontSize: 12,
+    color: '#8E8E93',
+  },
+  previewAmount: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  actionModalBtnRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionModalCancelBtn: {
+    flex: 1,
+    backgroundColor: '#24262E',
+    paddingVertical: 14,
+    borderRadius: 13,
+    alignItems: 'center',
+  },
+  actionModalCancelBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  actionModalConfirmBtn: {
+    flex: 1,
+    backgroundColor: Colors.tint,
+    paddingVertical: 14,
+    borderRadius: 13,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  actionModalConfirmBtnText: {
+    color: '#000000',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

@@ -10,6 +10,7 @@ export const expenseCategories: { key: string; label: string; icon: IoniconName 
   { key: 'transport', label: 'Transport', icon: 'bus-outline' },
   { key: 'dining_out', label: 'Dining Out', icon: 'fast-food-outline' },
   { key: 'shopping', label: 'Shopping', icon: 'shirt-outline' },
+  { key: 'subscriptions', label: 'Subscriptions', icon: 'play-circle-outline' },
   { key: 'personal_care', label: 'Personal Care', icon: 'sparkles-outline' },
   { key: 'health', label: 'Health', icon: 'medkit-outline' },
   { key: 'entertainment', label: 'Entertainment', icon: 'film-outline' },

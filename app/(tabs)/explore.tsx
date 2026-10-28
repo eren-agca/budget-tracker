@@ -29,7 +29,7 @@ interface Transaction {
   description: string;
   amount: number;
   category: string;
-  currency: 'TRY' | 'USD' | 'EUR' | 'RUB';
+  currency: 'TRY' | 'USD' | 'EUR' | 'GBP';
   type: 'income' | 'expense';
   date: any;
 }
@@ -208,7 +208,7 @@ export default function ExploreScreen() {
                   }}
                   style={[styles.currencyPillMini, isActive && styles.currencyPillMiniActive]}>
                   <ThemedText style={[styles.currencyPillMiniText, isActive && styles.currencyPillMiniTextActive]}>
-                    {c.code}
+                    {c.label}
                   </ThemedText>
                 </AnimatedPressable>
               );

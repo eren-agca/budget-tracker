@@ -1,6 +1,7 @@
 import { Text, type TextProps, StyleSheet } from 'react-native';
 
 import { Colors } from '@/constants/Colors';
+import { useSettings } from '@/context/SettingsContext';
 
 export type ThemedTextProps = TextProps & {
   type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link';
@@ -11,6 +12,9 @@ export function ThemedText({
   type = 'default',
   ...rest
 }: ThemedTextProps) {
+  const { colors } = useSettings();
+  const textColor = colors?.text || Colors.text;
+
   const flatStyle = StyleSheet.flatten(style);
   const hasCustomFontSize = flatStyle?.fontSize !== undefined && flatStyle.fontSize !== 16;
   const hasCustomLineHeight = flatStyle?.lineHeight !== undefined;
@@ -22,7 +26,7 @@ export function ThemedText({
   return (
     <Text
       style={[
-        { color: Colors.text },
+        { color: textColor },
         type === 'default' ? defaultStyle : undefined,
         type === 'title' ? styles.title : undefined,
         type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,

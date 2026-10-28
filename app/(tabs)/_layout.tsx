@@ -8,10 +8,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
+import { useSettings } from '@/context/SettingsContext';
 
 function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }: any) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { t, isDark } = useSettings();
 
   const onAddPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -26,7 +28,16 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
         Semi-circular dome backing:
         Directly unified with the top edge of the bottom bar, located right above the Charts tab
       */}
-      <View style={styles.halfCircleArch} pointerEvents="none" />
+      <View
+        style={[
+          styles.halfCircleArch,
+          {
+            backgroundColor: isDark ? '#18181C' : '#FFFFFF',
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
+          },
+        ]}
+        pointerEvents="none"
+      />
 
       {/* The Dome-Shaped Action Button */}
       <AnimatedPressable
@@ -37,7 +48,14 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
       </AnimatedPressable>
 
       {/* Main Tab Bar Body */}
-      <View style={styles.tabBarMain}>
+      <View
+        style={[
+          styles.tabBarMain,
+          {
+            backgroundColor: isDark ? '#18181C' : '#FFFFFF',
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
+          },
+        ]}>
         {state.routes.map((route: any, index: number) => {
           const { options } = descriptors[route.key];
           const isFocused = state.index === index;
@@ -70,13 +88,13 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
 
           if (route.name === 'index') {
             iconName = isFocused ? 'wallet' : 'wallet-outline';
-            label = 'Home';
+            label = t('tabHome');
           } else if (route.name === 'explore') {
             iconName = isFocused ? 'pie-chart' : 'pie-chart-outline';
-            label = 'Charts';
+            label = t('tabCharts');
           } else if (route.name === 'recurring') {
             iconName = isFocused ? 'repeat' : 'repeat-outline';
-            label = 'Recurring';
+            label = t('tabRecurring');
           }
 
           const isChartsTab = route.name === 'explore';

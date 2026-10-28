@@ -5,21 +5,21 @@ export interface ExchangeRates {
 const getFiatRates = async (): Promise<ExchangeRates> => {
   let rates: ExchangeRates = {};
   try {
-    const response = await fetch('https://api.frankfurter.app/latest?from=USD&to=TRY,EUR,RUB');
+    const response = await fetch('https://api.frankfurter.app/latest?from=USD&to=TRY,EUR,GBP');
     if (!response.ok) throw new Error('Frankfurter API request failed');
     const data = await response.json();
     if (!data.rates || !data.rates.TRY) throw new Error('Invalid data from Frankfurter API');
 
     const usdToTry = data.rates.TRY;
     const usdToEur = data.rates.EUR;
-    const usdToRub = data.rates.RUB;
+    const usdToGbp = data.rates.GBP;
 
     rates.USD = usdToTry;
     if (usdToEur) {
         rates['EUR'] = usdToTry / usdToEur;
     }
-    if (usdToRub) {
-        rates['RUB'] = usdToTry / usdToRub;
+    if (usdToGbp) {
+        rates['GBP'] = usdToTry / usdToGbp;
     }
   } catch (error) {
     console.warn('Primary Fiat API (Frankfurter) failed:', error, 'Trying fallback...');
@@ -31,27 +31,13 @@ const getFiatRates = async (): Promise<ExchangeRates> => {
 
       const usdToTry = data.rates.TRY;
       const usdToEur = data.rates.EUR;
-      const usdToRub = data.rates.RUB;
+      const usdToGbp = data.rates.GBP;
 
       if (!rates.USD) rates.USD = usdToTry;
       if (usdToEur) { rates['EUR'] = usdToTry / usdToEur; }
-      if (usdToRub) { rates['RUB'] = usdToTry / usdToRub; }
+      if (usdToGbp) { rates['GBP'] = usdToTry / usdToGbp; }
     } catch (fallbackError) {
       console.error('Could not fetch main fiat rates from primary/secondary source:', fallbackError);
-    }
-  }
-
-  if (!rates.RUB) {
-    try {
-      console.log('Fetching RUB from a dedicated fallback API...');
-      const rubResponse = await fetch('https://open.er-api.com/v6/latest/RUB');
-      if (!rubResponse.ok) throw new Error('RUB Fallback API request failed');
-      const rubData = await rubResponse.json();
-      if (rubData.rates && rubData.rates.TRY) {
-        rates['RUB'] = rubData.rates.TRY;
-      }
-    } catch (rubError) {
-      console.warn('Dedicated RUB fallback API failed:', rubError);
     }
   }
 

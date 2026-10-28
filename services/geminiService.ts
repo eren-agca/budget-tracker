@@ -1,12 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 
-if (!API_KEY) {
-  throw new Error('Gemini API key is not defined. Please check your .env file.');
-}
-
-const genAI = new GoogleGenerativeAI(API_KEY);
 
 const createPrompt = (transactions: any[]): string => {
   const transactionsString = JSON.stringify(
@@ -31,7 +25,15 @@ const createPrompt = (transactions: any[]): string => {
 };
 
 export const analyzeTransactionsWithGemini = async (transactions: any[]): Promise<string> => {
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+
+  if (!apiKey) {
+    console.warn('Gemini API key is not defined. Please check your .env file.');
+    return 'Gemini API anahtarı tanımlanmamış. Lütfen .env dosyanızda EXPO_PUBLIC_GEMINI_API_KEY değerini tanımlayın.';
+  }
+
   try {
+    const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const prompt = createPrompt(transactions);
     const result = await model.generateContent(prompt);

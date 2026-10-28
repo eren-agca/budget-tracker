@@ -1,42 +1,43 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import { useFocusEffect } from 'expo-router';
 import {
+  Timestamp,
+  addDoc,
   collection,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
-  getDocs,
-  addDoc,
   updateDoc,
-  Timestamp,
 } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   FlatList,
+  ListRenderItem,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
   View,
-  ListRenderItem,
-  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
+import Toast from 'react-native-toast-message';
 
+import { AnimatedPressable } from '@/components/AnimatedPressable';
+import { SettingsModal } from '@/components/SettingsModal';
 import { ThemedText } from '@/components/ThemedText';
 import { Ticker } from '@/components/Ticker';
-import { AnimatedPressable } from '@/components/AnimatedPressable';
-import { ExchangeRates, getExchangeRates } from '@/services/currencyService';
-import { dateFilters } from '@/constants/DateFilters';
 import { expenseCategories } from '@/constants/Categories';
-import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { Colors } from '@/constants/Colors';
-import { db, auth } from '@/firebaseConfig';
+import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
+import { dateFilters } from '@/constants/DateFilters';
 import { useAuth } from '@/context/AuthContext';
+import { db } from '@/firebaseConfig';
+import { ExchangeRates, getExchangeRates } from '@/services/currencyService';
 
 interface Transaction {
   id: string;
@@ -45,7 +46,7 @@ interface Transaction {
   category: string;
   purchaseRate?: number;
   assetQuantity?: number;
-  currency: 'TRY' | 'USD' | 'EUR' | 'RUB';
+  currency: 'TRY' | 'USD' | 'EUR' | 'GBP';
   type: 'income' | 'expense';
   date: Date;
 }
@@ -72,7 +73,7 @@ const TransactionListItem = React.memo(
     rate,
   }: {
     item: Transaction;
-    onDelete: (id: string) => void;
+    onDelete: (item: Transaction) => void;
     displayCurrency: Currency;
     rate: number;
   }) => {
@@ -128,21 +129,25 @@ const TransactionListItem = React.memo(
           <ThemedText style={isIncome ? styles.incomeAmount : styles.expenseAmount}>
             {isIncome ? '+' : '-'}{itemCurrency.symbol}{Math.abs(item.amount).toFixed(2)}
           </ThemedText>
-          <AnimatedPressable
+          <TouchableOpacity
+            activeOpacity={0.6}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            onPress={() => onDelete(item.id)}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              onDelete(item);
+            }}
             style={styles.deleteIconButton}>
-            <Ionicons name="trash-outline" size={17} color="#6E6E73" />
-          </AnimatedPressable>
+            <Ionicons name="trash-outline" size={16} color="#8E8E93" />
+          </TouchableOpacity>
         </View>
       </View>
     );
   }
 );
+TransactionListItem.displayName = 'TransactionListItem';
 
 export default function HomeScreen() {
   const { user } = useAuth();
-  const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -154,6 +159,8 @@ export default function HomeScreen() {
   const [cryptoTickerData, setCryptoTickerData] = useState<string[]>([]);
   const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
   const [isDateModalVisible, setDateModalVisible] = useState(false);
+  const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
+  const [isSettingsModalVisible, setIsSettingsModalVisible] = useState(false);
 
   const dateFilteredTransactions = useMemo(() => {
     const now = new Date();
@@ -206,12 +213,13 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const fetchRates = async () => {
+      const FALLBACK_MESSAGE = 'Canlı piyasa verileri geçici olarak devre dışı';
       try {
         const fetchedRates = await getExchangeRates();
-        if (!fetchedRates) {
+        if (!fetchedRates || Object.keys(fetchedRates).length <= 1) {
           setRates({});
-          setFiatMetalTickerData(['Rates updating...']);
-          setCryptoTickerData([]);
+          setFiatMetalTickerData([FALLBACK_MESSAGE]);
+          setCryptoTickerData([FALLBACK_MESSAGE]);
           return;
         }
 
@@ -220,7 +228,7 @@ export default function HomeScreen() {
         const fiatMetalItems = [
           { code: 'USD', name: 'USD' },
           { code: 'EUR', name: 'EUR' },
-          { code: 'RUB', name: 'RUB' },
+          { code: 'GBP', name: 'POUND' },
           { code: 'XAU_GRAM', name: 'GOLD' },
           { code: 'XAG_GRAM', name: 'SILVER' },
         ];
@@ -248,11 +256,20 @@ export default function HomeScreen() {
               return `${item.name} ${formattedRate}`;
             });
 
-        setFiatMetalTickerData(formatData(fiatMetalItems));
-        setCryptoTickerData(formatData(cryptoItems));
+        const formattedFiat = formatData(fiatMetalItems);
+        const formattedCrypto = formatData(cryptoItems);
+
+        setFiatMetalTickerData(
+          formattedFiat.length > 0 ? formattedFiat : [FALLBACK_MESSAGE]
+        );
+        setCryptoTickerData(
+          formattedCrypto.length > 0 ? formattedCrypto : [FALLBACK_MESSAGE]
+        );
       } catch (error) {
         console.error('Error fetching rates:', error);
         setRates({});
+        setFiatMetalTickerData([FALLBACK_MESSAGE]);
+        setCryptoTickerData([FALLBACK_MESSAGE]);
       }
     };
 
@@ -261,19 +278,21 @@ export default function HomeScreen() {
     return () => clearInterval(intervalId);
   }, []);
 
-  useEffect(() => {
+  const runChecks = useCallback(async () => {
     if (!user) return;
-    const checkRecurringIncomes = async () => {
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    const currentDay = today.getDate();
+
+    // 1. Check Recurring Incomes
+    try {
       const recurringQuery = query(collection(db, 'users', user.uid, 'recurringIncomes'));
       const querySnapshot = await getDocs(recurringQuery);
-      const today = new Date();
-      const currentMonth = today.getMonth();
-      const currentYear = today.getFullYear();
-
       for (const docSnap of querySnapshot.docs) {
         const recurring = docSnap.data();
         const lastAdded = recurring.lastAdded ? recurring.lastAdded.toDate() : null;
-        const isDayDue = today.getDate() >= recurring.dayOfMonth;
+        const isDayDue = currentDay >= recurring.dayOfMonth;
         const notAddedThisMonth =
           !lastAdded || lastAdded.getMonth() !== currentMonth || lastAdded.getFullYear() !== currentYear;
 
@@ -292,62 +311,113 @@ export default function HomeScreen() {
           });
         }
       }
-    };
+    } catch (err) {
+      console.error('Error auto-checking recurring incomes:', err);
+    }
 
-    const checkInstallments = async () => {
-      try {
-        const installmentsQuery = query(collection(db, 'users', user.uid, 'installments'));
-        const querySnapshot = await getDocs(installmentsQuery);
-        const today = new Date();
-        const currentMonth = today.getMonth();
-        const currentYear = today.getFullYear();
-
-        for (const docSnap of querySnapshot.docs) {
-          const inst = docSnap.data();
-          if (inst.completed || (inst.remainingInstallments != null && inst.remainingInstallments <= 0)) {
-            continue;
-          }
-
-          const lastCharged = inst.lastCharged ? inst.lastCharged.toDate() : null;
-          const isDayDue = today.getDate() >= (inst.dueDay || 1);
-          const notChargedThisMonth =
-            !lastCharged || lastCharged.getMonth() !== currentMonth || lastCharged.getFullYear() !== currentYear;
-
-          if (isDayDue && notChargedThisMonth) {
-            const transactionDate = new Date(currentYear, currentMonth, inst.dueDay || today.getDate());
-            const nextPaid = (inst.paidInstallments || 0) + 1;
-            const nextRemaining = (inst.remainingInstallments ?? inst.totalInstallments) - 1;
-
-            await addDoc(collection(db, 'users', user.uid, 'transactions'), {
-              amount: -Math.abs(inst.monthlyAmount),
-              category: 'Debt',
-              currency: inst.currency || 'TRY',
-              description: `${inst.bank || 'Bank'} - ${inst.title} (${nextPaid}/${inst.totalInstallments}. Taksit)`,
-              type: 'expense',
-              date: Timestamp.fromDate(transactionDate),
-            });
-
-            await updateDoc(doc(db, 'users', user.uid, 'installments', docSnap.id), {
-              paidInstallments: nextPaid,
-              remainingInstallments: Math.max(0, nextRemaining),
-              completed: nextRemaining <= 0,
-              lastCharged: Timestamp.now(),
-            });
-          }
+    // 2. Check Installments
+    try {
+      const installmentsQuery = query(collection(db, 'users', user.uid, 'installments'));
+      const querySnapshot = await getDocs(installmentsQuery);
+      for (const docSnap of querySnapshot.docs) {
+        const inst = docSnap.data();
+        if (inst.completed || (inst.remainingInstallments != null && inst.remainingInstallments <= 0)) {
+          continue;
         }
-      } catch (err) {
-        console.error('Error auto-checking installments:', err);
+
+        const lastCharged = inst.lastCharged ? inst.lastCharged.toDate() : null;
+        const isDayDue = currentDay >= (inst.dueDay || 1);
+        const notChargedThisMonth =
+          !lastCharged || lastCharged.getMonth() !== currentMonth || lastCharged.getFullYear() !== currentYear;
+
+        if (isDayDue && notChargedThisMonth) {
+          const transactionDate = new Date(currentYear, currentMonth, inst.dueDay || currentDay);
+          const nextPaid = (inst.paidInstallments || 0) + 1;
+          const nextRemaining = (inst.remainingInstallments ?? inst.totalInstallments) - 1;
+
+          await addDoc(collection(db, 'users', user.uid, 'transactions'), {
+            amount: -Math.abs(inst.monthlyAmount),
+            category: 'Debt',
+            currency: inst.currency || 'TRY',
+            description: `${inst.bank || 'Bank'} - ${inst.title} (${nextPaid}/${inst.totalInstallments}. Taksit)`,
+            type: 'expense',
+            date: Timestamp.fromDate(transactionDate),
+          });
+
+          await updateDoc(doc(db, 'users', user.uid, 'installments', docSnap.id), {
+            paidInstallments: nextPaid,
+            remainingInstallments: Math.max(0, nextRemaining),
+            completed: nextRemaining <= 0,
+            lastCharged: Timestamp.now(),
+          });
+        }
       }
-    };
+    } catch (err) {
+      console.error('Error auto-checking installments:', err);
+    }
 
-    const runChecks = async () => {
-      await checkRecurringIncomes();
-      await checkInstallments();
-    };
+    // 3. Check Subscriptions
+    try {
+      const subsQuery = query(collection(db, 'users', user.uid, 'subscriptions'));
+      const querySnapshot = await getDocs(subsQuery);
+      for (const docSnap of querySnapshot.docs) {
+        const sub = docSnap.data();
+        if (sub.isActive === false) continue;
 
-    const timeoutId = setTimeout(runChecks, 3000);
-    return () => clearTimeout(timeoutId);
+        const lastCharged = sub.lastCharged ? sub.lastCharged.toDate() : null;
+        const dueDay = sub.dueDay || 1;
+        const isDayDue = currentDay >= dueDay;
+
+        let notChargedYet = false;
+        if (sub.billingCycle === 'yearly') {
+          notChargedYet = !lastCharged || lastCharged.getFullYear() !== currentYear;
+        } else {
+          notChargedYet =
+            !lastCharged ||
+            lastCharged.getMonth() !== currentMonth ||
+            lastCharged.getFullYear() !== currentYear;
+        }
+
+        // Check if subscription was created in the current month AFTER the due day
+        const createdDate = sub.createdAt ? sub.createdAt.toDate() : null;
+        const createdThisMonthAfterDue =
+          createdDate &&
+          createdDate.getFullYear() === currentYear &&
+          createdDate.getMonth() === currentMonth &&
+          createdDate.getDate() > dueDay;
+
+        // If today is due date (or past due date) and wasn't added after the due day this month
+        if (isDayDue && notChargedYet && !createdThisMonthAfterDue) {
+          const transactionDate = new Date(currentYear, currentMonth, dueDay);
+          await addDoc(collection(db, 'users', user.uid, 'transactions'), {
+            amount: -Math.abs(sub.amount),
+            category: 'Subscriptions',
+            currency: sub.currency || 'TRY',
+            description: `${sub.name} (Abonelik Ödemesi)`,
+            type: 'expense',
+            date: Timestamp.fromDate(transactionDate),
+          });
+
+          await updateDoc(doc(db, 'users', user.uid, 'subscriptions', docSnap.id), {
+            lastCharged: Timestamp.now(),
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error auto-checking subscriptions:', err);
+    }
   }, [user]);
+
+  // Run auto checks whenever Home tab gains focus
+  useFocusEffect(
+    useCallback(() => {
+      runChecks();
+    }, [runChecks])
+  );
+
+  useEffect(() => {
+    runChecks();
+  }, [runChecks]);
 
   useEffect(() => {
     if (!user) return;
@@ -367,44 +437,34 @@ export default function HomeScreen() {
     return () => unsubscribe();
   }, [user]);
 
-  const handleLogout = async () => {
-    Alert.alert('Sign Out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log Out',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await signOut(auth);
-          } catch (error) {
-            console.error('Error logging out: ', error);
-          }
-        },
-      },
-    ]);
-  };
+  const handleDeleteTransaction = useCallback((item: Transaction) => {
+    setTransactionToDelete(item);
+  }, []);
 
-  const handleDeleteTransaction = useCallback(
-    async (id: string) => {
-      if (!user) return;
-      Alert.alert('Delete Transaction', 'Are you sure you want to delete this record?', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-              await deleteDoc(doc(db, 'users', user.uid, 'transactions', id));
-            } catch (error) {
-              console.error('Error deleting document: ', error);
-            }
-          },
-        },
-      ]);
-    },
-    [user]
-  );
+  const handleConfirmDelete = async () => {
+    if (!transactionToDelete || !user) return;
+    const targetId = transactionToDelete.id;
+    setTransactionToDelete(null);
+
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      await deleteDoc(doc(db, 'users', user.uid, 'transactions', targetId));
+      Toast.show({
+        type: 'success',
+        text1: 'İşlem Silindi',
+        text2: 'Kayıt başarıyla kaldırıldı.',
+        visibilityTime: 2500,
+      });
+    } catch (error) {
+      console.error('Error deleting document: ', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      Toast.show({
+        type: 'error',
+        text1: 'Hata',
+        text2: 'İşlem silinirken bir sorun oluştu.',
+      });
+    }
+  };
 
   const filteredTransactions = useMemo(() => {
     if (!selectedCategory) {
@@ -462,12 +522,15 @@ export default function HomeScreen() {
         {user && (
           <AnimatedPressable
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            onPress={user.isAnonymous ? () => router.push('/login') : handleLogout}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              setIsSettingsModalVisible(true);
+            }}
             style={styles.authBadge}>
             <Ionicons
-              name={user.isAnonymous ? 'log-in-outline' : 'log-out-outline'}
-              size={18}
-              color={user.isAnonymous ? Colors.tint : '#FF453A'}
+              name="settings-outline"
+              size={19}
+              color={Colors.tint}
             />
           </AnimatedPressable>
         )}
@@ -531,12 +594,12 @@ export default function HomeScreen() {
                     <AnimatedPressable
                       key={c.code}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => {});
+                        Haptics.selectionAsync().catch(() => { });
                         setDisplayCurrency(c);
                       }}
                       style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
                       <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
-                        {c.code}
+                        {c.label}
                       </ThemedText>
                     </AnimatedPressable>
                   );
@@ -576,7 +639,7 @@ export default function HomeScreen() {
               <AnimatedPressable
                 style={[styles.filterChip, selectedDateFilter !== 'all' && styles.filterChipActive]}
                 onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
+                  Haptics.selectionAsync().catch(() => { });
                   setDateModalVisible(true);
                 }}>
                 <Ionicons
@@ -595,7 +658,7 @@ export default function HomeScreen() {
               <AnimatedPressable
                 style={[styles.filterChip, selectedCategory != null && styles.filterChipActive]}
                 onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
+                  Haptics.selectionAsync().catch(() => { });
                   setCategoryModalVisible(true);
                 }}>
                 <Ionicons
@@ -628,7 +691,7 @@ export default function HomeScreen() {
             </View>
             <ThemedText style={styles.emptyTitle}>No Transactions Found</ThemedText>
             <ThemedText style={styles.emptySubtitle}>
-              Tap the '+' button in the bottom bar to add your first income or expense.
+              Tap the &apos;+&apos; button in the bottom bar to add your first income or expense.
             </ThemedText>
           </View>
         }
@@ -651,7 +714,7 @@ export default function HomeScreen() {
                   key={filter.key}
                   style={[styles.modalItemRow, isSelected && styles.modalItemRowActive]}
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
+                    Haptics.selectionAsync().catch(() => { });
                     setSelectedDateFilter(filter.key);
                     setDateModalVisible(false);
                   }}>
@@ -680,7 +743,7 @@ export default function HomeScreen() {
               <AnimatedPressable
                 style={[styles.modalItemRow, selectedCategory === null && styles.modalItemRowActive]}
                 onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
+                  Haptics.selectionAsync().catch(() => { });
                   setSelectedCategory(null);
                   setCategoryModalVisible(false);
                 }}>
@@ -700,7 +763,7 @@ export default function HomeScreen() {
                     key={cat.key}
                     style={[styles.modalItemRow, isSelected && styles.modalItemRowActive]}
                     onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
+                      Haptics.selectionAsync().catch(() => { });
                       setSelectedCategory(cat.label);
                       setCategoryModalVisible(false);
                     }}>
@@ -718,6 +781,97 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Custom Mobile Delete Confirmation Bottom Sheet */}
+      <Modal
+        transparent={true}
+        visible={transactionToDelete !== null}
+        animationType="slide"
+        onRequestClose={() => setTransactionToDelete(null)}>
+        <View style={styles.modalBackdrop}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setTransactionToDelete(null)}
+          />
+          <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.deleteModalHeader}>
+              <View style={styles.deleteModalIconCircle}>
+                <Ionicons name="trash-outline" size={26} color="#FF453A" />
+              </View>
+              <ThemedText style={styles.deleteModalTitle}>İşlemi Sil</ThemedText>
+              <ThemedText style={styles.deleteModalSubtitle}>
+                Bu işlem kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.
+              </ThemedText>
+            </View>
+
+            {transactionToDelete && (
+              <View style={styles.deletePreviewCard}>
+                <View style={styles.deletePreviewLeft}>
+                  <View
+                    style={[
+                      styles.deletePreviewIconCircle,
+                      {
+                        backgroundColor:
+                          transactionToDelete.amount > 0
+                            ? 'rgba(52, 199, 89, 0.12)'
+                            : 'rgba(255, 255, 255, 0.05)',
+                      },
+                    ]}>
+                    <Ionicons
+                      name={getCategoryIcon(transactionToDelete.category, transactionToDelete.type)}
+                      size={18}
+                      color={transactionToDelete.amount > 0 ? Colors.income : Colors.tint}
+                    />
+                  </View>
+                  <View style={styles.deletePreviewTexts}>
+                    <ThemedText style={styles.deletePreviewTitle} numberOfLines={1}>
+                      {transactionToDelete.description || transactionToDelete.category}
+                    </ThemedText>
+                    <ThemedText style={styles.deletePreviewCategory}>
+                      {transactionToDelete.category}
+                    </ThemedText>
+                  </View>
+                </View>
+                <ThemedText
+                  style={transactionToDelete.amount > 0 ? styles.incomeAmount : styles.expenseAmount}>
+                  {transactionToDelete.amount > 0 ? '+' : '-'}
+                  {currencies.find((c) => c.code === transactionToDelete.currency)?.symbol || transactionToDelete.currency}
+                  {Math.abs(transactionToDelete.amount).toFixed(2)}
+                </ThemedText>
+              </View>
+            )}
+
+            <View style={styles.deleteModalActions}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                style={styles.deleteCancelBtn}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setTransactionToDelete(null);
+                }}>
+                <ThemedText style={styles.deleteCancelBtnText}>Vazgeç</ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                style={styles.deleteConfirmBtn}
+                onPress={handleConfirmDelete}>
+                <Ionicons name="trash" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <ThemedText style={styles.deleteConfirmBtnText}>Sil</ThemedText>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Settings Bottom Sheet Modal */}
+      <SettingsModal
+        visible={isSettingsModalVisible}
+        onClose={() => setIsSettingsModalVisible(false)}
+      />
     </View>
   );
 }
@@ -1057,7 +1211,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   deleteIconButton: {
-    padding: 4,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    marginTop: 4,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -1141,5 +1301,100 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  deleteModalHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  deleteModalIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255, 69, 58, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  deleteModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: 6,
+  },
+  deleteModalSubtitle: {
+    fontSize: 13,
+    color: '#8E8E93',
+    textAlign: 'center',
+    paddingHorizontal: 16,
+    lineHeight: 18,
+  },
+  deletePreviewCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#141518',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  deletePreviewLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    marginRight: 8,
+  },
+  deletePreviewIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deletePreviewTexts: {
+    flex: 1,
+  },
+  deletePreviewTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  deletePreviewCategory: {
+    fontSize: 11,
+    color: '#8E8E93',
+    marginTop: 2,
+  },
+  deleteModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  deleteCancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#26282E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteCancelBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#E5E5EA',
+  },
+  deleteConfirmBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#FF453A',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteConfirmBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
