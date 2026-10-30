@@ -21,11 +21,14 @@ import { auth } from '@/firebaseConfig';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
+import { useSettings } from '@/context/SettingsContext';
 
 export default function LoginScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { isDark, colors } = useSettings();
+  const styles = createStyles(colors, isDark);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -105,7 +108,7 @@ export default function LoginScreen() {
           <View style={styles.card}>
             {/* Email Field */}
             <View style={styles.inputWrap}>
-              <Ionicons name="mail-outline" size={19} color="#8E8E93" style={styles.fieldIcon} />
+              <Ionicons name="mail-outline" size={19} color={colors.textSecondary} style={styles.fieldIcon} />
               <TextInput
                 style={styles.textInput}
                 placeholder="Email Address"
@@ -114,20 +117,20 @@ export default function LoginScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholderTextColor="#636366"
+                placeholderTextColor={colors.textMuted}
               />
             </View>
 
             {/* Password Field */}
             <View style={styles.inputWrap}>
-              <Ionicons name="lock-closed-outline" size={19} color="#8E8E93" style={styles.fieldIcon} />
+              <Ionicons name="lock-closed-outline" size={19} color={colors.textSecondary} style={styles.fieldIcon} />
               <TextInput
                 style={styles.textInput}
                 placeholder="Password"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
-                placeholderTextColor="#636366"
+                placeholderTextColor={colors.textMuted}
               />
               <AnimatedPressable
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -135,7 +138,7 @@ export default function LoginScreen() {
                 <Ionicons
                   name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                   size={19}
-                  color="#8E8E93"
+                  color={colors.textSecondary}
                 />
               </AnimatedPressable>
             </View>
@@ -146,7 +149,7 @@ export default function LoginScreen() {
               onPress={handleLogin}
               disabled={loading}>
               {loading ? (
-                <ActivityIndicator color="#000" />
+                <ActivityIndicator color={isDark ? '#000000' : '#FFFFFF'} />
               ) : (
                 <ThemedText style={styles.primaryButtonText}>Log In</ThemedText>
               )}
@@ -165,7 +168,7 @@ export default function LoginScreen() {
                 style={styles.guestButton}
                 onPress={handleAnonymousSignIn}
                 disabled={loading}>
-                <Ionicons name="finger-print-outline" size={18} color="#D1D1D6" />
+                <Ionicons name="finger-print-outline" size={18} color={colors.textSecondary} />
                 <ThemedText style={styles.guestButtonText}>Continue as Guest</ThemedText>
               </AnimatedPressable>
             )}
@@ -186,164 +189,165 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#0E0E10',
-  },
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-  },
-  brandSection: {
-    alignItems: 'center',
-    marginBottom: 28,
-  },
-  brandIconGlow: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: 'rgba(57, 255, 20, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(57, 255, 20, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.tint,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.35,
-        shadowRadius: 10,
-      },
-      android: {
-        elevation: 6,
-      },
-    }),
-  },
-  brandTitle: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: -0.5,
-  },
-  brandSubtitle: {
-    fontSize: 13,
-    color: '#8E8E93',
-    textAlign: 'center',
-    marginTop: 6,
-    lineHeight: 18,
-    maxWidth: 280,
-  },
-  card: {
-    backgroundColor: '#191A1F',
-    borderRadius: 22,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.4,
-        shadowRadius: 14,
-      },
-      android: {
-        elevation: 6,
-      },
-    }),
-  },
-  inputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#121215',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 14,
-    height: 52,
-    marginBottom: 14,
-  },
-  fieldIcon: {
-    marginRight: 10,
-  },
-  textInput: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  primaryButton: {
-    backgroundColor: Colors.tint,
-    height: 52,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 6,
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.tint,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
-      },
-      android: {
-        elevation: 6,
-      },
-    }),
-  },
-  primaryButtonText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#000',
-    letterSpacing: 0.2,
-  },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 18,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  dividerLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#636366',
-    marginHorizontal: 12,
-  },
-  guestButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#121215',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    height: 50,
-    borderRadius: 14,
-    gap: 8,
-  },
-  guestButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#D1D1D6',
-  },
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  footerPrompt: {
-    fontSize: 14,
-    color: '#8E8E93',
-  },
-  footerLink: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: Colors.tint,
-  },
-});
+const createStyles = (colors: any, isDark: boolean) =>
+  StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    container: {
+      flex: 1,
+      justifyContent: 'center',
+      paddingHorizontal: 20,
+    },
+    brandSection: {
+      alignItems: 'center',
+      marginBottom: 28,
+    },
+    brandIconGlow: {
+      width: 68,
+      height: 68,
+      borderRadius: 34,
+      backgroundColor: isDark ? 'rgba(57, 255, 20, 0.1)' : 'rgba(5, 150, 105, 0.12)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(57, 255, 20, 0.3)' : 'rgba(5, 150, 105, 0.3)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 16,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.tint,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: isDark ? 0.35 : 0.2,
+          shadowRadius: 10,
+        },
+        android: {
+          elevation: 6,
+        },
+      }),
+    },
+    brandTitle: {
+      fontSize: 26,
+      fontWeight: '900',
+      color: colors.text,
+      letterSpacing: -0.5,
+    },
+    brandSubtitle: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginTop: 6,
+      lineHeight: 18,
+      maxWidth: 280,
+    },
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 22,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: colors.border,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: isDark ? 0.4 : 0.08,
+          shadowRadius: 14,
+        },
+        android: {
+          elevation: 6,
+        },
+      }),
+    },
+    inputWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 14,
+      height: 52,
+      marginBottom: 14,
+    },
+    fieldIcon: {
+      marginRight: 10,
+    },
+    textInput: {
+      flex: 1,
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: '500',
+    },
+    primaryButton: {
+      backgroundColor: colors.tint,
+      height: 52,
+      borderRadius: 14,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: 6,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.tint,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 10,
+        },
+        android: {
+          elevation: 6,
+        },
+      }),
+    },
+    primaryButtonText: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: isDark ? '#000000' : '#FFFFFF',
+      letterSpacing: 0.2,
+    },
+    dividerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginVertical: 18,
+    },
+    dividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: colors.border,
+    },
+    dividerLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.textMuted,
+      marginHorizontal: 12,
+    },
+    guestButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.cardSecondary,
+      borderWidth: 1,
+      borderColor: colors.border,
+      height: 50,
+      borderRadius: 14,
+      gap: 8,
+    },
+    guestButtonText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.textSecondary,
+    },
+    footerRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: 24,
+    },
+    footerPrompt: {
+      fontSize: 14,
+      color: colors.textSecondary,
+    },
+    footerLink: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: colors.tint,
+    },
+  });

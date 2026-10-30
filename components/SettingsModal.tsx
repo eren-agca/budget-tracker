@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Modal,
+  ActivityIndicator,
   StyleSheet,
   TouchableOpacity,
   View,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { signOut } from 'firebase/auth';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/ThemedText';
@@ -17,6 +19,7 @@ import { useSettings } from '@/context/SettingsContext';
 import { auth } from '@/firebaseConfig';
 import { currencies } from '@/constants/Currencies';
 import { Colors } from '@/constants/Colors';
+import { SwipeableModal } from '@/components/SwipeableModal';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -24,19 +27,44 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ visible, onClose }: SettingsModalProps) {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { theme, setTheme, language, setLanguage, t, isDark } = useSettings();
+  const { theme, setTheme, language, setLanguage, t, isDark, colors } = useSettings();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    if (!visible) {
+      setShowLogoutConfirm(false);
+      setLoggingOut(false);
+    }
+  }, [visible]);
 
   const handleLogout = async () => {
+    if (loggingOut) return;
     try {
+      setLoggingOut(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-      setShowLogoutConfirm(false);
+
+      // 1. Close modal first so its dismiss animation runs smoothly
       onClose();
-      await signOut(auth);
+
+      // 2. Wait for modal animation to complete before signing out to prevent UIKit presentation freezing
+      setTimeout(async () => {
+        try {
+          await signOut(auth);
+          router.replace('/login');
+        } catch (error) {
+          console.error('Error signing out:', error);
+        } finally {
+          setLoggingOut(false);
+          setShowLogoutConfirm(false);
+        }
+      }, 300);
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error('Error in handleLogout:', error);
+      setLoggingOut(false);
     }
   };
 
@@ -44,352 +72,328 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
   const userDisplayName = user?.email ? user.email.split('@')[0] : (user?.isAnonymous ? t('guestUser') : 'Budget Portfolio');
 
   return (
-    <>
-      <Modal
-        visible={visible}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={onClose}>
-        <View style={styles.backdrop}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={onClose}
+    <SwipeableModal
+      visible={visible}
+      onClose={onClose}
+      sheetStyle={[
+        styles.sheet,
+        {
+          backgroundColor: colors.card,
+          paddingBottom: Math.max(insets.bottom, 20) + 16,
+        },
+      ]}>
+      {/* Header */}
+      <View style={styles.headerRow}>
+        <View>
+          <ThemedText style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
+            {t('settingsSubtitle')}
+          </ThemedText>
+          <ThemedText style={[styles.headerTitle, { color: colors.text }]}>
+            {t('settings')}
+          </ThemedText>
+        </View>
+
+        <TouchableOpacity
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => {});
+            onClose();
+          }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons
+            name="close-circle"
+            size={26}
+            color={colors.textSecondary}
           />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 24 }}>
+        {/* Profile Card */}
+        <View
+          style={[
+            styles.profileCard,
+            {
+              backgroundColor: colors.cardSecondary,
+              borderColor: colors.border,
+            },
+          ]}>
           <View
             style={[
-              styles.sheet,
-              {
-                backgroundColor: isDark ? '#191A20' : '#FFFFFF',
-                paddingBottom: Math.max(insets.bottom, 20) + 16,
-              },
+              styles.avatarCircle,
+              { backgroundColor: colors.tintSoft },
             ]}>
-            {/* Sheet Handle */}
+            <ThemedText
+              style={[styles.avatarText, { color: colors.tint }]}>
+              {userInitial}
+            </ThemedText>
+          </View>
+
+          <View style={styles.profileInfo}>
+            <ThemedText style={[styles.profileName, { color: colors.text }]}>
+              {userDisplayName}
+            </ThemedText>
+            <ThemedText style={[styles.profileEmail, { color: colors.textSecondary }]}>
+              {user?.email || t('guestUser')}
+            </ThemedText>
+          </View>
+
+          <View
+            style={[
+              styles.sessionBadge,
+              { backgroundColor: colors.tintSoft },
+            ]}>
             <View
               style={[
-                styles.handle,
-                { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.15)' },
+                styles.onlineDot,
+                { backgroundColor: colors.tint },
               ]}
             />
-
-            {/* Header */}
-            <View style={styles.headerRow}>
-              <View>
-                <ThemedText style={[styles.headerSubtitle, { color: isDark ? '#8E8E93' : '#6C6C70' }]}>
-                  {t('settingsSubtitle')}
-                </ThemedText>
-                <ThemedText style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#11181C' }]}>
-                  {t('settings')}
-                </ThemedText>
-              </View>
-
-              <TouchableOpacity
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
-                  onClose();
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons
-                  name="close-circle"
-                  size={26}
-                  color={isDark ? '#8E8E93' : '#8E8E93'}
-                />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 24 }}>
-              {/* Profile Card */}
-              <View
-                style={[
-                  styles.profileCard,
-                  {
-                    backgroundColor: isDark ? '#121215' : '#F4F5F7',
-                    borderColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.06)',
-                  },
-                ]}>
-                <View
-                  style={[
-                    styles.avatarCircle,
-                    { backgroundColor: isDark ? 'rgba(57, 255, 20, 0.15)' : 'rgba(16, 185, 129, 0.15)' },
-                  ]}>
-                  <ThemedText
-                    style={[styles.avatarText, { color: isDark ? Colors.tint : '#10B981' }]}>
-                    {userInitial}
-                  </ThemedText>
-                </View>
-
-                <View style={styles.profileInfo}>
-                  <ThemedText style={[styles.profileName, { color: isDark ? '#FFFFFF' : '#11181C' }]}>
-                    {userDisplayName}
-                  </ThemedText>
-                  <ThemedText style={[styles.profileEmail, { color: isDark ? '#8E8E93' : '#6C6C70' }]}>
-                    {user?.email || t('guestUser')}
-                  </ThemedText>
-                </View>
-
-                <View
-                  style={[
-                    styles.sessionBadge,
-                    { backgroundColor: isDark ? 'rgba(57, 255, 20, 0.1)' : 'rgba(16, 185, 129, 0.1)' },
-                  ]}>
-                  <View
-                    style={[
-                      styles.onlineDot,
-                      { backgroundColor: isDark ? Colors.tint : '#10B981' },
-                    ]}
-                  />
-                  <ThemedText
-                    style={[
-                      styles.sessionBadgeText,
-                      { color: isDark ? Colors.tint : '#10B981' },
-                    ]}>
-                    {t('activeSession')}
-                  </ThemedText>
-                </View>
-              </View>
-
-              {/* Theme Section */}
-              <View style={styles.sectionWrap}>
-                <ThemedText style={[styles.sectionTitle, { color: isDark ? '#8E8E93' : '#6C6C70' }]}>
-                  {t('theme').toUpperCase()}
-                </ThemedText>
-
-                <View style={styles.optionsRow}>
-                  {/* Dark Mode Tile */}
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={() => setTheme('dark')}
-                    style={[
-                      styles.optionTile,
-                      {
-                        backgroundColor: isDark ? '#121215' : '#F4F5F7',
-                        borderColor: isDark ? 'rgba(57, 255, 20, 0.4)' : 'rgba(0, 0, 0, 0.08)',
-                      },
-                      theme === 'dark' && {
-                        borderColor: Colors.tint,
-                        backgroundColor: isDark ? 'rgba(57, 255, 20, 0.08)' : '#EAEBEE',
-                      },
-                    ]}>
-                    <View style={styles.optionTopRow}>
-                      <Ionicons
-                        name="moon"
-                        size={20}
-                        color={theme === 'dark' ? Colors.tint : (isDark ? '#8E8E93' : '#6C6C70')}
-                      />
-                      {theme === 'dark' && (
-                        <Ionicons name="checkmark-circle" size={18} color={Colors.tint} />
-                      )}
-                    </View>
-                    <ThemedText
-                      style={[
-                        styles.optionLabel,
-                        { color: isDark ? '#FFFFFF' : '#11181C' },
-                        theme === 'dark' && { color: isDark ? Colors.tint : '#000000', fontWeight: '800' },
-                      ]}>
-                      {t('themeDark')}
-                    </ThemedText>
-                  </TouchableOpacity>
-
-                  {/* Light Mode Tile */}
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={() => setTheme('light')}
-                    style={[
-                      styles.optionTile,
-                      {
-                        backgroundColor: isDark ? '#121215' : '#F4F5F7',
-                        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
-                      },
-                      theme === 'light' && {
-                        borderColor: '#10B981',
-                        backgroundColor: isDark ? 'rgba(16, 185, 129, 0.1)' : 'rgba(16, 185, 129, 0.08)',
-                      },
-                    ]}>
-                    <View style={styles.optionTopRow}>
-                      <Ionicons
-                        name="sunny"
-                        size={20}
-                        color={theme === 'light' ? '#10B981' : (isDark ? '#8E8E93' : '#6C6C70')}
-                      />
-                      {theme === 'light' && (
-                        <Ionicons name="checkmark-circle" size={18} color="#10B981" />
-                      )}
-                    </View>
-                    <ThemedText
-                      style={[
-                        styles.optionLabel,
-                        { color: isDark ? '#FFFFFF' : '#11181C' },
-                        theme === 'light' && { color: '#10B981', fontWeight: '800' },
-                      ]}>
-                      {t('themeLight')}
-                    </ThemedText>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Language Section */}
-              <View style={styles.sectionWrap}>
-                <ThemedText style={[styles.sectionTitle, { color: isDark ? '#8E8E93' : '#6C6C70' }]}>
-                  {t('language').toUpperCase()}
-                </ThemedText>
-
-                <View style={styles.optionsRow}>
-                  {/* Turkish Option */}
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={() => setLanguage('tr')}
-                    style={[
-                      styles.optionTile,
-                      {
-                        backgroundColor: isDark ? '#121215' : '#F4F5F7',
-                        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
-                      },
-                      language === 'tr' && {
-                        borderColor: isDark ? Colors.tint : '#10B981',
-                        backgroundColor: isDark ? 'rgba(57, 255, 20, 0.08)' : 'rgba(16, 185, 129, 0.08)',
-                      },
-                    ]}>
-                    <View style={styles.optionTopRow}>
-                      <ThemedText style={{ fontSize: 18 }}>🇹🇷</ThemedText>
-                      {language === 'tr' && (
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={18}
-                          color={isDark ? Colors.tint : '#10B981'}
-                        />
-                      )}
-                    </View>
-                    <ThemedText
-                      style={[
-                        styles.optionLabel,
-                        { color: isDark ? '#FFFFFF' : '#11181C' },
-                        language === 'tr' && {
-                          color: isDark ? Colors.tint : '#10B981',
-                          fontWeight: '800',
-                        },
-                      ]}>
-                      Türkçe
-                    </ThemedText>
-                  </TouchableOpacity>
-
-                  {/* English Option */}
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={() => setLanguage('en')}
-                    style={[
-                      styles.optionTile,
-                      {
-                        backgroundColor: isDark ? '#121215' : '#F4F5F7',
-                        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
-                      },
-                      language === 'en' && {
-                        borderColor: isDark ? Colors.tint : '#10B981',
-                        backgroundColor: isDark ? 'rgba(57, 255, 20, 0.08)' : 'rgba(16, 185, 129, 0.08)',
-                      },
-                    ]}>
-                    <View style={styles.optionTopRow}>
-                      <ThemedText style={{ fontSize: 18 }}>🇬🇧</ThemedText>
-                      {language === 'en' && (
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={18}
-                          color={isDark ? Colors.tint : '#10B981'}
-                        />
-                      )}
-                    </View>
-                    <ThemedText
-                      style={[
-                        styles.optionLabel,
-                        { color: isDark ? '#FFFFFF' : '#11181C' },
-                        language === 'en' && {
-                          color: isDark ? Colors.tint : '#10B981',
-                          fontWeight: '800',
-                        },
-                      ]}>
-                      English
-                    </ThemedText>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Supported Currencies Badge Row */}
-              <View style={styles.sectionWrap}>
-                <ThemedText style={[styles.sectionTitle, { color: isDark ? '#8E8E93' : '#6C6C70' }]}>
-                  {t('currenciesTitle').toUpperCase()}
-                </ThemedText>
-                <View style={styles.currenciesRow}>
-                  {currencies.map((curr) => (
-                    <View
-                      key={curr.code}
-                      style={[
-                        styles.currencyTag,
-                        {
-                          backgroundColor: isDark ? '#121215' : '#F4F5F7',
-                          borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
-                        },
-                      ]}>
-                      <ThemedText style={[styles.currencySymbol, { color: isDark ? Colors.tint : '#10B981' }]}>
-                        {curr.symbol}
-                      </ThemedText>
-                      <ThemedText style={[styles.currencyCode, { color: isDark ? '#FFFFFF' : '#11181C' }]}>
-                        {curr.label}
-                      </ThemedText>
-                    </View>
-                  ))}
-                </View>
-              </View>
-
-              {/* App Info Box */}
-              <View
-                style={[
-                  styles.aboutBox,
-                  {
-                    backgroundColor: isDark ? '#121215' : '#F4F5F7',
-                    borderColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.06)',
-                  },
-                ]}>
-                <View style={styles.aboutRow}>
-                  <Ionicons
-                    name="shield-checkmark-outline"
-                    size={16}
-                    color={isDark ? Colors.tint : '#10B981'}
-                    style={{ marginRight: 6 }}
-                  />
-                  <ThemedText style={[styles.aboutText, { color: isDark ? '#8E8E93' : '#6C6C70' }]}>
-                    {t('version')} • {t('cloudSync')}
-                  </ThemedText>
-                </View>
-              </View>
-
-              {/* Logout Button */}
-              {user && (
-                <View style={{ marginTop: 20 }}>
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setShowLogoutConfirm(true);
-                    }}
-                    style={styles.logoutButton}>
-                    <Ionicons name="log-out-outline" size={18} color="#FF453A" style={{ marginRight: 8 }} />
-                    <ThemedText style={styles.logoutButtonText}>{t('logoutBtn')}</ThemedText>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </ScrollView>
+            <ThemedText
+              style={[
+                styles.sessionBadgeText,
+                { color: colors.tint },
+              ]}
+            >
+              {t('activeSession')}
+            </ThemedText>
           </View>
         </View>
-      </Modal>
 
-      {/* Logout Confirmation Bottom Sheet */}
-      <Modal
-        visible={showLogoutConfirm}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowLogoutConfirm(false)}>
-        <View style={styles.backdrop}>
+        {/* Theme Section */}
+        <View style={styles.sectionWrap}>
+          <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            {t('theme').toUpperCase()}
+          </ThemedText>
+
+          <View style={styles.optionsRow}>
+            {/* Dark Mode Tile */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setTheme('dark')}
+              style={[
+                styles.optionTile,
+                {
+                  backgroundColor: colors.cardSecondary,
+                  borderColor: colors.border,
+                },
+                theme === 'dark' && {
+                  borderColor: isDark ? Colors.tint : '#059669',
+                  backgroundColor: colors.tintSoft,
+                },
+              ]}>
+              <View style={styles.optionTopRow}>
+                <Ionicons
+                  name="moon"
+                  size={20}
+                  color={theme === 'dark' ? (isDark ? Colors.tint : '#059669') : colors.textSecondary}
+                />
+                {theme === 'dark' && (
+                  <Ionicons name="checkmark-circle" size={18} color={isDark ? Colors.tint : '#059669'} />
+                )}
+              </View>
+              <ThemedText
+                style={[
+                  styles.optionLabel,
+                  { color: colors.text },
+                  theme === 'dark' && { color: isDark ? Colors.tint : '#059669', fontWeight: '800' },
+                ]}>
+                {t('themeDark')}
+              </ThemedText>
+            </TouchableOpacity>
+
+            {/* Light Mode Tile */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setTheme('light')}
+              style={[
+                styles.optionTile,
+                {
+                  backgroundColor: colors.cardSecondary,
+                  borderColor: colors.border,
+                },
+                theme === 'light' && {
+                  borderColor: isDark ? '#10B981' : colors.tint,
+                  backgroundColor: colors.tintSoft,
+                },
+              ]}>
+              <View style={styles.optionTopRow}>
+                <Ionicons
+                  name="sunny"
+                  size={20}
+                  color={theme === 'light' ? colors.tint : colors.textSecondary}
+                />
+                {theme === 'light' && (
+                  <Ionicons name="checkmark-circle" size={18} color={colors.tint} />
+                )}
+              </View>
+              <ThemedText
+                style={[
+                  styles.optionLabel,
+                  { color: colors.text },
+                  theme === 'light' && { color: colors.tint, fontWeight: '800' },
+                ]}>
+                {t('themeLight')}
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Language Section */}
+        <View style={styles.sectionWrap}>
+          <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            {t('language').toUpperCase()}
+          </ThemedText>
+
+          <View style={styles.optionsRow}>
+            {/* Turkish Option */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setLanguage('tr')}
+              style={[
+                styles.optionTile,
+                {
+                  backgroundColor: colors.cardSecondary,
+                  borderColor: colors.border,
+                },
+                language === 'tr' && {
+                  borderColor: colors.tint,
+                  backgroundColor: colors.tintSoft,
+                },
+              ]}>
+              <View style={styles.optionTopRow}>
+                <ThemedText style={{ fontSize: 18 }}>🇹🇷</ThemedText>
+                {language === 'tr' && (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={18}
+                    color={colors.tint}
+                  />
+                )}
+              </View>
+              <ThemedText
+                style={[
+                  styles.optionLabel,
+                  { color: colors.text },
+                  language === 'tr' && {
+                    color: colors.tint,
+                    fontWeight: '800',
+                  },
+                ]}>
+                Türkçe
+              </ThemedText>
+            </TouchableOpacity>
+
+            {/* English Option */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => setLanguage('en')}
+              style={[
+                styles.optionTile,
+                {
+                  backgroundColor: colors.cardSecondary,
+                  borderColor: colors.border,
+                },
+                language === 'en' && {
+                  borderColor: colors.tint,
+                  backgroundColor: colors.tintSoft,
+                },
+              ]}>
+              <View style={styles.optionTopRow}>
+                <ThemedText style={{ fontSize: 18 }}>🇬🇧</ThemedText>
+                {language === 'en' && (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={18}
+                    color={colors.tint}
+                  />
+                )}
+              </View>
+              <ThemedText
+                style={[
+                  styles.optionLabel,
+                  { color: colors.text },
+                  language === 'en' && {
+                    color: colors.tint,
+                    fontWeight: '800',
+                  },
+                ]}>
+                English
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Supported Currencies Badge Row */}
+        <View style={styles.sectionWrap}>
+          <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            {t('currenciesTitle').toUpperCase()}
+          </ThemedText>
+          <View style={styles.currenciesRow}>
+            {currencies.map((curr) => (
+              <View
+                key={curr.code}
+                style={[
+                  styles.currencyTag,
+                  {
+                    backgroundColor: colors.cardSecondary,
+                    borderColor: colors.border,
+                  },
+                ]}>
+                <ThemedText style={[styles.currencySymbol, { color: colors.tint }]}>
+                  {curr.symbol}
+                </ThemedText>
+                <ThemedText style={[styles.currencyCode, { color: colors.text }]}>
+                  {curr.label}
+                </ThemedText>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* App Info Box */}
+        <View
+          style={[
+            styles.aboutBox,
+            {
+              backgroundColor: colors.cardSecondary,
+              borderColor: colors.border,
+            },
+          ]}>
+          <View style={styles.aboutRow}>
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={16}
+              color={colors.tint}
+              style={{ marginRight: 6 }}
+            />
+            <ThemedText style={[styles.aboutText, { color: colors.textSecondary }]}>
+              {t('version')} • {t('cloudSync')}
+            </ThemedText>
+          </View>
+        </View>
+
+        {/* Logout Section: Clean button that opens the centered confirmation popup */}
+        {user && (
+          <View style={{ marginTop: 22 }}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setShowLogoutConfirm(true);
+              }}
+              style={styles.logoutButton}>
+              <Ionicons name="log-out-outline" size={18} color="#FF453A" style={{ marginRight: 8 }} />
+              <ThemedText style={styles.logoutButtonText}>{t('logoutBtn')}</ThemedText>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Extra Popup Box for Logout Confirmation (Evet / Hayır) */}
+      {showLogoutConfirm && (
+        <View style={styles.popupOverlay}>
           <TouchableOpacity
             style={StyleSheet.absoluteFill}
             activeOpacity={1}
@@ -397,86 +401,76 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
           />
           <View
             style={[
-              styles.confirmSheet,
+              styles.popupCard,
               {
-                backgroundColor: isDark ? '#191A20' : '#FFFFFF',
-                paddingBottom: Math.max(insets.bottom, 20) + 16,
+                backgroundColor: colors.card,
+                borderColor: colors.border,
               },
             ]}>
-            <View
-              style={[
-                styles.handle,
-                { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.15)' },
-              ]}
-            />
-
-            <View style={styles.confirmHeader}>
-              <View style={styles.logoutIconCircle}>
-                <Ionicons name="log-out" size={26} color="#FF453A" />
-              </View>
-              <ThemedText style={[styles.confirmTitle, { color: isDark ? '#FFFFFF' : '#11181C' }]}>
-                {t('logoutConfirmTitle')}
-              </ThemedText>
-              <ThemedText style={[styles.confirmDesc, { color: isDark ? '#8E8E93' : '#6C6C70' }]}>
-                {t('logoutConfirmDesc')}
-              </ThemedText>
+            <View style={styles.popupIconCircle}>
+              <Ionicons name="log-out" size={26} color="#FF453A" />
             </View>
 
-            <View style={styles.confirmBtnRow}>
+            <ThemedText style={[styles.popupTitle, { color: colors.text }]}>
+              {t('logoutConfirmTitle')}
+            </ThemedText>
+
+            <ThemedText style={[styles.popupDesc, { color: colors.textSecondary }]}>
+              {t('logoutConfirmDesc')}
+            </ThemedText>
+
+            <View style={styles.popupBtnRow}>
+              {/* Hayır / Vazgeç */}
               <TouchableOpacity
                 activeOpacity={0.7}
+                disabled={loggingOut}
                 style={[
-                  styles.cancelBtn,
-                  { backgroundColor: isDark ? '#24262E' : '#E5E5EA' },
+                  styles.popupCancelBtn,
+                  { backgroundColor: colors.cardSecondary },
                 ]}
-                onPress={() => setShowLogoutConfirm(false)}>
-                <ThemedText style={[styles.cancelBtnText, { color: isDark ? '#FFFFFF' : '#000000' }]}>
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setShowLogoutConfirm(false);
+                }}>
+                <ThemedText style={[styles.popupCancelBtnText, { color: colors.text }]}>
                   {t('cancel')}
                 </ThemedText>
               </TouchableOpacity>
 
+              {/* Evet / Çıkış Yap */}
               <TouchableOpacity
                 activeOpacity={0.8}
-                style={styles.confirmLogoutBtn}
+                disabled={loggingOut}
+                style={styles.popupConfirmBtn}
                 onPress={handleLogout}>
-                <Ionicons name="log-out" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <ThemedText style={styles.confirmLogoutBtnText}>{t('logoutAction')}</ThemedText>
+                {loggingOut ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="log-out" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <ThemedText style={styles.popupConfirmBtnText}>{t('logoutAction')}</ThemedText>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           </View>
         </View>
-      </Modal>
-    </>
+      )}
+    </SwipeableModal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'flex-end',
-  },
   sheet: {
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-    paddingTop: 12,
     paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
     maxHeight: '85%',
-  },
-  handle: {
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 16,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: 16,
+    paddingTop: 4,
   },
   headerSubtitle: {
     fontSize: 10,
@@ -618,63 +612,80 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
-  confirmSheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 12,
-    paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  confirmHeader: {
+  popupOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    paddingHorizontal: 24,
+    zIndex: 9999,
   },
-  logoutIconCircle: {
+  popupCard: {
+    width: '100%',
+    borderRadius: 22,
+    padding: 22,
+    alignItems: 'center',
+    borderWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.5,
+        shadowRadius: 20,
+      },
+      android: {
+        elevation: 12,
+      },
+    }),
+  },
+  popupIconCircle: {
     width: 52,
     height: 52,
     borderRadius: 26,
     backgroundColor: 'rgba(255, 69, 58, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
   },
-  confirmTitle: {
+  popupTitle: {
     fontSize: 18,
     fontWeight: '800',
-    marginBottom: 6,
+    marginBottom: 8,
     textAlign: 'center',
   },
-  confirmDesc: {
+  popupDesc: {
     fontSize: 13,
     textAlign: 'center',
     lineHeight: 18,
-    paddingHorizontal: 12,
+    paddingHorizontal: 4,
+    marginBottom: 20,
   },
-  confirmBtnRow: {
+  popupBtnRow: {
     flexDirection: 'row',
     gap: 12,
+    width: '100%',
   },
-  cancelBtn: {
+  popupCancelBtn: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 13,
     borderRadius: 13,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  cancelBtnText: {
+  popupCancelBtnText: {
     fontSize: 15,
     fontWeight: '600',
   },
-  confirmLogoutBtn: {
-    flex: 1,
+  popupConfirmBtn: {
+    flex: 1.2,
     backgroundColor: '#FF453A',
-    paddingVertical: 14,
+    paddingVertical: 13,
     borderRadius: 13,
     alignItems: 'center',
-    flexDirection: 'row',
     justifyContent: 'center',
+    flexDirection: 'row',
   },
-  confirmLogoutBtnText: {
+  popupConfirmBtnText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',

@@ -29,6 +29,7 @@ import Toast from 'react-native-toast-message';
 
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { SettingsModal } from '@/components/SettingsModal';
+import { SwipeableModal } from '@/components/SwipeableModal';
 import { ThemedText } from '@/components/ThemedText';
 import { Ticker } from '@/components/Ticker';
 import { expenseCategories } from '@/constants/Categories';
@@ -36,6 +37,7 @@ import { Colors } from '@/constants/Colors';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { dateFilters } from '@/constants/DateFilters';
 import { useAuth } from '@/context/AuthContext';
+import { useSettings } from '@/context/SettingsContext';
 import { db } from '@/firebaseConfig';
 import { ExchangeRates, getExchangeRates } from '@/services/currencyService';
 
@@ -77,6 +79,7 @@ const TransactionListItem = React.memo(
     displayCurrency: Currency;
     rate: number;
   }) => {
+    const { colors, isDark } = useSettings();
     const itemCurrency = currencies.find((c) => c.code === item.currency) || { symbol: item.currency };
     const isIncome = item.amount > 0;
     const iconName = getCategoryIcon(item.category, item.type);
@@ -92,33 +95,43 @@ const TransactionListItem = React.memo(
     };
 
     return (
-      <View style={styles.transactionCard}>
+      <View style={[styles.transactionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View
           style={[
             styles.categoryIconCircle,
-            { backgroundColor: isIncome ? 'rgba(52, 199, 89, 0.12)' : 'rgba(255, 255, 255, 0.05)' },
+            {
+              backgroundColor: isIncome
+                ? colors.incomeSoft
+                : isDark
+                ? 'rgba(255, 255, 255, 0.05)'
+                : 'rgba(0, 0, 0, 0.04)',
+            },
           ]}>
           <Ionicons
             name={iconName}
             size={20}
-            color={isIncome ? Colors.income : Colors.tint}
+            color={isIncome ? colors.income : colors.tint}
           />
         </View>
 
         <View style={styles.transactionMainInfo}>
-          <ThemedText style={styles.transactionTitle} numberOfLines={1}>
+          <ThemedText style={[styles.transactionTitle, { color: colors.text }]} numberOfLines={1}>
             {item.description || item.category}
           </ThemedText>
           <View style={styles.transactionMetaRow}>
-            <ThemedText style={styles.transactionCategoryTag}>{item.category}</ThemedText>
-            <ThemedText style={styles.metaDot}>•</ThemedText>
-            <ThemedText style={styles.transactionDate}>{formatDate(item.date)}</ThemedText>
+            <ThemedText style={[styles.transactionCategoryTag, { color: colors.textSecondary }]}>
+              {item.category}
+            </ThemedText>
+            <ThemedText style={[styles.metaDot, { color: colors.textMuted }]}>•</ThemedText>
+            <ThemedText style={[styles.transactionDate, { color: colors.textMuted }]}>
+              {formatDate(item.date)}
+            </ThemedText>
           </View>
 
           {item.category === 'Savings' && item.purchaseRate != null && item.assetQuantity != null && (
-            <View style={styles.assetBadge}>
-              <Ionicons name="sparkles" size={11} color={Colors.tint} />
-              <ThemedText style={styles.assetBadgeText}>
+            <View style={[styles.assetBadge, { backgroundColor: colors.tintSoft }]}>
+              <Ionicons name="sparkles" size={11} color={colors.tint} />
+              <ThemedText style={[styles.assetBadgeText, { color: colors.tint }]}>
                 {`${item.assetQuantity} @ ${item.purchaseRate.toFixed(2)} ${itemCurrency.symbol}`}
               </ThemedText>
             </View>
@@ -126,7 +139,12 @@ const TransactionListItem = React.memo(
         </View>
 
         <View style={styles.transactionRightBlock}>
-          <ThemedText style={isIncome ? styles.incomeAmount : styles.expenseAmount}>
+          <ThemedText
+            style={
+              isIncome
+                ? [styles.incomeAmount, { color: colors.income }]
+                : [styles.expenseAmount, { color: colors.text }]
+            }>
             {isIncome ? '+' : '-'}{itemCurrency.symbol}{Math.abs(item.amount).toFixed(2)}
           </ThemedText>
           <TouchableOpacity
@@ -136,8 +154,15 @@ const TransactionListItem = React.memo(
               Haptics.selectionAsync().catch(() => {});
               onDelete(item);
             }}
-            style={styles.deleteIconButton}>
-            <Ionicons name="trash-outline" size={16} color="#8E8E93" />
+            style={[
+              styles.deleteIconButton,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(255, 255, 255, 0.04)'
+                  : 'rgba(0, 0, 0, 0.04)',
+              },
+            ]}>
+            <Ionicons name="trash-outline" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -149,6 +174,7 @@ TransactionListItem.displayName = 'TransactionListItem';
 export default function HomeScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { isDark, colors, t } = useSettings();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [displayCurrency, setDisplayCurrency] = useState<Currency>(defaultCurrency);
@@ -420,7 +446,10 @@ export default function HomeScreen() {
   }, [runChecks]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setTransactions([]);
+      return;
+    }
     const q = query(collection(db, 'users', user.uid, 'transactions'), orderBy('date', 'desc'));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const transactionsData: Transaction[] = [];
@@ -509,12 +538,12 @@ export default function HomeScreen() {
   };
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={[styles.root, { paddingTop: insets.top, backgroundColor: colors.background }]}>
       {/* Top Header Row */}
       <View style={styles.topHeader}>
         <View style={styles.userInfoBlock}>
-          <ThemedText style={styles.greetingText}>{userGreeting}</ThemedText>
-          <ThemedText style={styles.userNameText}>
+          <ThemedText style={[styles.greetingText, { color: colors.textSecondary }]}>{userGreeting}</ThemedText>
+          <ThemedText style={[styles.userNameText, { color: colors.text }]}>
             {user?.email ? user.email.split('@')[0] : 'My Portfolio'}
           </ThemedText>
         </View>
@@ -526,11 +555,11 @@ export default function HomeScreen() {
               Haptics.selectionAsync().catch(() => {});
               setIsSettingsModalVisible(true);
             }}
-            style={styles.authBadge}>
+            style={[styles.authBadge, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Ionicons
               name="settings-outline"
               size={19}
-              color={Colors.tint}
+              color={colors.tint}
             />
           </AnimatedPressable>
         )}
@@ -555,30 +584,46 @@ export default function HomeScreen() {
         ListHeaderComponent={
           <>
             {/* Hero Net Worth Balance Card */}
-            <View style={styles.heroCard}>
+            <View
+              style={[
+                styles.heroCard,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  shadowColor: colors.shadow.shadowColor,
+                  shadowOpacity: colors.shadow.shadowOpacity,
+                },
+              ]}>
               <View style={styles.heroHeaderRow}>
                 <View style={styles.heroTitleWithDot}>
-                  <View style={styles.neonDot} />
-                  <ThemedText style={styles.heroCardLabel}>TOTAL BALANCE</ThemedText>
+                  <View style={[styles.neonDot, { backgroundColor: colors.tint }]} />
+                  <ThemedText style={[styles.heroCardLabel, { color: colors.textSecondary }]}>
+                    TOTAL BALANCE
+                  </ThemedText>
                 </View>
-                <View style={[styles.trendBadge, { backgroundColor: balance >= 0 ? 'rgba(52, 199, 89, 0.15)' : 'rgba(255, 59, 48, 0.15)' }]}>
+                <View
+                  style={[
+                    styles.trendBadge,
+                    { backgroundColor: balance >= 0 ? colors.incomeSoft : colors.expenseSoft },
+                  ]}>
                   <Ionicons
                     name={balance >= 0 ? 'trending-up' : 'trending-down'}
                     size={13}
-                    color={balance >= 0 ? Colors.income : Colors.expense}
+                    color={balance >= 0 ? colors.income : colors.expense}
                   />
-                  <ThemedText style={[styles.trendText, { color: balance >= 0 ? Colors.income : Colors.expense }]}>
+                  <ThemedText
+                    style={[styles.trendText, { color: balance >= 0 ? colors.income : colors.expense }]}>
                     {balance >= 0 ? 'Net Positive' : 'Deficit'}
                   </ThemedText>
                 </View>
               </View>
 
               <View style={styles.heroAmountRow}>
-                <ThemedText style={styles.heroCurrencySymbol}>
+                <ThemedText style={[styles.heroCurrencySymbol, { color: colors.tint }]}>
                   {balance < 0 ? `-${displayCurrency.symbol}` : displayCurrency.symbol}
                 </ThemedText>
                 <ThemedText
-                  style={styles.heroAmountText}
+                  style={[styles.heroAmountText, { color: colors.text }]}
                   numberOfLines={1}
                   adjustsFontSizeToFit
                   minimumFontScale={0.55}>
@@ -587,7 +632,11 @@ export default function HomeScreen() {
               </View>
 
               {/* Integrated Currency Switcher */}
-              <View style={styles.currencyPillGroup}>
+              <View
+                style={[
+                  styles.currencyPillGroup,
+                  { backgroundColor: colors.cardSecondary, borderColor: colors.borderLight },
+                ]}>
                 {currencies.map((c) => {
                   const isActive = displayCurrency.code === c.code;
                   return (
@@ -597,8 +646,22 @@ export default function HomeScreen() {
                         Haptics.selectionAsync().catch(() => { });
                         setDisplayCurrency(c);
                       }}
-                      style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
-                      <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
+                      style={[
+                        styles.currencyPill,
+                        isActive && [
+                          styles.currencyPillActive,
+                          {
+                            backgroundColor: isDark ? '#26282E' : '#FFFFFF',
+                            borderColor: colors.tint,
+                          },
+                        ],
+                      ]}>
+                      <ThemedText
+                        style={[
+                          styles.currencyPillText,
+                          { color: colors.textSecondary },
+                          isActive && { color: colors.tint, fontWeight: '800' },
+                        ]}>
                         {c.label}
                       </ThemedText>
                     </AnimatedPressable>
@@ -609,25 +672,25 @@ export default function HomeScreen() {
 
             {/* Income & Expense Split Cards */}
             <View style={styles.statsRow}>
-              <View style={styles.statCard}>
-                <View style={styles.statIconBadgeGreen}>
-                  <Ionicons name="arrow-down" size={16} color={Colors.income} />
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={[styles.statIconBadgeGreen, { backgroundColor: colors.incomeSoft }]}>
+                  <Ionicons name="arrow-down" size={16} color={colors.income} />
                 </View>
                 <View style={styles.statTextGroup}>
-                  <ThemedText style={styles.statLabel}>Income</ThemedText>
-                  <ThemedText style={styles.statAmountIncome}>
+                  <ThemedText style={[styles.statLabel, { color: colors.textSecondary }]}>Income</ThemedText>
+                  <ThemedText style={[styles.statAmountIncome, { color: colors.income }]}>
                     +{displayCurrency.symbol}{formatAmount(totalIncome)}
                   </ThemedText>
                 </View>
               </View>
 
-              <View style={styles.statCard}>
-                <View style={styles.statIconBadgeRed}>
-                  <Ionicons name="arrow-up" size={16} color={Colors.expense} />
+              <View style={[styles.statCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={[styles.statIconBadgeRed, { backgroundColor: colors.expenseSoft }]}>
+                  <Ionicons name="arrow-up" size={16} color={colors.expense} />
                 </View>
                 <View style={styles.statTextGroup}>
-                  <ThemedText style={styles.statLabel}>Expenses</ThemedText>
-                  <ThemedText style={styles.statAmountExpense}>
+                  <ThemedText style={[styles.statLabel, { color: colors.textSecondary }]}>Expenses</ThemedText>
+                  <ThemedText style={[styles.statAmountExpense, { color: colors.expense }]}>
                     -{displayCurrency.symbol}{formatAmount(Math.abs(totalExpense))}
                   </ThemedText>
                 </View>
@@ -637,7 +700,14 @@ export default function HomeScreen() {
             {/* Filter Section */}
             <View style={styles.filtersRow}>
               <AnimatedPressable
-                style={[styles.filterChip, selectedDateFilter !== 'all' && styles.filterChipActive]}
+                style={[
+                  styles.filterChip,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                  selectedDateFilter !== 'all' && {
+                    borderColor: colors.tint,
+                    backgroundColor: colors.tintSoft,
+                  },
+                ]}
                 onPress={() => {
                   Haptics.selectionAsync().catch(() => { });
                   setDateModalVisible(true);
@@ -645,18 +715,29 @@ export default function HomeScreen() {
                 <Ionicons
                   name="calendar-outline"
                   size={15}
-                  color={selectedDateFilter !== 'all' ? Colors.tint : '#8E8E93'}
+                  color={selectedDateFilter !== 'all' ? colors.tint : colors.textSecondary}
                 />
                 <ThemedText
-                  style={[styles.filterChipText, selectedDateFilter !== 'all' && styles.filterChipTextActive]}
+                  style={[
+                    styles.filterChipText,
+                    { color: colors.text },
+                    selectedDateFilter !== 'all' && { color: colors.tint },
+                  ]}
                   numberOfLines={1}>
                   {selectedDateFilterLabel}
                 </ThemedText>
-                <Ionicons name="chevron-down" size={13} color="#8E8E93" />
+                <Ionicons name="chevron-down" size={13} color={colors.textSecondary} />
               </AnimatedPressable>
 
               <AnimatedPressable
-                style={[styles.filterChip, selectedCategory != null && styles.filterChipActive]}
+                style={[
+                  styles.filterChip,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                  selectedCategory != null && {
+                    borderColor: colors.tint,
+                    backgroundColor: colors.tintSoft,
+                  },
+                ]}
                 onPress={() => {
                   Haptics.selectionAsync().catch(() => { });
                   setCategoryModalVisible(true);
@@ -664,33 +745,37 @@ export default function HomeScreen() {
                 <Ionicons
                   name="pricetag-outline"
                   size={15}
-                  color={selectedCategory != null ? Colors.tint : '#8E8E93'}
+                  color={selectedCategory != null ? colors.tint : colors.textSecondary}
                 />
                 <ThemedText
-                  style={[styles.filterChipText, selectedCategory != null && styles.filterChipTextActive]}
+                  style={[
+                    styles.filterChipText,
+                    { color: colors.text },
+                    selectedCategory != null && { color: colors.tint },
+                  ]}
                   numberOfLines={1}>
                   {selectedCategory || 'All Categories'}
                 </ThemedText>
-                <Ionicons name="chevron-down" size={13} color="#8E8E93" />
+                <Ionicons name="chevron-down" size={13} color={colors.textSecondary} />
               </AnimatedPressable>
             </View>
 
             {/* Transactions Section Header */}
             <View style={styles.sectionHeaderRow}>
-              <ThemedText style={styles.sectionHeading}>Recent Transactions</ThemedText>
-              <View style={styles.countBadge}>
-                <ThemedText style={styles.countBadgeText}>{filteredTransactions.length}</ThemedText>
+              <ThemedText style={[styles.sectionHeading, { color: colors.text }]}>Recent Transactions</ThemedText>
+              <View style={[styles.countBadge, { backgroundColor: colors.cardSecondary }]}>
+                <ThemedText style={[styles.countBadgeText, { color: colors.tint }]}>{filteredTransactions.length}</ThemedText>
               </View>
             </View>
           </>
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconCircle}>
-              <Ionicons name="receipt-outline" size={32} color="#555" />
+            <View style={[styles.emptyIconCircle, { backgroundColor: colors.cardSecondary }]}>
+              <Ionicons name="receipt-outline" size={32} color={colors.textMuted} />
             </View>
-            <ThemedText style={styles.emptyTitle}>No Transactions Found</ThemedText>
-            <ThemedText style={styles.emptySubtitle}>
+            <ThemedText style={[styles.emptyTitle, { color: colors.text }]}>No Transactions Found</ThemedText>
+            <ThemedText style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
               Tap the &apos;+&apos; button in the bottom bar to add your first income or expense.
             </ThemedText>
           </View>
@@ -698,174 +783,212 @@ export default function HomeScreen() {
       />
 
       {/* Date Filter Modal */}
-      <Modal
-        transparent={true}
+      <SwipeableModal
         visible={isDateModalVisible}
-        animationType="fade"
-        onRequestClose={() => setDateModalVisible(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalSheet}>
-            <View style={styles.sheetHandle} />
-            <ThemedText style={styles.modalSheetTitle}>Select Time Range</ThemedText>
-            {dateFilters.map((filter) => {
-              const isSelected = selectedDateFilter === filter.key;
-              return (
-                <AnimatedPressable
-                  key={filter.key}
-                  style={[styles.modalItemRow, isSelected && styles.modalItemRowActive]}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => { });
-                    setSelectedDateFilter(filter.key);
-                    setDateModalVisible(false);
-                  }}>
-                  <ThemedText style={[styles.modalItemText, isSelected && styles.modalItemTextActive]}>
-                    {filter.label}
-                  </ThemedText>
-                  {isSelected && <Ionicons name="checkmark-circle" size={20} color={Colors.tint} />}
-                </AnimatedPressable>
-              );
-            })}
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setDateModalVisible(false)}
+        enableFullSheetDrag={true}
+        sheetStyle={[
+          styles.modalSheet,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            paddingBottom: Math.max(insets.bottom, 20) + 16,
+          },
+        ]}>
+        <ThemedText style={[styles.modalSheetTitle, { color: colors.text }]}>Select Time Range</ThemedText>
+        {dateFilters.map((filter) => {
+          const isSelected = selectedDateFilter === filter.key;
+          return (
+            <AnimatedPressable
+              key={filter.key}
+              style={[
+                styles.modalItemRow,
+                isSelected && [styles.modalItemRowActive, { backgroundColor: colors.tintSoft }],
+              ]}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => { });
+                setSelectedDateFilter(filter.key);
+                setDateModalVisible(false);
+              }}>
+              <ThemedText
+                style={[
+                  styles.modalItemText,
+                  { color: colors.text },
+                  isSelected && [styles.modalItemTextActive, { color: colors.tint }],
+                ]}>
+                {filter.label}
+              </ThemedText>
+              {isSelected && <Ionicons name="checkmark-circle" size={20} color={colors.tint} />}
+            </AnimatedPressable>
+          );
+        })}
+      </SwipeableModal>
 
       {/* Category Filter Modal */}
-      <Modal
-        transparent={true}
+      <SwipeableModal
         visible={isCategoryModalVisible}
-        animationType="fade"
-        onRequestClose={() => setCategoryModalVisible(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalSheet, { maxHeight: '75%' }]}>
-            <View style={styles.sheetHandle} />
-            <ThemedText style={styles.modalSheetTitle}>Filter by Category</ThemedText>
-            <ScrollView showsVerticalScrollIndicator={false}>
+        onClose={() => setCategoryModalVisible(false)}
+        sheetStyle={[
+          styles.modalSheet,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            maxHeight: '75%',
+            paddingBottom: Math.max(insets.bottom, 20) + 16,
+          },
+        ]}>
+        <ThemedText style={[styles.modalSheetTitle, { color: colors.text }]}>Filter by Category</ThemedText>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <AnimatedPressable
+            style={[
+              styles.modalItemRow,
+              selectedCategory === null && [styles.modalItemRowActive, { backgroundColor: colors.tintSoft }],
+            ]}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => { });
+              setSelectedCategory(null);
+              setCategoryModalVisible(false);
+            }}>
+            <View style={styles.modalCategoryLeft}>
+              <Ionicons
+                name="apps-outline"
+                size={20}
+                color={selectedCategory === null ? colors.tint : colors.textSecondary}
+              />
+              <ThemedText
+                style={[
+                  styles.modalItemText,
+                  { color: colors.text },
+                  selectedCategory === null && [styles.modalItemTextActive, { color: colors.tint }],
+                ]}>
+                All Categories
+              </ThemedText>
+            </View>
+            {selectedCategory === null && <Ionicons name="checkmark-circle" size={20} color={colors.tint} />}
+          </AnimatedPressable>
+
+          {expenseCategories.map((cat) => {
+            const isSelected = selectedCategory === cat.label;
+            return (
               <AnimatedPressable
-                style={[styles.modalItemRow, selectedCategory === null && styles.modalItemRowActive]}
+                key={cat.key}
+                style={[
+                  styles.modalItemRow,
+                  isSelected && [styles.modalItemRowActive, { backgroundColor: colors.tintSoft }],
+                ]}
                 onPress={() => {
                   Haptics.selectionAsync().catch(() => { });
-                  setSelectedCategory(null);
+                  setSelectedCategory(cat.label);
                   setCategoryModalVisible(false);
                 }}>
                 <View style={styles.modalCategoryLeft}>
-                  <Ionicons name="apps-outline" size={20} color={selectedCategory === null ? Colors.tint : '#8E8E93'} />
-                  <ThemedText style={[styles.modalItemText, selectedCategory === null && styles.modalItemTextActive]}>
-                    All Categories
+                  <Ionicons
+                    name={cat.icon}
+                    size={20}
+                    color={isSelected ? colors.tint : colors.textSecondary}
+                  />
+                  <ThemedText
+                    style={[
+                      styles.modalItemText,
+                      { color: colors.text },
+                      isSelected && [styles.modalItemTextActive, { color: colors.tint }],
+                    ]}>
+                    {cat.label}
                   </ThemedText>
                 </View>
-                {selectedCategory === null && <Ionicons name="checkmark-circle" size={20} color={Colors.tint} />}
+                {isSelected && <Ionicons name="checkmark-circle" size={20} color={colors.tint} />}
               </AnimatedPressable>
-
-              {expenseCategories.map((cat) => {
-                const isSelected = selectedCategory === cat.label;
-                return (
-                  <AnimatedPressable
-                    key={cat.key}
-                    style={[styles.modalItemRow, isSelected && styles.modalItemRowActive]}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => { });
-                      setSelectedCategory(cat.label);
-                      setCategoryModalVisible(false);
-                    }}>
-                    <View style={styles.modalCategoryLeft}>
-                      <Ionicons name={cat.icon} size={20} color={isSelected ? Colors.tint : '#8E8E93'} />
-                      <ThemedText style={[styles.modalItemText, isSelected && styles.modalItemTextActive]}>
-                        {cat.label}
-                      </ThemedText>
-                    </View>
-                    {isSelected && <Ionicons name="checkmark-circle" size={20} color={Colors.tint} />}
-                  </AnimatedPressable>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+            );
+          })}
+        </ScrollView>
+      </SwipeableModal>
 
       {/* Custom Mobile Delete Confirmation Bottom Sheet */}
-      <Modal
-        transparent={true}
+      <SwipeableModal
         visible={transactionToDelete !== null}
-        animationType="slide"
-        onRequestClose={() => setTransactionToDelete(null)}>
-        <View style={styles.modalBackdrop}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setTransactionToDelete(null)}
-          />
-          <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
-            <View style={styles.sheetHandle} />
+        onClose={() => setTransactionToDelete(null)}
+        enableFullSheetDrag={true}
+        sheetStyle={[
+          styles.modalSheet,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            paddingBottom: Math.max(insets.bottom, 20) + 16,
+          },
+        ]}>
+        <View style={styles.deleteModalHeader}>
+          <View style={styles.deleteModalIconCircle}>
+            <Ionicons name="trash-outline" size={26} color="#FF453A" />
+          </View>
+          <ThemedText style={[styles.deleteModalTitle, { color: colors.text }]}>İşlemi Sil</ThemedText>
+          <ThemedText style={[styles.deleteModalSubtitle, { color: colors.textSecondary }]}>
+            Bu işlem kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.
+          </ThemedText>
+        </View>
 
-            <View style={styles.deleteModalHeader}>
-              <View style={styles.deleteModalIconCircle}>
-                <Ionicons name="trash-outline" size={26} color="#FF453A" />
+        {transactionToDelete && (
+          <View style={[styles.deletePreviewCard, { backgroundColor: colors.cardSecondary, borderColor: colors.border }]}>
+            <View style={styles.deletePreviewLeft}>
+              <View
+                style={[
+                  styles.deletePreviewIconCircle,
+                  {
+                    backgroundColor:
+                      transactionToDelete.amount > 0
+                        ? colors.incomeSoft
+                        : isDark
+                        ? 'rgba(255, 255, 255, 0.05)'
+                        : 'rgba(0, 0, 0, 0.04)',
+                  },
+                ]}>
+                <Ionicons
+                  name={getCategoryIcon(transactionToDelete.category, transactionToDelete.type)}
+                  size={18}
+                  color={transactionToDelete.amount > 0 ? colors.income : colors.tint}
+                />
               </View>
-              <ThemedText style={styles.deleteModalTitle}>İşlemi Sil</ThemedText>
-              <ThemedText style={styles.deleteModalSubtitle}>
-                Bu işlem kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.
-              </ThemedText>
-            </View>
-
-            {transactionToDelete && (
-              <View style={styles.deletePreviewCard}>
-                <View style={styles.deletePreviewLeft}>
-                  <View
-                    style={[
-                      styles.deletePreviewIconCircle,
-                      {
-                        backgroundColor:
-                          transactionToDelete.amount > 0
-                            ? 'rgba(52, 199, 89, 0.12)'
-                            : 'rgba(255, 255, 255, 0.05)',
-                      },
-                    ]}>
-                    <Ionicons
-                      name={getCategoryIcon(transactionToDelete.category, transactionToDelete.type)}
-                      size={18}
-                      color={transactionToDelete.amount > 0 ? Colors.income : Colors.tint}
-                    />
-                  </View>
-                  <View style={styles.deletePreviewTexts}>
-                    <ThemedText style={styles.deletePreviewTitle} numberOfLines={1}>
-                      {transactionToDelete.description || transactionToDelete.category}
-                    </ThemedText>
-                    <ThemedText style={styles.deletePreviewCategory}>
-                      {transactionToDelete.category}
-                    </ThemedText>
-                  </View>
-                </View>
-                <ThemedText
-                  style={transactionToDelete.amount > 0 ? styles.incomeAmount : styles.expenseAmount}>
-                  {transactionToDelete.amount > 0 ? '+' : '-'}
-                  {currencies.find((c) => c.code === transactionToDelete.currency)?.symbol || transactionToDelete.currency}
-                  {Math.abs(transactionToDelete.amount).toFixed(2)}
+              <View style={styles.deletePreviewTexts}>
+                <ThemedText style={[styles.deletePreviewTitle, { color: colors.text }]} numberOfLines={1}>
+                  {transactionToDelete.description || transactionToDelete.category}
+                </ThemedText>
+                <ThemedText style={[styles.deletePreviewCategory, { color: colors.textSecondary }]}>
+                  {transactionToDelete.category}
                 </ThemedText>
               </View>
-            )}
-
-            <View style={styles.deleteModalActions}>
-              <TouchableOpacity
-                activeOpacity={0.7}
-                style={styles.deleteCancelBtn}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
-                  setTransactionToDelete(null);
-                }}>
-                <ThemedText style={styles.deleteCancelBtnText}>Vazgeç</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={styles.deleteConfirmBtn}
-                onPress={handleConfirmDelete}>
-                <Ionicons name="trash" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <ThemedText style={styles.deleteConfirmBtnText}>Sil</ThemedText>
-              </TouchableOpacity>
             </View>
+            <ThemedText
+              style={
+                transactionToDelete.amount > 0
+                  ? [styles.incomeAmount, { color: colors.income }]
+                  : [styles.expenseAmount, { color: colors.text }]
+              }>
+              {transactionToDelete.amount > 0 ? '+' : '-'}
+              {currencies.find((c) => c.code === transactionToDelete.currency)?.symbol || transactionToDelete.currency}
+              {Math.abs(transactionToDelete.amount).toFixed(2)}
+            </ThemedText>
           </View>
+        )}
+
+        <View style={styles.deleteModalActions}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={[styles.deleteCancelBtn, { backgroundColor: colors.cardSecondary }]}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              setTransactionToDelete(null);
+            }}>
+            <ThemedText style={[styles.deleteCancelBtnText, { color: colors.text }]}>Vazgeç</ThemedText>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.deleteConfirmBtn}
+            onPress={handleConfirmDelete}>
+            <Ionicons name="trash" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <ThemedText style={styles.deleteConfirmBtnText}>Sil</ThemedText>
+          </TouchableOpacity>
         </View>
-      </Modal>
+      </SwipeableModal>
 
       {/* Settings Bottom Sheet Modal */}
       <SettingsModal

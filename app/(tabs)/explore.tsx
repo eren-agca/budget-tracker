@@ -21,6 +21,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
 import { db } from '@/firebaseConfig';
 import { useAuth } from '@/context/AuthContext';
+import { useSettings } from '@/context/SettingsContext';
 import { analyzeTransactionsWithGemini } from '@/services/geminiService';
 import { expenseCategories } from '@/constants/Categories';
 
@@ -64,6 +65,7 @@ const PALETTE = [
 export default function ExploreScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useSettings();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -151,13 +153,13 @@ export default function ExploreScreen() {
         name: cat,
         population: catAmountDisplay,
         color,
-        legendFontColor: Colors.text,
+        legendFontColor: colors.text,
         legendFontSize: 12,
       });
     });
 
     return { breakdownList: list, chartData: chart, totalSum: totalInDisplay };
-  }, [transactions, rates, displayCurrency, activeTab]);
+  }, [transactions, rates, displayCurrency, activeTab, colors.text]);
 
   useEffect(() => {
     if (!loading) {
@@ -183,7 +185,7 @@ export default function ExploreScreen() {
   const screenWidth = Dimensions.get('window').width;
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={[styles.root, { paddingTop: insets.top, backgroundColor: colors.background }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}>
@@ -191,12 +193,12 @@ export default function ExploreScreen() {
         {/* Top Header */}
         <View style={styles.headerRow}>
           <View>
-            <ThemedText style={styles.screenSubtitle}>FINANCIAL ANALYTICS</ThemedText>
-            <ThemedText style={styles.screenTitle}>Insights</ThemedText>
+            <ThemedText style={[styles.screenSubtitle, { color: colors.textSecondary }]}>FINANCIAL ANALYTICS</ThemedText>
+            <ThemedText style={[styles.screenTitle, { color: colors.text }]}>Insights</ThemedText>
           </View>
 
           {/* Currency Switcher */}
-          <View style={styles.currencyPillsMini}>
+          <View style={[styles.currencyPillsMini, { backgroundColor: colors.cardSecondary, borderColor: colors.borderLight }]}>
             {currencies.map((c) => {
               const isActive = displayCurrency.code === c.code;
               return (
@@ -206,8 +208,22 @@ export default function ExploreScreen() {
                     Haptics.selectionAsync().catch(() => {});
                     setDisplayCurrency(c);
                   }}
-                  style={[styles.currencyPillMini, isActive && styles.currencyPillMiniActive]}>
-                  <ThemedText style={[styles.currencyPillMiniText, isActive && styles.currencyPillMiniTextActive]}>
+                  style={[
+                    styles.currencyPillMini,
+                    isActive && [
+                      styles.currencyPillMiniActive,
+                      {
+                        backgroundColor: isDark ? '#26282E' : '#FFFFFF',
+                        borderColor: colors.tint,
+                      },
+                    ],
+                  ]}>
+                  <ThemedText
+                    style={[
+                      styles.currencyPillMiniText,
+                      { color: colors.textSecondary },
+                      isActive && { color: colors.tint, fontWeight: '800' },
+                    ]}>
                     {c.label}
                   </ThemedText>
                 </AnimatedPressable>
@@ -217,9 +233,18 @@ export default function ExploreScreen() {
         </View>
 
         {/* Expenses / Income Segmented Switcher */}
-        <View style={styles.segmentedControl}>
+        <View style={[styles.segmentedControl, { backgroundColor: colors.cardSecondary, borderColor: colors.borderLight }]}>
           <AnimatedPressable
-            style={[styles.segmentButton, activeTab === 'expense' && styles.segmentButtonActiveExpense]}
+            style={[
+              styles.segmentButton,
+              activeTab === 'expense' && [
+                styles.segmentButtonActiveExpense,
+                {
+                  backgroundColor: isDark ? '#26282E' : '#FFFFFF',
+                  borderColor: isDark ? 'rgba(255, 59, 48, 0.4)' : 'rgba(239, 68, 68, 0.4)',
+                },
+              ],
+            ]}
             onPress={() => {
               Haptics.selectionAsync().catch(() => {});
               setActiveTab('expense');
@@ -227,15 +252,26 @@ export default function ExploreScreen() {
             <Ionicons
               name="arrow-up"
               size={14}
-              color={activeTab === 'expense' ? '#FFF' : '#8E8E93'}
+              color={activeTab === 'expense' ? colors.expense : colors.textSecondary}
             />
-            <ThemedText style={[styles.segmentButtonText, activeTab === 'expense' && styles.segmentButtonTextActive]}>
+            <ThemedText
+              style={[
+                styles.segmentButtonText,
+                { color: colors.textSecondary },
+                activeTab === 'expense' && { color: colors.text, fontWeight: '800' },
+              ]}>
               Expenses
             </ThemedText>
           </AnimatedPressable>
 
           <AnimatedPressable
-            style={[styles.segmentButton, activeTab === 'income' && styles.segmentButtonActiveIncome]}
+            style={[
+              styles.segmentButton,
+              activeTab === 'income' && [
+                styles.segmentButtonActiveIncome,
+                { backgroundColor: colors.tint },
+              ],
+            ]}
             onPress={() => {
               Haptics.selectionAsync().catch(() => {});
               setActiveTab('income');
@@ -243,12 +279,13 @@ export default function ExploreScreen() {
             <Ionicons
               name="arrow-down"
               size={14}
-              color={activeTab === 'income' ? '#000' : '#8E8E93'}
+              color={activeTab === 'income' ? (isDark ? '#000000' : '#FFFFFF') : colors.textSecondary}
             />
             <ThemedText
               style={[
                 styles.segmentButtonText,
-                activeTab === 'income' && { color: '#000', fontWeight: '800' },
+                { color: colors.textSecondary },
+                activeTab === 'income' && { color: isDark ? '#000000' : '#FFFFFF', fontWeight: '800' },
               ]}>
               Income
             </ThemedText>
@@ -256,12 +293,26 @@ export default function ExploreScreen() {
         </View>
 
         {/* Chart Card */}
-        <View style={styles.chartCard}>
+        <View
+          style={[
+            styles.chartCard,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              shadowColor: colors.shadow.shadowColor,
+              shadowOpacity: colors.shadow.shadowOpacity,
+            },
+          ]}>
           <View style={styles.chartCardHeader}>
-            <ThemedText style={styles.chartCardTitle}>
+            <ThemedText style={[styles.chartCardTitle, { color: colors.textSecondary }]}>
               {activeTab === 'expense' ? 'Spending Breakdown' : 'Income Breakdown'}
             </ThemedText>
-            <ThemedText style={activeTab === 'expense' ? styles.totalExpenseText : styles.totalIncomeText}>
+            <ThemedText
+              style={
+                activeTab === 'expense'
+                  ? [styles.totalExpenseText, { color: colors.expense }]
+                  : [styles.totalIncomeText, { color: colors.income }]
+              }>
               {displayCurrency.symbol}
               {totalSum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </ThemedText>
@@ -269,7 +320,7 @@ export default function ExploreScreen() {
 
           {loading ? (
             <View style={styles.chartPlaceholder}>
-              <ActivityIndicator size="large" color={Colors.tint} />
+              <ActivityIndicator size="large" color={colors.tint} />
             </View>
           ) : chartData.length > 0 ? (
             <Animated.View style={[styles.chartContainer, animatedChartStyle]}>
@@ -280,7 +331,7 @@ export default function ExploreScreen() {
                 chartConfig={{
                   backgroundGradientFrom: 'transparent',
                   backgroundGradientTo: 'transparent',
-                  color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                  color: (opacity = 1) => isDark ? `rgba(255, 255, 255, ${opacity})` : `rgba(0, 0, 0, ${opacity})`,
                 }}
                 accessor="population"
                 backgroundColor="transparent"
@@ -291,8 +342,8 @@ export default function ExploreScreen() {
             </Animated.View>
           ) : (
             <View style={styles.chartPlaceholder}>
-              <Ionicons name="pie-chart-outline" size={40} color="#444" />
-              <ThemedText style={styles.noDataText}>
+              <Ionicons name="pie-chart-outline" size={40} color={colors.textMuted} />
+              <ThemedText style={[styles.noDataText, { color: colors.textSecondary }]}>
                 No {activeTab} data available to display chart.
               </ThemedText>
             </View>
@@ -302,24 +353,28 @@ export default function ExploreScreen() {
         {/* Detailed Category Rows with Progress Bars */}
         {breakdownList.length > 0 && (
           <View style={styles.breakdownSection}>
-            <ThemedText style={styles.breakdownHeading}>Top Categories</ThemedText>
+            <ThemedText style={[styles.breakdownHeading, { color: colors.text }]}>Top Categories</ThemedText>
             {breakdownList.map((item) => (
-              <View key={item.category} style={styles.breakdownRow}>
+              <View
+                key={item.category}
+                style={[styles.breakdownRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={[styles.categoryIconWrap, { backgroundColor: `${item.color}20` }]}>
                   <Ionicons name={item.icon} size={18} color={item.color} />
                 </View>
 
                 <View style={styles.breakdownCenter}>
                   <View style={styles.breakdownTitleRow}>
-                    <ThemedText style={styles.breakdownCategoryName}>{item.category}</ThemedText>
-                    <ThemedText style={styles.breakdownAmount}>
+                    <ThemedText style={[styles.breakdownCategoryName, { color: colors.text }]}>
+                      {item.category}
+                    </ThemedText>
+                    <ThemedText style={[styles.breakdownAmount, { color: colors.text }]}>
                       {displayCurrency.symbol}
                       {item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </ThemedText>
                   </View>
 
                   {/* Progress Bar */}
-                  <View style={styles.progressTrack}>
+                  <View style={[styles.progressTrack, { backgroundColor: colors.borderLight }]}>
                     <View
                       style={[
                         styles.progressFill,
@@ -328,7 +383,9 @@ export default function ExploreScreen() {
                     />
                   </View>
 
-                  <ThemedText style={styles.breakdownPercentText}>{item.percentage.toFixed(1)}%</ThemedText>
+                  <ThemedText style={[styles.breakdownPercentText, { color: colors.textSecondary }]}>
+                    {item.percentage.toFixed(1)}%
+                  </ThemedText>
                 </View>
               </View>
             ))}
@@ -336,35 +393,46 @@ export default function ExploreScreen() {
         )}
 
         {/* AI Financial Analysis Card */}
-        <View style={styles.aiCard}>
+        <View
+          style={[
+            styles.aiCard,
+            {
+              backgroundColor: colors.card,
+              borderColor: isDark ? 'rgba(57, 255, 20, 0.3)' : 'rgba(5, 150, 105, 0.35)',
+              shadowColor: colors.shadow.shadowColor,
+              shadowOpacity: colors.shadow.shadowOpacity,
+            },
+          ]}>
           <View style={styles.aiCardTop}>
             <View style={styles.aiBadge}>
-              <Ionicons name="sparkles" size={16} color={Colors.tint} />
-              <ThemedText style={styles.aiBadgeText}>AI FINANCIAL ASSISTANT</ThemedText>
+              <Ionicons name="sparkles" size={16} color={colors.tint} />
+              <ThemedText style={[styles.aiBadgeText, { color: colors.tint }]}>AI FINANCIAL ASSISTANT</ThemedText>
             </View>
 
             <AnimatedPressable
-              style={styles.aiAnalyzeButton}
+              style={[styles.aiAnalyzeButton, { backgroundColor: colors.tint }]}
               onPress={handleAnalysis}
               disabled={isAnalyzing}>
               {isAnalyzing ? (
-                <ActivityIndicator size="small" color="#000" />
+                <ActivityIndicator size="small" color={isDark ? '#000000' : '#FFFFFF'} />
               ) : (
                 <>
-                  <Ionicons name="flash" size={14} color="#000" />
-                  <ThemedText style={styles.aiAnalyzeButtonText}>Analyze</ThemedText>
+                  <Ionicons name="flash" size={14} color={isDark ? '#000000' : '#FFFFFF'} />
+                  <ThemedText style={[styles.aiAnalyzeButtonText, { color: isDark ? '#000000' : '#FFFFFF' }]}>
+                    Analyze
+                  </ThemedText>
                 </>
               )}
             </AnimatedPressable>
           </View>
 
-          <ThemedText style={styles.aiCardDescription}>
+          <ThemedText style={[styles.aiCardDescription, { color: colors.textSecondary }]}>
             Get intelligent insights, anomaly detection, and smart budget advice powered by Google Gemini.
           </ThemedText>
 
           {analysis && (
-            <View style={styles.analysisBox}>
-              <ThemedText style={styles.analysisResultText}>{analysis}</ThemedText>
+            <View style={[styles.analysisBox, { backgroundColor: colors.cardSecondary, borderColor: colors.border }]}>
+              <ThemedText style={[styles.analysisResultText, { color: colors.text }]}>{analysis}</ThemedText>
             </View>
           )}
         </View>

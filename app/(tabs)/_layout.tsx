@@ -13,7 +13,7 @@ import { useSettings } from '@/context/SettingsContext';
 function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }: any) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { t, isDark } = useSettings();
+  const { t, isDark, colors } = useSettings();
 
   const onAddPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -21,6 +21,7 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
   };
 
   const bottomOffset = Platform.OS === 'ios' ? Math.max(insets.bottom, 20) : 16;
+  const inactiveIconColor = isDark ? '#7C7C82' : '#94A3B8';
 
   return (
     <View pointerEvents="box-none" style={[styles.tabBarContainer, { bottom: bottomOffset }]}>
@@ -33,7 +34,7 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
           styles.halfCircleArch,
           {
             backgroundColor: isDark ? '#18181C' : '#FFFFFF',
-            borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
+            borderColor: colors.border,
           },
         ]}
         pointerEvents="none"
@@ -41,10 +42,16 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
 
       {/* The Dome-Shaped Action Button */}
       <AnimatedPressable
-        style={styles.domeAddButton}
+        style={[
+          styles.domeAddButton,
+          {
+            backgroundColor: colors.tint,
+            shadowColor: isDark ? colors.tint : '#64748B',
+          },
+        ]}
         hitSlop={{ top: 10, bottom: 8, left: 10, right: 10 }}
         onPress={onAddPress}>
-        <Ionicons name="add" size={24} color="#000" />
+        <Ionicons name="add" size={24} color={isDark ? '#000000' : '#FFFFFF'} />
       </AnimatedPressable>
 
       {/* Main Tab Bar Body */}
@@ -53,7 +60,9 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
           styles.tabBarMain,
           {
             backgroundColor: isDark ? '#18181C' : '#FFFFFF',
-            borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
+            borderColor: colors.border,
+            shadowColor: isDark ? '#000000' : '#64748B',
+            shadowOpacity: isDark ? 0.45 : 0.12,
           },
         ]}>
         {state.routes.map((route: any, index: number) => {
@@ -107,12 +116,12 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
               <Ionicons
                 size={isChartsTab ? 20 : 22}
                 name={iconName}
-                color={isFocused ? Colors.tint : Colors.tabIconDefault}
+                color={isFocused ? colors.tint : inactiveIconColor}
               />
               <ThemedText
                 style={[
                   styles.tabLabel,
-                  { color: isFocused ? Colors.tint : Colors.tabIconDefault },
+                  { color: isFocused ? colors.tint : inactiveIconColor },
                 ]}>
                 {label}
               </ThemedText>

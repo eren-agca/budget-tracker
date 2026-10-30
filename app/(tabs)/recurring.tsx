@@ -27,7 +27,9 @@ import Toast from 'react-native-toast-message';
 import { db } from '@/firebaseConfig';
 import { ThemedText } from '@/components/ThemedText';
 import { useAuth } from '@/context/AuthContext';
+import { useSettings, ThemeColors } from '@/context/SettingsContext';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
+import { SwipeableModal } from '@/components/SwipeableModal';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { Colors } from '@/constants/Colors';
 
@@ -150,6 +152,8 @@ const QUICK_INSTALLMENTS = ['3', '6', '9', '12'];
 export default function RecurringScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useSettings();
+  const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
   // Active Segment Tab
   const [activeTab, setActiveTab] = useState<'installment' | 'subscription' | 'income'>('installment');
@@ -1825,1184 +1829,1152 @@ export default function RecurringScreen() {
       </ScrollView>
 
       {/* Bank Selection Bottom Sheet Modal */}
-      <Modal
-        transparent={true}
+      <SwipeableModal
         visible={isBankModalVisible}
-        animationType="slide"
-        onRequestClose={() => setBankModalVisible(false)}>
-        <View style={styles.modalBackdrop}>
+        onClose={() => setBankModalVisible(false)}
+        sheetStyle={[styles.modalSheet, { maxHeight: '78%', paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
+        <View style={styles.modalHeaderRow}>
+          <ThemedText style={styles.modalSheetTitle}>Banka / Kart Seçin</ThemedText>
           <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
             onPress={() => setBankModalVisible(false)}
-          />
-          <View style={[styles.modalSheet, { maxHeight: '78%', paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
-            <View style={styles.sheetHandle} />
-
-            <View style={styles.modalHeaderRow}>
-              <ThemedText style={styles.modalSheetTitle}>Banka / Kart Seçin</ThemedText>
-              <TouchableOpacity
-                onPress={() => setBankModalVisible(false)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="close-circle" size={24} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Bank Search Input */}
-            <View style={styles.modalSearchWrap}>
-              <Ionicons name="search-outline" size={17} color="#8E8E93" style={styles.modalSearchIcon} />
-              <TextInput
-                placeholder="Banka ara (örn: Ziraat, Garanti)..."
-                value={bankSearchQuery}
-                onChangeText={setBankSearchQuery}
-                style={styles.modalSearchInput}
-                maxLength={30}
-                placeholderTextColor="#636366"
-                autoCorrect={false}
-              />
-              {bankSearchQuery.length > 0 && (
-                <TouchableOpacity
-                  onPress={() => setBankSearchQuery('')}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <Ionicons name="close-circle-sharp" size={17} color="#8E8E93" />
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              style={{ marginTop: 8 }}>
-              {filteredBanks.map((bankName) => {
-                const isSelected = bankModalTarget === 'installment' ? instBank === bankName : subBank === bankName;
-                return (
-                  <TouchableOpacity
-                    key={bankName}
-                    activeOpacity={0.7}
-                    style={[styles.modalItemRow, isSelected && styles.modalItemRowActive]}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      if (bankModalTarget === 'installment') {
-                        setInstBank(bankName);
-                      } else {
-                        setSubBank(bankName);
-                      }
-                      setBankModalVisible(false);
-                    }}>
-                    <View style={styles.modalItemLeft}>
-                      <View style={[styles.modalBankIcon, isSelected && styles.modalBankIconActive]}>
-                        <Ionicons
-                          name={bankName === 'Diğer' ? 'ellipsis-horizontal' : 'business-outline'}
-                          size={18}
-                          color={isSelected ? Colors.tint : '#8E8E93'}
-                        />
-                      </View>
-                      <ThemedText style={[styles.modalItemText, isSelected && styles.modalItemTextActive]}>
-                        {bankName}
-                      </ThemedText>
-                    </View>
-                    {isSelected && <Ionicons name="checkmark-circle" size={20} color={Colors.tint} />}
-                  </TouchableOpacity>
-                );
-              })}
-              {filteredBanks.length === 0 && (
-                <View style={styles.modalEmptyWrap}>
-                  <ThemedText style={styles.modalEmptyText}>Eşleşen banka bulunamadı</ThemedText>
-                </View>
-              )}
-            </ScrollView>
-          </View>
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name="close-circle" size={24} color="#8E8E93" />
+          </TouchableOpacity>
         </View>
-      </Modal>
 
-      {/* Subscription Pay Confirm Modal */}
-      <Modal
-        transparent={true}
-        visible={!!subToPay}
-        animationType="slide"
-        onRequestClose={() => setSubToPay(null)}>
-        <View style={styles.actionModalOverlay}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setSubToPay(null)}
+        {/* Bank Search Input */}
+        <View style={styles.modalSearchWrap}>
+          <Ionicons name="search-outline" size={17} color="#8E8E93" style={styles.modalSearchIcon} />
+          <TextInput
+            placeholder="Banka ara (örn: Ziraat, Garanti)..."
+            value={bankSearchQuery}
+            onChangeText={setBankSearchQuery}
+            style={styles.modalSearchInput}
+            maxLength={30}
+            placeholderTextColor="#636366"
+            autoCorrect={false}
           />
-          <View style={[styles.actionModalSheet, { paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
-            <View style={styles.sheetHandle} />
+          {bankSearchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setBankSearchQuery('')}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close-circle-sharp" size={17} color="#8E8E93" />
+            </TouchableOpacity>
+          )}
+        </View>
 
-            <View style={styles.actionModalHeader}>
-              <View style={[styles.actionModalIconBadge, { backgroundColor: 'rgba(57, 255, 20, 0.15)' }]}>
-                <Ionicons name="checkmark-circle" size={28} color={Colors.tint} />
-              </View>
-              <ThemedText style={styles.actionModalTitle}>Abonelik Ödemesini Kaydet</ThemedText>
-              <ThemedText style={styles.actionModalDesc}>
-                Bu ödemeyi Harcamalar (Subscriptions) listenize hemen ekleyip bakiyenizden düşmek istiyor musunuz?
-              </ThemedText>
-            </View>
-
-            {subToPay && (
-              <View style={styles.actionModalPreviewCard}>
-                <View style={styles.previewLeft}>
-                  <ThemedText style={styles.previewTitle}>{subToPay.name}</ThemedText>
-                  <ThemedText style={styles.previewSub}>
-                    {subToPay.category} • Her ayın {subToPay.dueDay}. günü
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          style={{ marginTop: 8 }}>
+          {filteredBanks.map((bankName) => {
+            const isSelected = bankModalTarget === 'installment' ? instBank === bankName : subBank === bankName;
+            return (
+              <TouchableOpacity
+                key={bankName}
+                activeOpacity={0.7}
+                style={[styles.modalItemRow, isSelected && styles.modalItemRowActive]}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  if (bankModalTarget === 'installment') {
+                    setInstBank(bankName);
+                  } else {
+                    setSubBank(bankName);
+                  }
+                  setBankModalVisible(false);
+                }}>
+                <View style={styles.modalItemLeft}>
+                  <View style={[styles.modalBankIcon, isSelected && styles.modalBankIconActive]}>
+                    <Ionicons
+                      name={bankName === 'Diğer' ? 'ellipsis-horizontal' : 'business-outline'}
+                      size={18}
+                      color={isSelected ? Colors.tint : '#8E8E93'}
+                    />
+                  </View>
+                  <ThemedText style={[styles.modalItemText, isSelected && styles.modalItemTextActive]}>
+                    {bankName}
                   </ThemedText>
                 </View>
-                <ThemedText style={[styles.previewAmount, { color: '#FF453A' }]}>
-                  -{currencies.find((c) => c.code === subToPay.currency)?.symbol || subToPay.currency}
-                  {subToPay.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </ThemedText>
-              </View>
-            )}
-
-            <View style={styles.actionModalBtnRow}>
-              <TouchableOpacity
-                activeOpacity={0.7}
-                style={styles.actionModalCancelBtn}
-                onPress={() => setSubToPay(null)}>
-                <ThemedText style={styles.actionModalCancelBtnText}>Vazgeç</ThemedText>
+                {isSelected && <Ionicons name="checkmark-circle" size={20} color={Colors.tint} />}
               </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={styles.actionModalConfirmBtn}
-                onPress={handleConfirmPaySub}>
-                <Ionicons name="card" size={17} color="#000" style={{ marginRight: 6 }} />
-                <ThemedText style={styles.actionModalConfirmBtnText}>Öde ve Kaydet</ThemedText>
-              </TouchableOpacity>
+            );
+          })}
+          {filteredBanks.length === 0 && (
+            <View style={styles.modalEmptyWrap}>
+              <ThemedText style={styles.modalEmptyText}>Eşleşen banka bulunamadı</ThemedText>
             </View>
+          )}
+        </ScrollView>
+      </SwipeableModal>
+
+      {/* Subscription Pay Confirm Modal */}
+      <SwipeableModal
+        visible={!!subToPay}
+        onClose={() => setSubToPay(null)}
+        enableFullSheetDrag={true}
+        sheetStyle={[styles.actionModalSheet, { paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
+        <View style={styles.actionModalHeader}>
+          <View style={[styles.actionModalIconBadge, { backgroundColor: 'rgba(57, 255, 20, 0.15)' }]}>
+            <Ionicons name="checkmark-circle" size={28} color={Colors.tint} />
           </View>
+          <ThemedText style={styles.actionModalTitle}>Abonelik Ödemesini Kaydet</ThemedText>
+          <ThemedText style={styles.actionModalDesc}>
+            Bu ödemeyi Harcamalar (Subscriptions) listenize hemen ekleyip bakiyenizden düşmek istiyor musunuz?
+          </ThemedText>
         </View>
-      </Modal>
 
-      {/* Subscription Delete Confirm Modal */}
-      <Modal
-        transparent={true}
-        visible={!!subToDelete}
-        animationType="slide"
-        onRequestClose={() => setSubToDelete(null)}>
-        <View style={styles.actionModalOverlay}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setSubToDelete(null)}
-          />
-          <View style={[styles.actionModalSheet, { paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
-            <View style={styles.sheetHandle} />
-
-            <View style={styles.actionModalHeader}>
-              <View style={[styles.actionModalIconBadge, { backgroundColor: 'rgba(255, 69, 58, 0.15)' }]}>
-                <Ionicons name="trash" size={26} color="#FF453A" />
-              </View>
-              <ThemedText style={styles.actionModalTitle}>Aboneliği Kaldır</ThemedText>
-              <ThemedText style={styles.actionModalDesc}>
-                {`"${subToDelete?.name}" abonelik kaydını silmek istediğinize emin misiniz? Daha önce kaydedilen harcama geçmişiniz korunur.`}
+        {subToPay && (
+          <View style={styles.actionModalPreviewCard}>
+            <View style={styles.previewLeft}>
+              <ThemedText style={styles.previewTitle}>{subToPay.name}</ThemedText>
+              <ThemedText style={styles.previewSub}>
+                {subToPay.category} • Her ayın {subToPay.dueDay}. günü
               </ThemedText>
             </View>
-
-            <View style={styles.actionModalBtnRow}>
-              <TouchableOpacity
-                activeOpacity={0.7}
-                style={styles.actionModalCancelBtn}
-                onPress={() => setSubToDelete(null)}>
-                <ThemedText style={styles.actionModalCancelBtnText}>Vazgeç</ThemedText>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={[styles.actionModalConfirmBtn, { backgroundColor: '#FF453A' }]}
-                onPress={handleConfirmDeleteSub}>
-                <Ionicons name="trash" size={17} color="#FFF" style={{ marginRight: 6 }} />
-                <ThemedText style={[styles.actionModalConfirmBtnText, { color: '#FFF' }]}>Sil</ThemedText>
-              </TouchableOpacity>
-            </View>
+            <ThemedText style={[styles.previewAmount, { color: '#FF453A' }]}>
+              -{currencies.find((c) => c.code === subToPay.currency)?.symbol || subToPay.currency}
+              {subToPay.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </ThemedText>
           </View>
+        )}
+
+        <View style={styles.actionModalBtnRow}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={styles.actionModalCancelBtn}
+            onPress={() => setSubToPay(null)}>
+            <ThemedText style={styles.actionModalCancelBtnText}>Vazgeç</ThemedText>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.actionModalConfirmBtn}
+            onPress={handleConfirmPaySub}>
+            <Ionicons name="card" size={17} color="#000" style={{ marginRight: 6 }} />
+            <ThemedText style={styles.actionModalConfirmBtnText}>Öde ve Kaydet</ThemedText>
+          </TouchableOpacity>
         </View>
-      </Modal>
+      </SwipeableModal>
+
+      {/* Subscription Delete Confirm Modal */}
+      <SwipeableModal
+        visible={!!subToDelete}
+        onClose={() => setSubToDelete(null)}
+        enableFullSheetDrag={true}
+        sheetStyle={[styles.actionModalSheet, { paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
+        <View style={styles.actionModalHeader}>
+          <View style={[styles.actionModalIconBadge, { backgroundColor: 'rgba(255, 69, 58, 0.15)' }]}>
+            <Ionicons name="trash" size={26} color="#FF453A" />
+          </View>
+          <ThemedText style={styles.actionModalTitle}>Aboneliği Kaldır</ThemedText>
+          <ThemedText style={styles.actionModalDesc}>
+            {`"${subToDelete?.name}" abonelik kaydını silmek istediğinize emin misiniz? Daha önce kaydedilen harcama geçmişiniz korunur.`}
+          </ThemedText>
+        </View>
+
+        <View style={styles.actionModalBtnRow}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={styles.actionModalCancelBtn}
+            onPress={() => setSubToDelete(null)}>
+            <ThemedText style={styles.actionModalCancelBtnText}>Vazgeç</ThemedText>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={[styles.actionModalConfirmBtn, { backgroundColor: '#FF453A' }]}
+            onPress={handleConfirmDeleteSub}>
+            <Ionicons name="trash" size={17} color="#FFF" style={{ marginRight: 6 }} />
+            <ThemedText style={[styles.actionModalConfirmBtnText, { color: '#FFF' }]}>Sil</ThemedText>
+          </TouchableOpacity>
+        </View>
+      </SwipeableModal>
     </KeyboardAvoidingView>
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#0E0E10',
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-  },
-  screenHeader: {
-    marginBottom: 14,
-  },
-  screenSubtitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#8E8E93',
-    letterSpacing: 1,
-  },
-  screenTitle: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: -0.5,
-    marginTop: 2,
-  },
-  segmentContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#16171B',
-    borderRadius: 14,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    marginBottom: 16,
-  },
-  segmentButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 9,
-    borderRadius: 11,
-  },
-  segmentButtonActive: {
-    backgroundColor: '#24262E',
-    borderWidth: 1,
-    borderColor: 'rgba(57, 255, 20, 0.3)',
-  },
-  segmentText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#8E8E93',
-  },
-  segmentTextActive: {
-    color: '#FFFFFF',
-  },
-  segmentBadge: {
-    marginLeft: 4,
-    backgroundColor: '#1E1F24',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 8,
-  },
-  segmentBadgeActive: {
-    backgroundColor: 'rgba(57, 255, 20, 0.15)',
-  },
-  segmentBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#8E8E93',
-  },
-  segmentBadgeTextActive: {
-    color: Colors.tint,
-  },
-  kpiContainer: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-  },
-  kpiCard: {
-    flex: 1,
-    backgroundColor: '#16171B',
-    borderRadius: 16,
-    padding: 13,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.07)',
-  },
-  kpiLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#8E8E93',
-    letterSpacing: 0.5,
-  },
-  kpiValue: {
-    fontSize: 17,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-    marginTop: 4,
-  },
-  kpiSub: {
-    fontSize: 10,
-    color: '#636366',
-    marginTop: 2,
-  },
-  formToggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  toggleCollapseBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(57, 255, 20, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(57, 255, 20, 0.25)',
-  },
-  toggleCollapseText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: Colors.tint,
-  },
-  formCard: {
-    backgroundColor: '#191A1F',
-    borderRadius: 22,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    marginBottom: 20,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.35,
-        shadowRadius: 10,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
-  },
-  formCardTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  formCardTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#F2F2F2',
-    letterSpacing: 0.2,
-  },
-  inputLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#8E8E93',
-    letterSpacing: 0.6,
-    marginBottom: 6,
-    marginTop: 4,
-  },
-  inputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#121215',
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 12,
-    marginBottom: 10,
-    height: 46,
-  },
-  inputIcon: {
-    marginRight: 8,
-  },
-  inputPrefix: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.tint,
-    marginRight: 6,
-  },
-  textInput: {
-    flex: 1,
-    color: '#F2F2F2',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 12,
-  },
-  chip: {
-    backgroundColor: '#131417',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  chipActive: {
-    backgroundColor: '#26282E',
-    borderColor: Colors.tint,
-  },
-  chipText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#8E8E93',
-  },
-  chipTextActive: {
-    color: Colors.tint,
-  },
-  currencyGroup: {
-    flexDirection: 'row',
-    backgroundColor: '#121215',
-    borderRadius: 12,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-    marginBottom: 12,
-  },
-  currencyPill: {
-    flex: 1,
-    paddingVertical: 7,
-    borderRadius: 9,
-    alignItems: 'center',
-  },
-  currencyPillActive: {
-    backgroundColor: '#26282E',
-    borderWidth: 1,
-    borderColor: 'rgba(57, 255, 20, 0.4)',
-  },
-  currencyPillText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#8E8E93',
-  },
-  currencyPillTextActive: {
-    color: Colors.tint,
-  },
-  inputsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  inputGroupCol: {
-    flex: 1,
-  },
-  liveCalculationBox: {
-    backgroundColor: '#121215',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(57, 255, 20, 0.25)',
-    marginBottom: 14,
-    gap: 4,
-  },
-  calcRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  calcLabel: {
-    fontSize: 12,
-    color: '#8E8E93',
-    fontWeight: '600',
-  },
-  calcValue: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: Colors.tint,
-  },
-  calcValueSub: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FF9F0A',
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.tint,
-    borderRadius: 14,
-    height: 46,
-    gap: 6,
-    marginTop: 4,
-  },
-  addButtonText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#000',
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-    paddingHorizontal: 2,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.2,
-  },
-  countBadge: {
-    backgroundColor: '#26282E',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  countBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: Colors.tint,
-  },
-  installmentCard: {
-    backgroundColor: '#191A1F',
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  installmentCardCompleted: {
-    opacity: 0.65,
-    borderColor: 'rgba(76, 175, 80, 0.3)',
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  bankPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#121215',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.07)',
-  },
-  bankPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#E0E0E0',
-  },
-  headerRightBadges: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dueDayPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#121215',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 7,
-  },
-  dueDayPillText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  completedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(76, 175, 80, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 7,
-  },
-  completedBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#4CAF50',
-  },
-  activeBadge: {
-    backgroundColor: 'rgba(255, 159, 10, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 7,
-  },
-  activeBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#FF9F0A',
-  },
-  cardMainRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  cardTitleCol: {
-    flex: 1,
-    marginRight: 10,
-  },
-  installmentTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.3,
-  },
-  installmentSub: {
-    fontSize: 11,
-    color: '#8E8E93',
-    marginTop: 3,
-  },
-  cardAmountCol: {
-    alignItems: 'flex-end',
-  },
-  installmentMonthlyAmount: {
-    fontSize: 17,
-    fontWeight: '900',
-    color: '#FF453A',
-    letterSpacing: -0.3,
-  },
-  installmentPerMonth: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  progressContainer: {
-    backgroundColor: '#121215',
-    borderRadius: 10,
-    padding: 9,
-    marginBottom: 10,
-  },
-  progressBarBackground: {
-    height: 6,
-    backgroundColor: '#26282E',
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginBottom: 6,
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  progressTextRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  progressText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#8E8E93',
-  },
-  remainingDebtText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FF9F0A',
-  },
-  cardActionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: 8,
-  },
-  payNowButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.tint,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 9,
-  },
-  payNowButtonText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#000',
-  },
-  recurringCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#191A1F',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  dayCalendarBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: 'rgba(52, 199, 89, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(52, 199, 89, 0.25)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  dayBadgeLabel: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: Colors.income,
-    letterSpacing: 0.5,
-  },
-  dayBadgeNumber: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#FFFFFF',
-  },
-  recurringCenter: {
-    flex: 1,
-    marginRight: 8,
-  },
-  recurringTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#F2F2F2',
-  },
-  recurringSub: {
-    fontSize: 11,
-    color: '#8E8E93',
-    marginTop: 3,
-  },
-  recurringRight: {
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  recurringAmount: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: Colors.income,
-  },
-  deleteButton: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: '#121215',
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 44,
-    paddingHorizontal: 24,
-  },
-  emptyIconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#16171B',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#D1D1D6',
-    marginBottom: 6,
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    color: '#6E6E73',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  bankSelectorButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#131417',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    marginBottom: 10,
-  },
-  bankSelectorButtonActive: {
-    borderColor: 'rgba(57, 255, 20, 0.4)',
-    backgroundColor: 'rgba(57, 255, 20, 0.04)',
-  },
-  bankSelectorLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  bankIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bankIconCircleActive: {
-    backgroundColor: 'rgba(57, 255, 20, 0.12)',
-  },
-  bankSelectorText: {
-    fontSize: 14,
-    color: '#8E8E93',
-    fontWeight: '500',
-  },
-  bankSelectorTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.72)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    backgroundColor: '#1A1B20',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 12,
-    paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.09)',
-  },
-  sheetHandle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#3C3C40',
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  modalSheetTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#F2F2F2',
-  },
-  modalSearchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#131417',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 8,
-  },
-  modalSearchIcon: {
-    marginRight: 8,
-  },
-  modalSearchInput: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 14,
-    padding: 0,
-  },
-  modalItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    marginBottom: 4,
-  },
-  modalItemRowActive: {
-    backgroundColor: 'rgba(57, 255, 20, 0.08)',
-  },
-  modalItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  modalBankIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalBankIconActive: {
-    backgroundColor: 'rgba(57, 255, 20, 0.12)',
-  },
-  modalItemText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#D1D1D6',
-  },
-  modalItemTextActive: {
-    color: Colors.tint,
-    fontWeight: '700',
-  },
-  modalEmptyWrap: {
-    alignItems: 'center',
-    paddingVertical: 32,
-  },
-  modalEmptyText: {
-    fontSize: 14,
-    color: '#6E6E73',
-  },
+const createStyles = (colors: ThemeColors, isDark: boolean) =>
+  StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    listContent: {
+      paddingHorizontal: 16,
+      paddingTop: 8,
+    },
+    screenHeader: {
+      marginBottom: 14,
+    },
+    screenSubtitle: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.textSecondary,
+      letterSpacing: 1,
+    },
+    screenTitle: {
+      fontSize: 26,
+      fontWeight: '900',
+      color: colors.text,
+      letterSpacing: -0.5,
+      marginTop: 2,
+    },
+    segmentContainer: {
+      flexDirection: 'row',
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 14,
+      padding: 4,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      marginBottom: 16,
+    },
+    segmentButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 9,
+      borderRadius: 11,
+    },
+    segmentButtonActive: {
+      backgroundColor: isDark ? '#24262E' : '#FFFFFF',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(57, 255, 20, 0.3)' : 'rgba(5, 150, 105, 0.3)',
+    },
+    segmentText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.textSecondary,
+    },
+    segmentTextActive: {
+      color: colors.text,
+    },
+    segmentBadge: {
+      marginLeft: 4,
+      backgroundColor: isDark ? '#1E1F24' : '#E2E8F0',
+      paddingHorizontal: 5,
+      paddingVertical: 1,
+      borderRadius: 8,
+    },
+    segmentBadgeActive: {
+      backgroundColor: colors.tintSoft,
+    },
+    segmentBadgeText: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: colors.textSecondary,
+    },
+    segmentBadgeTextActive: {
+      color: colors.tint,
+    },
+    kpiContainer: {
+      flexDirection: 'row',
+      gap: 10,
+      marginBottom: 16,
+    },
+    kpiCard: {
+      flex: 1,
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 13,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    kpiLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: colors.textSecondary,
+      letterSpacing: 0.5,
+    },
+    kpiValue: {
+      fontSize: 17,
+      fontWeight: '900',
+      color: colors.text,
+      letterSpacing: -0.3,
+      marginTop: 4,
+    },
+    kpiSub: {
+      fontSize: 10,
+      color: colors.textMuted,
+      marginTop: 2,
+    },
+    formToggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+    },
+    toggleCollapseBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: colors.tintSoft,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.tintSoft,
+    },
+    toggleCollapseText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.tint,
+    },
+    formCard: {
+      backgroundColor: colors.card,
+      borderRadius: 22,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: 20,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.shadow.shadowColor,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: colors.shadow.shadowOpacity,
+          shadowRadius: 10,
+        },
+        android: {
+          elevation: 3,
+        },
+      }),
+    },
+    formCardTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    formCardTitle: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: colors.text,
+      letterSpacing: 0.2,
+    },
+    inputLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: colors.textSecondary,
+      letterSpacing: 0.6,
+      marginBottom: 6,
+      marginTop: 4,
+    },
+    inputWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 13,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 12,
+      marginBottom: 10,
+      height: 46,
+    },
+    inputIcon: {
+      marginRight: 8,
+    },
+    inputPrefix: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.tint,
+      marginRight: 6,
+    },
+    textInput: {
+      flex: 1,
+      color: colors.text,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    chipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginBottom: 12,
+    },
+    chip: {
+      backgroundColor: colors.cardSecondary,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 9,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    chipActive: {
+      backgroundColor: isDark ? '#26282E' : '#FFFFFF',
+      borderColor: colors.tint,
+    },
+    chipText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.textSecondary,
+    },
+    chipTextActive: {
+      color: colors.tint,
+    },
+    currencyGroup: {
+      flexDirection: 'row',
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 12,
+      padding: 3,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      marginBottom: 12,
+    },
+    currencyPill: {
+      flex: 1,
+      paddingVertical: 7,
+      borderRadius: 9,
+      alignItems: 'center',
+    },
+    currencyPillActive: {
+      backgroundColor: isDark ? '#26282E' : '#FFFFFF',
+      borderWidth: 1,
+      borderColor: colors.tint,
+    },
+    currencyPillText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.textSecondary,
+    },
+    currencyPillTextActive: {
+      color: colors.tint,
+    },
+    inputsRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    inputGroupCol: {
+      flex: 1,
+    },
+    liveCalculationBox: {
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 12,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(57, 255, 20, 0.25)' : 'rgba(5, 150, 105, 0.25)',
+      marginBottom: 14,
+      gap: 4,
+    },
+    calcRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    calcLabel: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      fontWeight: '600',
+    },
+    calcValue: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: colors.tint,
+    },
+    calcValueSub: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: '#FF9F0A',
+    },
+    addButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.tint,
+      borderRadius: 14,
+      height: 46,
+      gap: 6,
+      marginTop: 4,
+    },
+    addButtonText: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: isDark ? '#000000' : '#FFFFFF',
+    },
+    sectionHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 12,
+      paddingHorizontal: 2,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: colors.text,
+      letterSpacing: -0.2,
+    },
+    countBadge: {
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 10,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+    },
+    countBadgeText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.tint,
+    },
+    installmentCard: {
+      backgroundColor: colors.card,
+      borderRadius: 18,
+      padding: 14,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    installmentCardCompleted: {
+      opacity: 0.65,
+      borderColor: 'rgba(76, 175, 80, 0.3)',
+    },
+    cardHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    bankPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.cardSecondary,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+    },
+    bankPillText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.text,
+    },
+    headerRightBadges: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    dueDayPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.cardSecondary,
+      paddingHorizontal: 7,
+      paddingVertical: 3,
+      borderRadius: 7,
+    },
+    dueDayPillText: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    completedBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(76, 175, 80, 0.15)',
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 7,
+    },
+    completedBadgeText: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: '#4CAF50',
+    },
+    activeBadge: {
+      backgroundColor: 'rgba(255, 159, 10, 0.15)',
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 7,
+    },
+    activeBadgeText: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: '#FF9F0A',
+    },
+    cardMainRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    cardTitleCol: {
+      flex: 1,
+      marginRight: 10,
+    },
+    installmentTitle: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: colors.text,
+      letterSpacing: -0.3,
+    },
+    installmentSub: {
+      fontSize: 11,
+      color: colors.textSecondary,
+      marginTop: 3,
+    },
+    cardAmountCol: {
+      alignItems: 'flex-end',
+    },
+    installmentMonthlyAmount: {
+      fontSize: 17,
+      fontWeight: '900',
+      color: '#FF453A',
+      letterSpacing: -0.3,
+    },
+    installmentPerMonth: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    progressContainer: {
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 10,
+      padding: 9,
+      marginBottom: 10,
+    },
+    progressBarBackground: {
+      height: 6,
+      backgroundColor: colors.borderLight,
+      borderRadius: 3,
+      overflow: 'hidden',
+      marginBottom: 6,
+    },
+    progressBarFill: {
+      height: '100%',
+      borderRadius: 3,
+    },
+    progressTextRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    progressText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: colors.textSecondary,
+    },
+    remainingDebtText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: '#FF9F0A',
+    },
+    cardActionsRow: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      alignItems: 'center',
+      gap: 8,
+    },
+    payNowButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.tint,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 9,
+    },
+    payNowButtonText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: isDark ? '#000000' : '#FFFFFF',
+    },
+    recurringCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 14,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    dayCalendarBadge: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      backgroundColor: colors.incomeSoft,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(52, 199, 89, 0.25)' : 'rgba(16, 185, 129, 0.25)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    dayBadgeLabel: {
+      fontSize: 9,
+      fontWeight: '800',
+      color: colors.income,
+      letterSpacing: 0.5,
+    },
+    dayBadgeNumber: {
+      fontSize: 16,
+      fontWeight: '900',
+      color: colors.text,
+    },
+    recurringCenter: {
+      flex: 1,
+      marginRight: 8,
+    },
+    recurringTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.text,
+    },
+    recurringSub: {
+      fontSize: 11,
+      color: colors.textSecondary,
+      marginTop: 3,
+    },
+    recurringRight: {
+      alignItems: 'flex-end',
+      gap: 4,
+    },
+    recurringAmount: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: colors.income,
+    },
+    deleteButton: {
+      padding: 6,
+      borderRadius: 8,
+      backgroundColor: colors.cardSecondary,
+    },
+    emptyContainer: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 44,
+      paddingHorizontal: 24,
+    },
+    emptyIconCircle: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: colors.cardSecondary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    emptyTitle: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: colors.text,
+      marginBottom: 6,
+    },
+    emptySubtitle: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 18,
+    },
+    bankSelectorButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      marginBottom: 10,
+    },
+    bankSelectorButtonActive: {
+      borderColor: colors.tint,
+      backgroundColor: colors.tintSoft,
+    },
+    bankSelectorLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      flex: 1,
+    },
+    bankIconCircle: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    bankIconCircleActive: {
+      backgroundColor: colors.tintSoft,
+    },
+    bankSelectorText: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      fontWeight: '500',
+    },
+    bankSelectorTextActive: {
+      color: colors.text,
+      fontWeight: '700',
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.72)',
+      justifyContent: 'flex-end',
+    },
+    modalSheet: {
+      backgroundColor: colors.card,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingTop: 12,
+      paddingHorizontal: 20,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    sheetHandle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: isDark ? '#3C3C40' : '#CBD5E1',
+      alignSelf: 'center',
+      marginBottom: 16,
+    },
+    modalHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    modalSheetTitle: {
+      fontSize: 17,
+      fontWeight: '800',
+      color: colors.text,
+    },
+    modalSearchWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      marginBottom: 8,
+    },
+    modalSearchIcon: {
+      marginRight: 8,
+    },
+    modalSearchInput: {
+      flex: 1,
+      color: colors.text,
+      fontSize: 14,
+      padding: 0,
+    },
+    modalItemRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      marginBottom: 4,
+    },
+    modalItemRowActive: {
+      backgroundColor: colors.tintSoft,
+    },
+    modalItemLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    modalBankIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modalBankIconActive: {
+      backgroundColor: colors.tintSoft,
+    },
+    modalItemText: {
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    modalItemTextActive: {
+      color: colors.tint,
+      fontWeight: '700',
+    },
+    modalEmptyWrap: {
+      alignItems: 'center',
+      paddingVertical: 32,
+    },
+    modalEmptyText: {
+      fontSize: 14,
+      color: colors.textMuted,
+    },
 
-  // Subscriptions & Action Modals Styles
-  presetScrollContent: {
-    gap: 8,
-    paddingVertical: 2,
-  },
-  presetChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#141519',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    gap: 7,
-  },
-  presetDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  presetChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  cycleToggleRow: {
-    flexDirection: 'row',
-    backgroundColor: '#121215',
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    padding: 3,
-    height: 46,
-    alignItems: 'center',
-  },
-  cyclePill: {
-    flex: 1,
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-  },
-  cyclePillActive: {
-    backgroundColor: '#24262E',
-  },
-  cyclePillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  cyclePillTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  subCard: {
-    backgroundColor: '#191A20',
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  subCardPaused: {
-    opacity: 0.55,
-  },
-  subCardTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 14,
-  },
-  subBrandIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-    borderWidth: 1,
-  },
-  subCenter: {
-    flex: 1,
-    marginRight: 8,
-  },
-  subTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 3,
-  },
-  subTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  pausedBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  pausedBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#8E8E93',
-  },
-  subMeta: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginBottom: 6,
-  },
-  subRight: {
-    alignItems: 'flex-end',
-  },
-  subAmount: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#FF453A',
-  },
-  subBillingPeriod: {
-    fontSize: 11,
-    color: '#8E8E93',
-    marginTop: 2,
-  },
-  subActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.05)',
-    paddingTop: 12,
-  },
-  subPayBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.tint,
-    paddingVertical: 9,
-    borderRadius: 10,
-  },
-  subPayBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#000000',
-  },
-  subPauseBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#141519',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  subResumeBtn: {
-    borderColor: 'rgba(57, 255, 20, 0.3)',
-  },
-  subPauseBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  subDeleteBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#141519',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  actionModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'flex-end',
-  },
-  actionModalSheet: {
-    backgroundColor: '#191A20',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 12,
-    paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  actionModalHeader: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  actionModalIconBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  actionModalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  actionModalDesc: {
-    fontSize: 13,
-    color: '#8E8E93',
-    textAlign: 'center',
-    lineHeight: 18,
-    paddingHorizontal: 10,
-  },
-  actionModalPreviewCard: {
-    backgroundColor: '#121215',
-    borderRadius: 14,
-    padding: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  previewLeft: {
-    flex: 1,
-  },
-  previewTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 2,
-  },
-  previewSub: {
-    fontSize: 12,
-    color: '#8E8E93',
-  },
-  previewAmount: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  actionModalBtnRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionModalCancelBtn: {
-    flex: 1,
-    backgroundColor: '#24262E',
-    paddingVertical: 14,
-    borderRadius: 13,
-    alignItems: 'center',
-  },
-  actionModalCancelBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  actionModalConfirmBtn: {
-    flex: 1,
-    backgroundColor: Colors.tint,
-    paddingVertical: 14,
-    borderRadius: 13,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  actionModalConfirmBtnText: {
-    color: '#000000',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-});
+    // Subscriptions & Action Modals Styles
+    presetScrollContent: {
+      gap: 8,
+      paddingVertical: 2,
+    },
+    presetChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.cardSecondary,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      gap: 7,
+    },
+    presetDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
+    presetChipText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    cycleToggleRow: {
+      flexDirection: 'row',
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 13,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      padding: 3,
+      height: 46,
+      alignItems: 'center',
+    },
+    cyclePill: {
+      flex: 1,
+      height: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 10,
+    },
+    cyclePillActive: {
+      backgroundColor: isDark ? '#24262E' : '#FFFFFF',
+    },
+    cyclePillText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    cyclePillTextActive: {
+      color: colors.text,
+      fontWeight: '700',
+    },
+    subCard: {
+      backgroundColor: colors.card,
+      borderRadius: 18,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    subCardPaused: {
+      opacity: 0.55,
+    },
+    subCardTop: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      marginBottom: 14,
+    },
+    subBrandIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+      borderWidth: 1,
+    },
+    subCenter: {
+      flex: 1,
+      marginRight: 8,
+    },
+    subTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 3,
+    },
+    subTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.text,
+    },
+    pausedBadge: {
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)',
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 6,
+    },
+    pausedBadgeText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: colors.textSecondary,
+    },
+    subMeta: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginBottom: 6,
+    },
+    subRight: {
+      alignItems: 'flex-end',
+    },
+    subAmount: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: '#FF453A',
+    },
+    subBillingPeriod: {
+      fontSize: 11,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    subActionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderTopWidth: 1,
+      borderTopColor: colors.borderLight,
+      paddingTop: 12,
+    },
+    subPayBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.tint,
+      paddingVertical: 9,
+      borderRadius: 10,
+    },
+    subPayBtnText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: isDark ? '#000000' : '#FFFFFF',
+    },
+    subPauseBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.cardSecondary,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    subResumeBtn: {
+      borderColor: isDark ? 'rgba(57, 255, 20, 0.3)' : 'rgba(5, 150, 105, 0.3)',
+    },
+    subPauseBtnText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    subDeleteBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      backgroundColor: colors.cardSecondary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    actionModalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.75)',
+      justifyContent: 'flex-end',
+    },
+    actionModalSheet: {
+      backgroundColor: colors.card,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingTop: 12,
+      paddingHorizontal: 20,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    actionModalHeader: {
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    actionModalIconBadge: {
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 10,
+    },
+    actionModalTitle: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: colors.text,
+      marginBottom: 6,
+      textAlign: 'center',
+    },
+    actionModalDesc: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 18,
+      paddingHorizontal: 10,
+    },
+    actionModalPreviewCard: {
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 14,
+      padding: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    previewLeft: {
+      flex: 1,
+    },
+    previewTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 2,
+    },
+    previewSub: {
+      fontSize: 12,
+      color: colors.textSecondary,
+    },
+    previewAmount: {
+      fontSize: 16,
+      fontWeight: '800',
+    },
+    actionModalBtnRow: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    actionModalCancelBtn: {
+      flex: 1,
+      backgroundColor: colors.cardSecondary,
+      paddingVertical: 14,
+      borderRadius: 13,
+      alignItems: 'center',
+    },
+    actionModalCancelBtnText: {
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    actionModalConfirmBtn: {
+      flex: 1,
+      backgroundColor: colors.tint,
+      paddingVertical: 14,
+      borderRadius: 13,
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'center',
+    },
+    actionModalConfirmBtnText: {
+      color: isDark ? '#000000' : '#FFFFFF',
+      fontSize: 15,
+      fontWeight: '700',
+    },
+  });

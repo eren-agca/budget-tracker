@@ -107,6 +107,14 @@ export interface ThemeColors {
   border: string;
   borderLight: string;
   tint: string;
+  tintSoft: string;
+  income: string;
+  incomeSoft: string;
+  expense: string;
+  expenseSoft: string;
+  warning: string;
+  warningSoft: string;
+  shadow: any;
 }
 
 const darkColors: ThemeColors = {
@@ -120,19 +128,47 @@ const darkColors: ThemeColors = {
   border: 'rgba(255, 255, 255, 0.08)',
   borderLight: 'rgba(255, 255, 255, 0.05)',
   tint: '#39FF14',
+  tintSoft: 'rgba(57, 255, 20, 0.12)',
+  income: '#34C759',
+  incomeSoft: 'rgba(52, 199, 89, 0.14)',
+  expense: '#FF3B30',
+  expenseSoft: 'rgba(255, 59, 48, 0.14)',
+  warning: '#FF9F0A',
+  warningSoft: 'rgba(255, 159, 10, 0.15)',
+  shadow: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
+  },
 };
 
 const lightColors: ThemeColors = {
-  background: '#F2F2F7',
+  background: '#F8F9FC',
   card: '#FFFFFF',
-  cardSecondary: '#F8F9FA',
-  cardElevated: '#E9E9EB',
-  text: '#11181C',
-  textSecondary: '#6C6C70',
-  textMuted: '#8E8E93',
+  cardSecondary: '#F1F3F9',
+  cardElevated: '#E8ECF4',
+  text: '#0F172A',
+  textSecondary: '#475569',
+  textMuted: '#94A3B8',
   border: 'rgba(0, 0, 0, 0.08)',
-  borderLight: 'rgba(0, 0, 0, 0.04)',
-  tint: '#10B981',
+  borderLight: 'rgba(0, 0, 0, 0.05)',
+  tint: '#059669',
+  tintSoft: 'rgba(5, 150, 105, 0.12)',
+  income: '#10B981',
+  incomeSoft: 'rgba(16, 185, 129, 0.12)',
+  expense: '#EF4444',
+  expenseSoft: 'rgba(239, 68, 68, 0.12)',
+  warning: '#D97706',
+  warningSoft: 'rgba(217, 119, 6, 0.12)',
+  shadow: {
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 2,
+  },
 };
 
 interface SettingsContextType {

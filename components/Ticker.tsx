@@ -10,6 +10,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { ThemedText } from './ThemedText';
 import { Colors } from '@/constants/Colors';
+import { useSettings } from '@/context/SettingsContext';
 
 interface TickerProps {
   data: string[];
@@ -26,6 +27,7 @@ export const Ticker: React.FC<TickerProps> = ({
   badgeLabel,
   isError,
 }) => {
+  const { colors, isDark } = useSettings();
   const textWidth = useSharedValue(0);
   const translateX = useSharedValue(0);
 
@@ -58,31 +60,44 @@ export const Ticker: React.FC<TickerProps> = ({
     };
   }, []);
 
+  const containerStyle = [
+    styles.container,
+    { height, backgroundColor: colors.card, borderColor: colors.border },
+  ];
+
   if (!data || data.length === 0) {
     return (
-      <View style={[styles.container, { height }]}>
-        <ThemedText style={styles.textLoading}>Loading market rates...</ThemedText>
+      <View style={containerStyle}>
+        <ThemedText style={[styles.textLoading, { color: colors.textMuted }]}>
+          Loading market rates...
+        </ThemedText>
       </View>
     );
   }
+
+  const badgeBg = isUnavailable ? colors.warningSoft : colors.tintSoft;
+  const badgeBorder = isUnavailable ? 'rgba(217, 119, 6, 0.25)' : colors.tintSoft;
+  const badgeColor = isUnavailable ? colors.warning : colors.tint;
+  const itemTextColor = isUnavailable ? (isDark ? '#FFB340' : '#D97706') : colors.text;
+  const separatorColor = isDark ? 'rgba(255, 255, 255, 0.35)' : 'rgba(0, 0, 0, 0.2)';
 
   const renderGroup = (prefix: string, onLayout?: (e: LayoutChangeEvent) => void) => (
     <View onLayout={onLayout} style={styles.tickerGroup}>
       {data.map((item, idx) => (
         <View key={`${prefix}-${idx}`} style={styles.tickerItem}>
-          <ThemedText style={[styles.text, isUnavailable && styles.textUnavailable]}>{item}</ThemedText>
-          <ThemedText style={[styles.separator, isUnavailable && styles.separatorUnavailable]}>◆</ThemedText>
+          <ThemedText style={[styles.text, { color: itemTextColor }]}>{item}</ThemedText>
+          <ThemedText style={[styles.separator, { color: separatorColor }]}>◆</ThemedText>
         </View>
       ))}
     </View>
   );
 
   return (
-    <View style={[styles.container, { height }]}>
+    <View style={containerStyle}>
       {badgeLabel ? (
-        <View style={[styles.badge, isUnavailable && styles.badgeUnavailable]}>
-          <View style={[styles.liveDot, isUnavailable && styles.liveDotUnavailable]} />
-          <ThemedText style={[styles.badgeText, isUnavailable && styles.badgeTextUnavailable]}>{badgeLabel}</ThemedText>
+        <View style={[styles.badge, { backgroundColor: badgeBg, borderRightColor: badgeBorder }]}>
+          <View style={[styles.liveDot, { backgroundColor: badgeColor }]} />
+          <ThemedText style={[styles.badgeText, { color: badgeColor }]}>{badgeLabel}</ThemedText>
         </View>
       ) : null}
       <View style={styles.marqueeMask}>

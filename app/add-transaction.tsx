@@ -22,6 +22,7 @@ import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { expenseCategories } from '@/constants/Categories';
 import { db } from '@/firebaseConfig';
 import { useAuth } from '@/context/AuthContext';
+import { useSettings, ThemeColors } from '@/context/SettingsContext';
 import { Colors } from '@/constants/Colors';
 
 const INCOME_SHORTCUTS = [
@@ -37,6 +38,8 @@ export default function AddTransactionScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useSettings();
+  const styles = React.useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
@@ -357,274 +360,275 @@ export default function AddTransactionScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#0E0E10',
-  },
-  navBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
-  },
-  closeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#1E1F24',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  navTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.2,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  typeSwitcher: {
-    flexDirection: 'row',
-    backgroundColor: '#18191E',
-    borderRadius: 14,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.07)',
-    marginBottom: 16,
-  },
-  typeButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 11,
-    gap: 6,
-  },
-  typeButtonActiveExpense: {
-    backgroundColor: '#26282E',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 59, 48, 0.4)',
-  },
-  typeButtonActiveIncome: {
-    backgroundColor: Colors.tint,
-  },
-  typeButtonText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#8E8E93',
-  },
-  typeButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  amountCard: {
-    backgroundColor: '#191A1F',
-    borderRadius: 22,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    alignItems: 'center',
-    marginBottom: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
-  },
-  amountLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#8E8E93',
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  amountRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  currencySymbolLarge: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: Colors.tint,
-    marginRight: 6,
-  },
-  amountInput: {
-    fontSize: 42,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: -1,
-    minWidth: 120,
-    textAlign: 'center',
-  },
-  currencyPills: {
-    flexDirection: 'row',
-    backgroundColor: '#121215',
-    borderRadius: 12,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-    width: '100%',
-  },
-  currencyPill: {
-    flex: 1,
-    paddingVertical: 7,
-    borderRadius: 9,
-    alignItems: 'center',
-  },
-  currencyPillActive: {
-    backgroundColor: '#26282E',
-    borderWidth: 1,
-    borderColor: 'rgba(57, 255, 20, 0.4)',
-  },
-  currencyPillText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#8E8E93',
-  },
-  currencyPillTextActive: {
-    color: Colors.tint,
-  },
-  inputCard: {
-    backgroundColor: '#191A1F',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    paddingHorizontal: 14,
-    height: 52,
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  fieldIcon: {
-    marginRight: 10,
-  },
-  fieldInput: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-    color: '#FFFFFF',
-  },
-  sectionWrap: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#A1A1A6',
-    letterSpacing: 0.4,
-    marginBottom: 12,
-    textTransform: 'uppercase',
-  },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  categoryTile: {
-    width: '22.5%',
-    aspectRatio: 1,
-    backgroundColor: '#191A1F',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.07)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 6,
-  },
-  categoryTileActive: {
-    borderColor: Colors.tint,
-    backgroundColor: 'rgba(57, 255, 20, 0.08)',
-  },
-  categoryIconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#141416',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  categoryLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#8E8E93',
-    textAlign: 'center',
-  },
-  categoryLabelActive: {
-    color: Colors.tint,
-    fontWeight: '700',
-  },
-  incomeShortcuts: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  shortcutChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#191A1F',
-    borderRadius: 12,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.07)',
-    gap: 6,
-  },
-  shortcutChipActive: {
-    borderColor: Colors.tint,
-    backgroundColor: 'rgba(57, 255, 20, 0.1)',
-  },
-  shortcutText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  shortcutTextActive: {
-    color: Colors.tint,
-    fontWeight: '700',
-  },
-  saveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.tint,
-    borderRadius: 16,
-    height: 54,
-    gap: 8,
-    marginTop: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.tint,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.45,
-        shadowRadius: 10,
-      },
-      android: {
-        elevation: 6,
-      },
-    }),
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#000',
-    letterSpacing: 0.2,
-  },
-});
+const createStyles = (colors: ThemeColors, isDark: boolean) =>
+  StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    navBar: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.borderLight,
+    },
+    closeButton: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.cardSecondary,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    navTitle: {
+      fontSize: 17,
+      fontWeight: '800',
+      color: colors.text,
+      letterSpacing: -0.2,
+    },
+    scrollContent: {
+      paddingHorizontal: 16,
+      paddingTop: 16,
+    },
+    typeSwitcher: {
+      flexDirection: 'row',
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 14,
+      padding: 4,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      marginBottom: 16,
+    },
+    typeButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 10,
+      borderRadius: 11,
+      gap: 6,
+    },
+    typeButtonActiveExpense: {
+      backgroundColor: isDark ? '#26282E' : '#FFFFFF',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255, 59, 48, 0.4)' : 'rgba(239, 68, 68, 0.4)',
+    },
+    typeButtonActiveIncome: {
+      backgroundColor: colors.tint,
+    },
+    typeButtonText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textSecondary,
+    },
+    typeButtonTextActive: {
+      color: colors.text,
+    },
+    amountCard: {
+      backgroundColor: colors.card,
+      borderRadius: 22,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      marginBottom: 16,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.shadow.shadowColor,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: colors.shadow.shadowOpacity,
+          shadowRadius: 10,
+        },
+        android: {
+          elevation: 3,
+        },
+      }),
+    },
+    amountLabel: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.textSecondary,
+      letterSpacing: 1,
+      marginBottom: 8,
+    },
+    amountRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 16,
+    },
+    currencySymbolLarge: {
+      fontSize: 34,
+      fontWeight: '800',
+      color: colors.tint,
+      marginRight: 6,
+    },
+    amountInput: {
+      fontSize: 42,
+      fontWeight: '900',
+      color: colors.text,
+      letterSpacing: -1,
+      minWidth: 120,
+      textAlign: 'center',
+    },
+    currencyPills: {
+      flexDirection: 'row',
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 12,
+      padding: 3,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      width: '100%',
+    },
+    currencyPill: {
+      flex: 1,
+      paddingVertical: 7,
+      borderRadius: 9,
+      alignItems: 'center',
+    },
+    currencyPillActive: {
+      backgroundColor: isDark ? '#26282E' : '#FFFFFF',
+      borderWidth: 1,
+      borderColor: colors.tint,
+    },
+    currencyPillText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.textSecondary,
+    },
+    currencyPillTextActive: {
+      color: colors.tint,
+    },
+    inputCard: {
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 14,
+      height: 52,
+      justifyContent: 'center',
+      marginBottom: 16,
+    },
+    inputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    fieldIcon: {
+      marginRight: 10,
+    },
+    fieldInput: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: '500',
+      color: colors.text,
+    },
+    sectionWrap: {
+      marginBottom: 20,
+    },
+    sectionTitle: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: colors.textSecondary,
+      letterSpacing: 0.4,
+      marginBottom: 12,
+      textTransform: 'uppercase',
+    },
+    categoryGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
+    },
+    categoryTile: {
+      width: '22.5%',
+      aspectRatio: 1,
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 6,
+    },
+    categoryTileActive: {
+      borderColor: colors.tint,
+      backgroundColor: colors.tintSoft,
+    },
+    categoryIconCircle: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: isDark ? '#141416' : '#F1F5F9',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
+    categoryLabel: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      textAlign: 'center',
+    },
+    categoryLabelActive: {
+      color: colors.tint,
+      fontWeight: '700',
+    },
+    incomeShortcuts: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    shortcutChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      paddingVertical: 9,
+      paddingHorizontal: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      gap: 6,
+    },
+    shortcutChipActive: {
+      borderColor: colors.tint,
+      backgroundColor: colors.tintSoft,
+    },
+    shortcutText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    shortcutTextActive: {
+      color: colors.tint,
+      fontWeight: '700',
+    },
+    saveButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.tint,
+      borderRadius: 16,
+      height: 54,
+      gap: 8,
+      marginTop: 8,
+      ...Platform.select({
+        ios: {
+          shadowColor: isDark ? colors.tint : '#64748B',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: isDark ? 0.45 : 0.15,
+          shadowRadius: 10,
+        },
+        android: {
+          elevation: 6,
+        },
+      }),
+    },
+    saveButtonText: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: isDark ? '#000000' : '#FFFFFF',
+      letterSpacing: 0.2,
+    },
+  });

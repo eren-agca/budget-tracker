@@ -1,20 +1,21 @@
 const neonGreen = '#39FF14';
+const emeraldGreen = '#059669';
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: neonGreen,
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: neonGreen,
+    text: '#0F172A',
+    background: '#F8F9FC',
+    tint: emeraldGreen,
+    icon: '#64748B',
+    tabIconDefault: '#94A3B8',
+    tabIconSelected: emeraldGreen,
   },
   dark: {
     text: '#ECEDEE',
-    background: '#151718',
+    background: '#0E0E10',
     tint: neonGreen,
     icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
+    tabIconDefault: '#7C7C82',
     tabIconSelected: neonGreen,
   },
   background: '#121212',
