@@ -41,9 +41,22 @@ export const incomeCategories: { key: string; label: string; labelTr: string; la
   { key: 'other', label: 'Other', labelTr: 'Diğer', labelEn: 'Other', icon: 'apps-outline' },
 ];
 
+export const incomeCategoryFilter: ExpenseCategory = {
+  key: 'incomes',
+  label: 'Incomes',
+  labelTr: 'Gelirler',
+  labelEn: 'Incomes',
+  icon: 'cash-outline',
+};
+
 export function getCategoryLabel(categoryOrKey?: string | null, lang: AppLanguage = 'tr'): string {
   if (!categoryOrKey) return '';
   const search = categoryOrKey.trim().toLowerCase();
+
+  // Check general income filter
+  if (search === 'income' || search === 'incomes' || search === 'gelir' || search === 'gelirler') {
+    return lang === 'tr' ? 'Gelirler' : 'Incomes';
+  }
 
   // Check expense categories
   const expenseMatch = expenseCategories.find(

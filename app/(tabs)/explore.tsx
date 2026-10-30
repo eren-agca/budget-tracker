@@ -83,7 +83,12 @@ export default function ExploreScreen() {
     const unsubscribe = onSnapshot(query(collection(db, 'users', user.uid, 'transactions')), (snapshot) => {
       const transactionsData: Transaction[] = [];
       snapshot.forEach((doc) => {
-        transactionsData.push({ id: doc.id, ...doc.data() } as Transaction);
+        const data = doc.data();
+        transactionsData.push({
+          id: doc.id,
+          ...data,
+          type: data.type || (data.amount >= 0 ? 'income' : 'expense'),
+        } as Transaction);
       });
       setTransactions(transactionsData);
       setLoading(false);

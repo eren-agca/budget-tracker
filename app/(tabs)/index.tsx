@@ -462,6 +462,7 @@ export default function HomeScreen() {
           ...data,
           id: doc.id,
           date: data.date.toDate(),
+          type: data.type || (data.amount >= 0 ? 'income' : 'expense'),
         } as Transaction);
       });
       setTransactions(transactionsData);
@@ -503,8 +504,23 @@ export default function HomeScreen() {
       return dateFilteredTransactions;
     }
     const targetKey = selectedCategory.toLowerCase();
+    const isIncomeFilter =
+      targetKey === 'incomes' ||
+      targetKey === 'income' ||
+      targetKey === 'gelir' ||
+      targetKey === 'gelirler';
+
+    if (isIncomeFilter) {
+      return dateFilteredTransactions.filter((transaction) => {
+        return transaction.type === 'income' || transaction.amount > 0;
+      });
+    }
+
     return dateFilteredTransactions.filter((transaction) => {
-      if (transaction.type === 'income') return true;
+      // Exclude incomes completely when an expense category is selected
+      const isTxIncome = transaction.type === 'income' || transaction.amount > 0;
+      if (isTxIncome) return false;
+
       const cat = (transaction.category || '').toLowerCase();
       return (
         cat === targetKey ||
@@ -753,8 +769,16 @@ export default function HomeScreen() {
                   styles.filterChip,
                   { backgroundColor: colors.card, borderColor: colors.border },
                   selectedCategory != null && {
-                    borderColor: colors.tint,
-                    backgroundColor: colors.tintSoft,
+                    borderColor:
+                      selectedCategory === 'incomes' || selectedCategory === 'income'
+                        ? colors.income
+                        : colors.tint,
+                    backgroundColor:
+                      selectedCategory === 'incomes' || selectedCategory === 'income'
+                        ? isDark
+                          ? 'rgba(16, 185, 129, 0.15)'
+                          : 'rgba(16, 185, 129, 0.1)'
+                        : colors.tintSoft,
                   },
                 ]}
                 onPress={() => {
@@ -762,15 +786,30 @@ export default function HomeScreen() {
                   setCategoryModalVisible(true);
                 }}>
                 <Ionicons
-                  name="pricetag-outline"
+                  name={
+                    selectedCategory === 'incomes' || selectedCategory === 'income'
+                      ? 'cash-outline'
+                      : 'pricetag-outline'
+                  }
                   size={15}
-                  color={selectedCategory != null ? colors.tint : colors.textSecondary}
+                  color={
+                    selectedCategory != null
+                      ? selectedCategory === 'incomes' || selectedCategory === 'income'
+                        ? colors.income
+                        : colors.tint
+                      : colors.textSecondary
+                  }
                 />
                 <ThemedText
                   style={[
                     styles.filterChipText,
                     { color: colors.text },
-                    selectedCategory != null && { color: colors.tint },
+                    selectedCategory != null && {
+                      color:
+                        selectedCategory === 'incomes' || selectedCategory === 'income'
+                          ? colors.income
+                          : colors.tint,
+                    },
                   ]}
                   numberOfLines={1}>
                   {selectedCategory ? getCategoryLabel(selectedCategory, language) : t('allCategories')}
@@ -884,6 +923,47 @@ export default function HomeScreen() {
               </ThemedText>
             </View>
             {selectedCategory === null && <Ionicons name="checkmark-circle" size={20} color={colors.tint} />}
+          </AnimatedPressable>
+
+          {/* Incomes Filter Option */}
+          <AnimatedPressable
+            style={[
+              styles.modalItemRow,
+              (selectedCategory === 'incomes' || selectedCategory === 'income') && [
+                styles.modalItemRowActive,
+                { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.1)' },
+              ],
+            ]}
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => { });
+              setSelectedCategory('incomes');
+              setCategoryModalVisible(false);
+            }}>
+            <View style={styles.modalCategoryLeft}>
+              <Ionicons
+                name="cash-outline"
+                size={20}
+                color={
+                  selectedCategory === 'incomes' || selectedCategory === 'income'
+                    ? colors.income
+                    : colors.income
+                }
+              />
+              <ThemedText
+                style={[
+                  styles.modalItemText,
+                  { color: colors.text },
+                  (selectedCategory === 'incomes' || selectedCategory === 'income') && [
+                    styles.modalItemTextActive,
+                    { color: colors.income },
+                  ],
+                ]}>
+                {t('incomes')}
+              </ThemedText>
+            </View>
+            {(selectedCategory === 'incomes' || selectedCategory === 'income') && (
+              <Ionicons name="checkmark-circle" size={20} color={colors.income} />
+            )}
           </AnimatedPressable>
 
           {expenseCategories.map((cat) => {
