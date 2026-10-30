@@ -31,7 +31,7 @@ import { useSettings } from '@/context/SettingsContext';
 export default function SignUpScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isDark, colors } = useSettings();
+  const { isDark, colors, t, language } = useSettings();
   const styles = createStyles(colors, isDark);
 
   const [email, setEmail] = useState('');
@@ -44,24 +44,24 @@ export default function SignUpScreen() {
     if (!email || !password || !confirmPassword) {
       Toast.show({
         type: 'error',
-        text1: 'Missing Information',
-        text2: 'Please fill in all fields.',
+        text1: language === 'tr' ? 'Eksik Bilgi' : 'Missing Information',
+        text2: language === 'tr' ? 'Lütfen tüm alanları doldurun.' : 'Please fill in all fields.',
       });
       return;
     }
     if (password !== confirmPassword) {
       Toast.show({
         type: 'error',
-        text1: 'Password Mismatch',
-        text2: 'The passwords you entered do not match.',
+        text1: language === 'tr' ? 'Şifre Uyuşmazlığı' : 'Password Mismatch',
+        text2: language === 'tr' ? 'Girdiğiniz şifreler eşleşmiyor.' : 'The passwords you entered do not match.',
       });
       return;
     }
     if (password.length < 6) {
       Toast.show({
         type: 'error',
-        text1: 'Weak Password',
-        text2: 'Password must be at least 6 characters.',
+        text1: language === 'tr' ? 'Zayıf Şifre' : 'Weak Password',
+        text2: language === 'tr' ? 'Şifre en az 6 karakter olmalıdır.' : 'Password must be at least 6 characters.',
       });
       return;
     }
@@ -86,8 +86,8 @@ export default function SignUpScreen() {
 
         Toast.show({
           type: 'success',
-          text1: 'Account Upgraded',
-          text2: 'Your data is now permanently synced.',
+          text1: language === 'tr' ? 'Hesap Yükseltildi' : 'Account Upgraded',
+          text2: language === 'tr' ? 'Verileriniz artık kalıcı olarak eşitleniyor.' : 'Your data is now permanently synced.',
         });
       } else {
         const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
@@ -100,8 +100,8 @@ export default function SignUpScreen() {
 
         Toast.show({
           type: 'success',
-          text1: 'Welcome',
-          text2: 'Account created successfully.',
+          text1: language === 'tr' ? 'Hoş Geldiniz' : 'Welcome',
+          text2: language === 'tr' ? 'Hesabınız başarıyla oluşturuldu.' : 'Account created successfully.',
         });
       }
 
@@ -109,17 +109,17 @@ export default function SignUpScreen() {
         router.back();
       }
     } catch (error: any) {
-      let errorMessage = 'An unexpected error occurred. Please try again.';
+      let errorMessage = language === 'tr' ? 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.' : 'An unexpected error occurred. Please try again.';
       if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'This email address is already registered.';
+        errorMessage = language === 'tr' ? 'Bu e-posta adresi zaten kayıtlı.' : 'This email address is already registered.';
       } else if (error.code === 'auth/weak-password') {
-        errorMessage = 'The password must be at least 6 characters.';
+        errorMessage = language === 'tr' ? 'Şifre en az 6 karakter olmalıdır.' : 'The password must be at least 6 characters.';
       } else if (error.message) {
         errorMessage = error.message;
       }
       Toast.show({
         type: 'error',
-        text1: 'Sign Up Failed',
+        text1: language === 'tr' ? 'Kayıt Başarısız' : 'Sign Up Failed',
         text2: errorMessage,
       });
     } finally {
@@ -139,7 +139,7 @@ export default function SignUpScreen() {
             style={styles.closeButton}>
             <Ionicons name="close" size={22} color={colors.text} />
           </AnimatedPressable>
-          <ThemedText style={styles.navTitle}>Create Account</ThemedText>
+          <ThemedText style={styles.navTitle}>{t('createAccountTitle')}</ThemedText>
           <View style={{ width: 36 }} />
         </View>
 
@@ -156,9 +156,9 @@ export default function SignUpScreen() {
               <View style={styles.iconCircle}>
                 <Ionicons name="shield-checkmark" size={30} color={colors.tint} />
               </View>
-              <ThemedText style={styles.headerTitle}>Save & Sync Your Data</ThemedText>
+              <ThemedText style={styles.headerTitle}>{t('createAccountTitle')}</ThemedText>
               <ThemedText style={styles.headerSubtitle}>
-                Create an account to securely access your transactions and recurring budgets on any device.
+                {t('createAccountSubtitle')}
               </ThemedText>
             </View>
 
@@ -169,7 +169,7 @@ export default function SignUpScreen() {
                 <Ionicons name="mail-outline" size={19} color={colors.textSecondary} style={styles.fieldIcon} />
                 <TextInput
                   style={styles.textInput}
-                  placeholder="Email Address"
+                  placeholder={t('emailPlaceholder')}
                   value={email}
                   onChangeText={setEmail}
                   keyboardType="email-address"
@@ -184,7 +184,7 @@ export default function SignUpScreen() {
                 <Ionicons name="lock-closed-outline" size={19} color={colors.textSecondary} style={styles.fieldIcon} />
                 <TextInput
                   style={styles.textInput}
-                  placeholder="Password (min. 6 characters)"
+                  placeholder={`${t('passwordPlaceholder')} (min. 6)`}
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry={!showPassword}
@@ -206,7 +206,7 @@ export default function SignUpScreen() {
                 <Ionicons name="checkmark-done-outline" size={19} color={colors.textSecondary} style={styles.fieldIcon} />
                 <TextInput
                   style={styles.textInput}
-                  placeholder="Confirm Password"
+                  placeholder={t('confirmPasswordPlaceholder')}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
                   secureTextEntry={!showPassword}
@@ -222,18 +222,18 @@ export default function SignUpScreen() {
                 {loading ? (
                   <ActivityIndicator color={isDark ? '#000000' : '#FFFFFF'} />
                 ) : (
-                  <ThemedText style={styles.primaryButtonText}>Create Account</ThemedText>
+                  <ThemedText style={styles.primaryButtonText}>{t('signupBtn')}</ThemedText>
                 )}
               </AnimatedPressable>
             </View>
 
             {/* Back to Login Footer */}
             <View style={styles.footerRow}>
-              <ThemedText style={styles.footerPrompt}>Already have an account? </ThemedText>
+              <ThemedText style={styles.footerPrompt}>{t('hasAccountPrompt')} </ThemedText>
               <AnimatedPressable
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 onPress={() => router.back()}>
-                <ThemedText style={styles.footerLink}>Log In</ThemedText>
+                <ThemedText style={styles.footerLink}>{t('loginBtn')}</ThemedText>
               </AnimatedPressable>
             </View>
           </ScrollView>

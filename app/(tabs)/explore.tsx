@@ -23,7 +23,7 @@ import { db } from '@/firebaseConfig';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
 import { analyzeTransactionsWithGemini } from '@/services/geminiService';
-import { expenseCategories } from '@/constants/Categories';
+import { expenseCategories, getCategoryLabel } from '@/constants/Categories';
 
 interface Transaction {
   id: string;
@@ -65,7 +65,7 @@ const PALETTE = [
 export default function ExploreScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const { colors, isDark } = useSettings();
+  const { colors, isDark, t, language } = useSettings();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,12 +137,17 @@ export default function ExploreScreen() {
       const color = PALETTE[index % PALETTE.length];
 
       const matchIcon = expenseCategories.find(
-        (c) => c.label.toLowerCase() === cat.toLowerCase() || c.key.toLowerCase() === cat.toLowerCase()
+        (c) =>
+          c.label.toLowerCase() === cat.toLowerCase() ||
+          c.key.toLowerCase() === cat.toLowerCase() ||
+          c.labelTr.toLowerCase() === cat.toLowerCase() ||
+          c.labelEn.toLowerCase() === cat.toLowerCase()
       );
       const icon = matchIcon?.icon || (activeTab === 'income' ? 'cash-outline' : 'pricetag-outline');
+      const localizedCategory = getCategoryLabel(cat, language);
 
       list.push({
-        category: cat,
+        category: localizedCategory,
         amount: catAmountDisplay,
         percentage,
         color,
@@ -150,7 +155,7 @@ export default function ExploreScreen() {
       });
 
       chart.push({
-        name: cat,
+        name: localizedCategory,
         population: catAmountDisplay,
         color,
         legendFontColor: colors.text,
@@ -159,7 +164,7 @@ export default function ExploreScreen() {
     });
 
     return { breakdownList: list, chartData: chart, totalSum: totalInDisplay };
-  }, [transactions, rates, displayCurrency, activeTab, colors.text]);
+  }, [transactions, rates, displayCurrency, activeTab, colors.text, language]);
 
   useEffect(() => {
     if (!loading) {
@@ -177,7 +182,7 @@ export default function ExploreScreen() {
     setIsAnalyzing(true);
     setAnalysis(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    const result = await analyzeTransactionsWithGemini(transactions);
+    const result = await analyzeTransactionsWithGemini(transactions, language);
     setAnalysis(result);
     setIsAnalyzing(false);
   };
@@ -193,8 +198,8 @@ export default function ExploreScreen() {
         {/* Top Header */}
         <View style={styles.headerRow}>
           <View>
-            <ThemedText style={[styles.screenSubtitle, { color: colors.textSecondary }]}>FINANCIAL ANALYTICS</ThemedText>
-            <ThemedText style={[styles.screenTitle, { color: colors.text }]}>Insights</ThemedText>
+            <ThemedText style={[styles.screenSubtitle, { color: colors.textSecondary }]}>{t('analyticsSubtitle')}</ThemedText>
+            <ThemedText style={[styles.screenTitle, { color: colors.text }]}>{t('analyticsTitle')}</ThemedText>
           </View>
 
           {/* Currency Switcher */}
@@ -260,7 +265,7 @@ export default function ExploreScreen() {
                 { color: colors.textSecondary },
                 activeTab === 'expense' && { color: colors.text, fontWeight: '800' },
               ]}>
-              Expenses
+              {t('expenses')}
             </ThemedText>
           </AnimatedPressable>
 
@@ -287,7 +292,7 @@ export default function ExploreScreen() {
                 { color: colors.textSecondary },
                 activeTab === 'income' && { color: isDark ? '#000000' : '#FFFFFF', fontWeight: '800' },
               ]}>
-              Income
+              {t('income')}
             </ThemedText>
           </AnimatedPressable>
         </View>
@@ -305,7 +310,7 @@ export default function ExploreScreen() {
           ]}>
           <View style={styles.chartCardHeader}>
             <ThemedText style={[styles.chartCardTitle, { color: colors.textSecondary }]}>
-              {activeTab === 'expense' ? 'Spending Breakdown' : 'Income Breakdown'}
+              {activeTab === 'expense' ? t('spendingBreakdown') : t('incomeBreakdown')}
             </ThemedText>
             <ThemedText
               style={
@@ -344,7 +349,7 @@ export default function ExploreScreen() {
             <View style={styles.chartPlaceholder}>
               <Ionicons name="pie-chart-outline" size={40} color={colors.textMuted} />
               <ThemedText style={[styles.noDataText, { color: colors.textSecondary }]}>
-                No {activeTab} data available to display chart.
+                {activeTab === 'expense' ? t('noChartDataExpense') : t('noChartDataIncome')}
               </ThemedText>
             </View>
           )}
@@ -353,7 +358,7 @@ export default function ExploreScreen() {
         {/* Detailed Category Rows with Progress Bars */}
         {breakdownList.length > 0 && (
           <View style={styles.breakdownSection}>
-            <ThemedText style={[styles.breakdownHeading, { color: colors.text }]}>Top Categories</ThemedText>
+            <ThemedText style={[styles.breakdownHeading, { color: colors.text }]}>{t('topCategories')}</ThemedText>
             {breakdownList.map((item) => (
               <View
                 key={item.category}
@@ -406,7 +411,7 @@ export default function ExploreScreen() {
           <View style={styles.aiCardTop}>
             <View style={styles.aiBadge}>
               <Ionicons name="sparkles" size={16} color={colors.tint} />
-              <ThemedText style={[styles.aiBadgeText, { color: colors.tint }]}>AI FINANCIAL ASSISTANT</ThemedText>
+              <ThemedText style={[styles.aiBadgeText, { color: colors.tint }]}>{t('aiAdvisorBadge')}</ThemedText>
             </View>
 
             <AnimatedPressable
@@ -419,7 +424,7 @@ export default function ExploreScreen() {
                 <>
                   <Ionicons name="flash" size={14} color={isDark ? '#000000' : '#FFFFFF'} />
                   <ThemedText style={[styles.aiAnalyzeButtonText, { color: isDark ? '#000000' : '#FFFFFF' }]}>
-                    Analyze
+                    {t('aiAnalyzeBtn')}
                   </ThemedText>
                 </>
               )}
@@ -427,7 +432,7 @@ export default function ExploreScreen() {
           </View>
 
           <ThemedText style={[styles.aiCardDescription, { color: colors.textSecondary }]}>
-            Get intelligent insights, anomaly detection, and smart budget advice powered by Google Gemini.
+            {t('aiAdvisorDesc')}
           </ThemedText>
 
           {analysis && (

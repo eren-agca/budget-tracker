@@ -2,7 +2,7 @@ import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import { getAnalytics, isSupported } from "firebase/analytics";
 import { getApps, initializeApp } from 'firebase/app';
 import { getAuth, getReactNativePersistence, initializeAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore } from 'firebase/firestore';
 
 if (!process.env.EXPO_PUBLIC_FIREBASE_API_KEY) {
   console.warn('[Firebase] EXPO_PUBLIC_FIREBASE_API_KEY bulunamadı. Lütfen .env dosyanızı doldurun.');
@@ -38,5 +38,14 @@ isSupported().then(isAnalyticsSupported => {
   // Analytics desteklenmeyen ortamlarda sessizce geç
 });
 
-export const db = getFirestore(app);
+export const db = (() => {
+  try {
+    return initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    });
+  } catch {
+    return getFirestore(app);
+  }
+})();
+
 export { auth };

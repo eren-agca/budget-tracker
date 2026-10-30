@@ -32,10 +32,10 @@ import { SettingsModal } from '@/components/SettingsModal';
 import { SwipeableModal } from '@/components/SwipeableModal';
 import { ThemedText } from '@/components/ThemedText';
 import { Ticker } from '@/components/Ticker';
-import { expenseCategories } from '@/constants/Categories';
+import { expenseCategories, getCategoryLabel, isSavingsCategory } from '@/constants/Categories';
 import { Colors } from '@/constants/Colors';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
-import { dateFilters } from '@/constants/DateFilters';
+import { dateFilters, getDateFilters, getDateFilterLabel } from '@/constants/DateFilters';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
 import { db } from '@/firebaseConfig';
@@ -79,15 +79,18 @@ const TransactionListItem = React.memo(
     displayCurrency: Currency;
     rate: number;
   }) => {
-    const { colors, isDark } = useSettings();
+    const { colors, isDark, language } = useSettings();
     const itemCurrency = currencies.find((c) => c.code === item.currency) || { symbol: item.currency };
     const isIncome = item.amount > 0;
     const iconName = getCategoryIcon(item.category, item.type);
+    const localizedCategory = getCategoryLabel(item.category, language);
 
     const formatDate = (timestamp: Date) => {
       if (!(timestamp instanceof Date)) return '';
       const day = String(timestamp.getDate()).padStart(2, '0');
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const monthNamesTr = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+      const monthNamesEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const monthNames = language === 'tr' ? monthNamesTr : monthNamesEn;
       const month = monthNames[timestamp.getMonth()] || '';
       const hours = String(timestamp.getHours()).padStart(2, '0');
       const minutes = String(timestamp.getMinutes()).padStart(2, '0');
@@ -116,11 +119,11 @@ const TransactionListItem = React.memo(
 
         <View style={styles.transactionMainInfo}>
           <ThemedText style={[styles.transactionTitle, { color: colors.text }]} numberOfLines={1}>
-            {item.description || item.category}
+            {item.description || localizedCategory}
           </ThemedText>
           <View style={styles.transactionMetaRow}>
             <ThemedText style={[styles.transactionCategoryTag, { color: colors.textSecondary }]}>
-              {item.category}
+              {localizedCategory}
             </ThemedText>
             <ThemedText style={[styles.metaDot, { color: colors.textMuted }]}>•</ThemedText>
             <ThemedText style={[styles.transactionDate, { color: colors.textMuted }]}>
@@ -128,7 +131,7 @@ const TransactionListItem = React.memo(
             </ThemedText>
           </View>
 
-          {item.category === 'Savings' && item.purchaseRate != null && item.assetQuantity != null && (
+          {isSavingsCategory(item.category) && item.purchaseRate != null && item.assetQuantity != null && (
             <View style={[styles.assetBadge, { backgroundColor: colors.tintSoft }]}>
               <Ionicons name="sparkles" size={11} color={colors.tint} />
               <ThemedText style={[styles.assetBadgeText, { color: colors.tint }]}>
@@ -174,7 +177,7 @@ TransactionListItem.displayName = 'TransactionListItem';
 export default function HomeScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const { isDark, colors, t } = useSettings();
+  const { isDark, colors, t, language } = useSettings();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [displayCurrency, setDisplayCurrency] = useState<Currency>(defaultCurrency);
@@ -239,7 +242,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const fetchRates = async () => {
-      const FALLBACK_MESSAGE = 'Canlı piyasa verileri geçici olarak devre dışı';
+      const FALLBACK_MESSAGE = t('marketDataFallback');
       try {
         const fetchedRates = await getExchangeRates();
         if (!fetchedRates || Object.keys(fetchedRates).length <= 1) {
@@ -499,19 +502,35 @@ export default function HomeScreen() {
     if (!selectedCategory) {
       return dateFilteredTransactions;
     }
-    return dateFilteredTransactions.filter(
-      (transaction) => transaction.type === 'income' || transaction.category === selectedCategory
-    );
+    const targetKey = selectedCategory.toLowerCase();
+    return dateFilteredTransactions.filter((transaction) => {
+      if (transaction.type === 'income') return true;
+      const cat = (transaction.category || '').toLowerCase();
+      return (
+        cat === targetKey ||
+        expenseCategories.some(
+          (c) =>
+            (c.key.toLowerCase() === targetKey ||
+              c.label.toLowerCase() === targetKey ||
+              c.labelTr.toLowerCase() === targetKey ||
+              c.labelEn.toLowerCase() === targetKey) &&
+            (c.key.toLowerCase() === cat ||
+              c.label.toLowerCase() === cat ||
+              c.labelTr.toLowerCase() === cat ||
+              c.labelEn.toLowerCase() === cat)
+        )
+      );
+    });
   }, [dateFilteredTransactions, selectedCategory]);
 
-  const selectedDateFilterLabel = dateFilters.find((f) => f.key === selectedDateFilter)?.label || 'All';
+  const selectedDateFilterLabel = getDateFilterLabel(selectedDateFilter, language);
 
   const userGreeting = useMemo(() => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  }, []);
+    if (hour < 12) return t('greetingMorning');
+    if (hour < 18) return t('greetingAfternoon');
+    return t('greetingEvening');
+  }, [language, t]);
 
   const renderTransaction: ListRenderItem<Transaction> = useCallback(
     ({ item }) => (
@@ -544,7 +563,7 @@ export default function HomeScreen() {
         <View style={styles.userInfoBlock}>
           <ThemedText style={[styles.greetingText, { color: colors.textSecondary }]}>{userGreeting}</ThemedText>
           <ThemedText style={[styles.userNameText, { color: colors.text }]}>
-            {user?.email ? user.email.split('@')[0] : 'My Portfolio'}
+            {user?.email ? user.email.split('@')[0] : t('myPortfolio')}
           </ThemedText>
         </View>
 
@@ -568,10 +587,10 @@ export default function HomeScreen() {
       {/* Live Market Tickers */}
       <View style={styles.tickerStack}>
         {fiatMetalTickerData.length > 0 && (
-          <Ticker key={`fiat-${fiatMetalTickerData.join()}`} data={fiatMetalTickerData} badgeLabel="MARKETS" />
+          <Ticker key={`fiat-${fiatMetalTickerData.join()}`} data={fiatMetalTickerData} badgeLabel={t('marketTicker')} />
         )}
         {cryptoTickerData.length > 0 && (
-          <Ticker key={`crypto-${cryptoTickerData.join()}`} data={cryptoTickerData} badgeLabel="CRYPTO" />
+          <Ticker key={`crypto-${cryptoTickerData.join()}`} data={cryptoTickerData} badgeLabel={t('cryptoTicker')} />
         )}
       </View>
 
@@ -598,7 +617,7 @@ export default function HomeScreen() {
                 <View style={styles.heroTitleWithDot}>
                   <View style={[styles.neonDot, { backgroundColor: colors.tint }]} />
                   <ThemedText style={[styles.heroCardLabel, { color: colors.textSecondary }]}>
-                    TOTAL BALANCE
+                    {t('totalBalanceLabel')}
                   </ThemedText>
                 </View>
                 <View
@@ -613,7 +632,7 @@ export default function HomeScreen() {
                   />
                   <ThemedText
                     style={[styles.trendText, { color: balance >= 0 ? colors.income : colors.expense }]}>
-                    {balance >= 0 ? 'Net Positive' : 'Deficit'}
+                    {balance >= 0 ? t('netPositive') : t('deficit')}
                   </ThemedText>
                 </View>
               </View>
@@ -677,7 +696,7 @@ export default function HomeScreen() {
                   <Ionicons name="arrow-down" size={16} color={colors.income} />
                 </View>
                 <View style={styles.statTextGroup}>
-                  <ThemedText style={[styles.statLabel, { color: colors.textSecondary }]}>Income</ThemedText>
+                  <ThemedText style={[styles.statLabel, { color: colors.textSecondary }]}>{t('income')}</ThemedText>
                   <ThemedText style={[styles.statAmountIncome, { color: colors.income }]}>
                     +{displayCurrency.symbol}{formatAmount(totalIncome)}
                   </ThemedText>
@@ -689,7 +708,7 @@ export default function HomeScreen() {
                   <Ionicons name="arrow-up" size={16} color={colors.expense} />
                 </View>
                 <View style={styles.statTextGroup}>
-                  <ThemedText style={[styles.statLabel, { color: colors.textSecondary }]}>Expenses</ThemedText>
+                  <ThemedText style={[styles.statLabel, { color: colors.textSecondary }]}>{t('expenses')}</ThemedText>
                   <ThemedText style={[styles.statAmountExpense, { color: colors.expense }]}>
                     -{displayCurrency.symbol}{formatAmount(Math.abs(totalExpense))}
                   </ThemedText>
@@ -754,7 +773,7 @@ export default function HomeScreen() {
                     selectedCategory != null && { color: colors.tint },
                   ]}
                   numberOfLines={1}>
-                  {selectedCategory || 'All Categories'}
+                  {selectedCategory ? getCategoryLabel(selectedCategory, language) : t('allCategories')}
                 </ThemedText>
                 <Ionicons name="chevron-down" size={13} color={colors.textSecondary} />
               </AnimatedPressable>
@@ -762,7 +781,7 @@ export default function HomeScreen() {
 
             {/* Transactions Section Header */}
             <View style={styles.sectionHeaderRow}>
-              <ThemedText style={[styles.sectionHeading, { color: colors.text }]}>Recent Transactions</ThemedText>
+              <ThemedText style={[styles.sectionHeading, { color: colors.text }]}>{t('recentTransactions')}</ThemedText>
               <View style={[styles.countBadge, { backgroundColor: colors.cardSecondary }]}>
                 <ThemedText style={[styles.countBadgeText, { color: colors.tint }]}>{filteredTransactions.length}</ThemedText>
               </View>
@@ -774,9 +793,9 @@ export default function HomeScreen() {
             <View style={[styles.emptyIconCircle, { backgroundColor: colors.cardSecondary }]}>
               <Ionicons name="receipt-outline" size={32} color={colors.textMuted} />
             </View>
-            <ThemedText style={[styles.emptyTitle, { color: colors.text }]}>No Transactions Found</ThemedText>
+            <ThemedText style={[styles.emptyTitle, { color: colors.text }]}>{t('noTransactionsFound')}</ThemedText>
             <ThemedText style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-              Tap the &apos;+&apos; button in the bottom bar to add your first income or expense.
+              {t('noTransactionsSubtitle')}
             </ThemedText>
           </View>
         }
@@ -795,8 +814,8 @@ export default function HomeScreen() {
             paddingBottom: Math.max(insets.bottom, 20) + 16,
           },
         ]}>
-        <ThemedText style={[styles.modalSheetTitle, { color: colors.text }]}>Select Time Range</ThemedText>
-        {dateFilters.map((filter) => {
+        <ThemedText style={[styles.modalSheetTitle, { color: colors.text }]}>{t('selectTimeRange')}</ThemedText>
+        {getDateFilters(language).map((filter) => {
           const isSelected = selectedDateFilter === filter.key;
           return (
             <AnimatedPressable
@@ -837,7 +856,7 @@ export default function HomeScreen() {
             paddingBottom: Math.max(insets.bottom, 20) + 16,
           },
         ]}>
-        <ThemedText style={[styles.modalSheetTitle, { color: colors.text }]}>Filter by Category</ThemedText>
+        <ThemedText style={[styles.modalSheetTitle, { color: colors.text }]}>{t('filterByCategory')}</ThemedText>
         <ScrollView showsVerticalScrollIndicator={false}>
           <AnimatedPressable
             style={[
@@ -861,14 +880,19 @@ export default function HomeScreen() {
                   { color: colors.text },
                   selectedCategory === null && [styles.modalItemTextActive, { color: colors.tint }],
                 ]}>
-                All Categories
+                {t('allCategories')}
               </ThemedText>
             </View>
             {selectedCategory === null && <Ionicons name="checkmark-circle" size={20} color={colors.tint} />}
           </AnimatedPressable>
 
           {expenseCategories.map((cat) => {
-            const isSelected = selectedCategory === cat.label;
+            const isSelected =
+              selectedCategory === cat.key ||
+              selectedCategory === cat.label ||
+              selectedCategory === cat.labelTr ||
+              selectedCategory === cat.labelEn;
+            const catLabel = language === 'tr' ? cat.labelTr : cat.labelEn;
             return (
               <AnimatedPressable
                 key={cat.key}
@@ -878,7 +902,7 @@ export default function HomeScreen() {
                 ]}
                 onPress={() => {
                   Haptics.selectionAsync().catch(() => { });
-                  setSelectedCategory(cat.label);
+                  setSelectedCategory(cat.key);
                   setCategoryModalVisible(false);
                 }}>
                 <View style={styles.modalCategoryLeft}>
@@ -893,7 +917,7 @@ export default function HomeScreen() {
                       { color: colors.text },
                       isSelected && [styles.modalItemTextActive, { color: colors.tint }],
                     ]}>
-                    {cat.label}
+                    {catLabel}
                   </ThemedText>
                 </View>
                 {isSelected && <Ionicons name="checkmark-circle" size={20} color={colors.tint} />}
@@ -920,9 +944,9 @@ export default function HomeScreen() {
           <View style={styles.deleteModalIconCircle}>
             <Ionicons name="trash-outline" size={26} color="#FF453A" />
           </View>
-          <ThemedText style={[styles.deleteModalTitle, { color: colors.text }]}>İşlemi Sil</ThemedText>
+          <ThemedText style={[styles.deleteModalTitle, { color: colors.text }]}>{t('deleteConfirmTitle')}</ThemedText>
           <ThemedText style={[styles.deleteModalSubtitle, { color: colors.textSecondary }]}>
-            Bu işlem kaydını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.
+            {t('deleteConfirmDesc')}
           </ThemedText>
         </View>
 
@@ -949,10 +973,10 @@ export default function HomeScreen() {
               </View>
               <View style={styles.deletePreviewTexts}>
                 <ThemedText style={[styles.deletePreviewTitle, { color: colors.text }]} numberOfLines={1}>
-                  {transactionToDelete.description || transactionToDelete.category}
+                  {transactionToDelete.description || getCategoryLabel(transactionToDelete.category, language)}
                 </ThemedText>
                 <ThemedText style={[styles.deletePreviewCategory, { color: colors.textSecondary }]}>
-                  {transactionToDelete.category}
+                  {getCategoryLabel(transactionToDelete.category, language)}
                 </ThemedText>
               </View>
             </View>
@@ -977,7 +1001,7 @@ export default function HomeScreen() {
               Haptics.selectionAsync().catch(() => {});
               setTransactionToDelete(null);
             }}>
-            <ThemedText style={[styles.deleteCancelBtnText, { color: colors.text }]}>Vazgeç</ThemedText>
+            <ThemedText style={[styles.deleteCancelBtnText, { color: colors.text }]}>{t('cancel')}</ThemedText>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -985,7 +1009,7 @@ export default function HomeScreen() {
             style={styles.deleteConfirmBtn}
             onPress={handleConfirmDelete}>
             <Ionicons name="trash" size={17} color="#FFFFFF" style={{ marginRight: 6 }} />
-            <ThemedText style={styles.deleteConfirmBtnText}>Sil</ThemedText>
+            <ThemedText style={styles.deleteConfirmBtnText}>{t('delete')}</ThemedText>
           </TouchableOpacity>
         </View>
       </SwipeableModal>

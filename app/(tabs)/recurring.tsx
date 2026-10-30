@@ -32,6 +32,7 @@ import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { SwipeableModal } from '@/components/SwipeableModal';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { Colors } from '@/constants/Colors';
+import { getCategoryLabel } from '@/constants/Categories';
 
 export interface RecurringIncome {
   id: string;
@@ -152,11 +153,11 @@ const QUICK_INSTALLMENTS = ['3', '6', '9', '12'];
 export default function RecurringScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const { colors, isDark } = useSettings();
+  const { colors, isDark, t, language } = useSettings();
   const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
   // Active Segment Tab
-  const [activeTab, setActiveTab] = useState<'installment' | 'subscription' | 'income'>('installment');
+  const [activeTab, setActiveTab] = useState<'subscription' | 'income'>('subscription');
 
   // --- Subscriptions State ---
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -181,18 +182,8 @@ export default function RecurringScreen() {
   const [dayOfMonth, setDayOfMonth] = useState('');
   const [incomeCurrency, setIncomeCurrency] = useState<Currency>(defaultCurrency);
 
-  // --- Installments State ---
-  const [installments, setInstallments] = useState<Installment[]>([]);
-  const [isFormExpanded, setIsFormExpanded] = useState(true);
-  const [instTitle, setInstTitle] = useState('');
-  const [instBank, setInstBank] = useState('');
-  const [instTotalAmount, setInstTotalAmount] = useState('');
-  const [instTotalCount, setInstTotalCount] = useState('6');
-  const [instPaidCount, setInstPaidCount] = useState('0');
-  const [instDueDay, setInstDueDay] = useState('');
-  const [instCurrency, setInstCurrency] = useState<Currency>(defaultCurrency);
+  // Bank selector for subscriptions
   const [isBankModalVisible, setBankModalVisible] = useState(false);
-  const [bankModalTarget, setBankModalTarget] = useState<'installment' | 'subscription'>('installment');
   const [bankSearchQuery, setBankSearchQuery] = useState('');
 
   const filteredBanks = useMemo(() => {
@@ -210,26 +201,6 @@ export default function RecurringScreen() {
         incomes.push({ id: doc.id, ...doc.data() } as RecurringIncome);
       });
       setRecurringIncomes(incomes);
-    });
-    return () => unsubscribe();
-  }, [user]);
-
-  // Subscribe to Installments
-  useEffect(() => {
-    if (!user) return;
-    const unsubscribe = onSnapshot(collection(db, 'users', user.uid, 'installments'), (snapshot) => {
-      const list: Installment[] = [];
-      snapshot.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() } as Installment);
-      });
-      // Sort: active first, then by dueDay
-      list.sort((a, b) => {
-        if (a.completed === b.completed) {
-          return (a.dueDay || 0) - (b.dueDay || 0);
-        }
-        return a.completed ? 1 : -1;
-      });
-      setInstallments(list);
     });
     return () => unsubscribe();
   }, [user]);
@@ -283,29 +254,6 @@ export default function RecurringScreen() {
       return `+ ${sym}${amt.toFixed(0)}/ay`;
     }).join(' ');
   }, [activeSubscriptions]);
-
-  // --- Calculations for Installments ---
-  const parsedTotal = parseFloat(instTotalAmount.replace(',', '.')) || 0;
-  const parsedCount = parseInt(instTotalCount, 10) || 1;
-  const parsedPaid = parseInt(instPaidCount, 10) || 0;
-  const liveMonthly = parsedCount > 0 ? parsedTotal / parsedCount : 0;
-  const liveRemainingCount = Math.max(0, parsedCount - parsedPaid);
-  const liveRemainingDebt = liveMonthly * liveRemainingCount;
-
-  const activeInstallments = useMemo(() => {
-    return installments.filter((item) => !item.completed && (item.remainingInstallments == null || item.remainingInstallments > 0));
-  }, [installments]);
-
-  const totalMonthlyCommitment = useMemo(() => {
-    return activeInstallments.reduce((sum, item) => sum + (item.monthlyAmount || 0), 0);
-  }, [activeInstallments]);
-
-  const totalRemainingDebt = useMemo(() => {
-    return activeInstallments.reduce((sum, item) => {
-      const remaining = item.remainingInstallments ?? Math.max(0, item.totalInstallments - (item.paidInstallments || 0));
-      return sum + (item.monthlyAmount || 0) * remaining;
-    }, 0);
-  }, [activeInstallments]);
 
   // --- Handlers: Subscriptions ---
   const handleSelectPreset = (preset: PresetSubscription) => {
@@ -573,174 +521,7 @@ export default function RecurringScreen() {
     ]);
   };
 
-  // --- Handlers: Installments ---
-  const handleAddInstallment = async () => {
-    const numericTotal = parseFloat(instTotalAmount.replace(',', '.'));
-    const numericCount = parseInt(instTotalCount, 10);
-    const numericPaid = parseInt(instPaidCount, 10) || 0;
-    const numericDueDay = parseInt(instDueDay, 10);
-
-    if (!instTitle.trim()) {
-      Toast.show({
-        type: 'error',
-        text1: 'Eksik Bilgi',
-        text2: 'Lütfen harcama veya ürün adını girin (örn. iPhone 15, Dyson).',
-      });
-      return;
-    }
-    if (!instBank.trim()) {
-      Toast.show({
-        type: 'error',
-        text1: 'Eksik Bilgi',
-        text2: 'Lütfen kartın ait olduğu bankayı seçin veya girin.',
-      });
-      return;
-    }
-    if (isNaN(numericTotal) || numericTotal <= 0) {
-      Toast.show({
-        type: 'error',
-        text1: 'Geçersiz Tutar',
-        text2: 'Lütfen geçerli bir toplam taksit tutarı girin.',
-      });
-      return;
-    }
-    if (isNaN(numericCount) || numericCount < 1) {
-      Toast.show({
-        type: 'error',
-        text1: 'Geçersiz Taksit',
-        text2: 'Taksit sayısı en az 1 olmalıdır.',
-      });
-      return;
-    }
-    if (numericPaid >= numericCount) {
-      Toast.show({
-        type: 'error',
-        text1: 'Hatalı Taksit Sayısı',
-        text2: 'Ödenmiş taksit sayısı toplam taksit sayısından küçük olmalıdır.',
-      });
-      return;
-    }
-    if (isNaN(numericDueDay) || numericDueDay < 1 || numericDueDay > 31) {
-      Toast.show({
-        type: 'error',
-        text1: 'Geçersiz Son Ödeme Günü',
-        text2: 'Lütfen 1 ile 31 arasında bir gün girin.',
-      });
-      return;
-    }
-
-    try {
-      if (!user) throw new Error('User not authenticated');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-
-      const monthlyAmount = Number((numericTotal / numericCount).toFixed(2));
-      const remainingInstallments = numericCount - numericPaid;
-
-      await addDoc(collection(db, 'users', user.uid, 'installments'), {
-        title: instTitle.trim(),
-        bank: instBank.trim(),
-        totalAmount: numericTotal,
-        monthlyAmount,
-        totalInstallments: numericCount,
-        paidInstallments: numericPaid,
-        remainingInstallments,
-        currency: instCurrency.code,
-        dueDay: numericDueDay,
-        lastCharged: null,
-        createdAt: Timestamp.now(),
-        completed: remainingInstallments <= 0,
-      });
-
-      setInstTitle('');
-      setInstBank('');
-      setInstTotalAmount('');
-      setInstTotalCount('6');
-      setInstPaidCount('0');
-      setInstDueDay('');
-      setInstCurrency(defaultCurrency);
-      setIsFormExpanded(false);
-
-      Toast.show({
-        type: 'success',
-        text1: 'Taksit Kaydedildi 🎉',
-        text2: `Aylık ${instCurrency.symbol}${monthlyAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} tutarındaki taksitiniz her ayın ${numericDueDay}. günü için tanımlandı.`,
-      });
-    } catch (error) {
-      console.error('Error adding installment:', error);
-      Toast.show({
-        type: 'error',
-        text1: 'Hata',
-        text2: 'Taksit kaydedilirken bir hata oluştu.',
-      });
-    }
-  };
-
-  const handlePayInstallment = (item: Installment) => {
-    const currencySymbol = currencies.find((c) => c.code === item.currency)?.symbol || '₺';
-    const nextPaid = (item.paidInstallments || 0) + 1;
-    const nextRemaining = (item.remainingInstallments ?? item.totalInstallments) - 1;
-
-    Alert.alert(
-      'Taksit Ödemesi Yap',
-      `${item.bank} - ${item.title} için ${currencySymbol}${item.monthlyAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} tutarındaki ${nextPaid}/${item.totalInstallments}. taksit işlemini şimdi kaydedip bakiyeden düşmek istiyor musunuz?`,
-      [
-        { text: 'Vazgeç', style: 'cancel' },
-        {
-          text: 'Öde ve Düş',
-          style: 'default',
-          onPress: async () => {
-            try {
-              if (!user) return;
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-
-              await addDoc(collection(db, 'users', user.uid, 'transactions'), {
-                amount: -Math.abs(item.monthlyAmount),
-                category: 'Debt',
-                currency: item.currency || 'TRY',
-                description: `${item.bank || 'Banka'} - ${item.title} (${nextPaid}/${item.totalInstallments}. Taksit)`,
-                type: 'expense',
-                date: Timestamp.now(),
-              });
-
-              await updateDoc(doc(db, 'users', user.uid, 'installments', item.id), {
-                paidInstallments: nextPaid,
-                remainingInstallments: Math.max(0, nextRemaining),
-                completed: nextRemaining <= 0,
-                lastCharged: Timestamp.now(),
-              });
-            } catch (err) {
-              console.error('Error paying installment:', err);
-              Alert.alert('Hata', 'Taksit ödemesi kaydedilemedi.');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleDeleteInstallment = (id: string, title: string) => {
-    Alert.alert(
-      'Taksiti Kaldır',
-      `"${title}" taksit planını kaldırmak istediğinize emin misiniz? (Daha önce yapılmış harcama kayıtlarınız silinmez.)`,
-      [
-        { text: 'Vazgeç', style: 'cancel' },
-        {
-          text: 'Sil',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              if (!user) return;
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-              await deleteDoc(doc(db, 'users', user.uid, 'installments', id));
-            } catch (error) {
-              console.error('Error deleting installment:', error);
-              Alert.alert('Hata', 'Taksit silinemedi.');
-            }
-          },
-        },
-      ]
-    );
-  };
+  // --- Input formatting helpers ---
 
   const formatNumberInput = (text: string, setter: (val: string) => void) => {
     if (text.length > 12) return;
@@ -778,38 +559,6 @@ export default function RecurringScreen() {
     }
   };
 
-  const handleTotalCountInput = (text: string) => {
-    const digits = text.replace(/[^0-9]/g, '');
-    if (!digits) {
-      setInstTotalCount('');
-      return;
-    }
-    const num = parseInt(digits, 10);
-    if (num > 60) {
-      setInstTotalCount('60');
-    } else if (digits === '0') {
-      setInstTotalCount('');
-    } else {
-      setInstTotalCount(num.toString());
-    }
-  };
-
-  const handlePaidCountInput = (text: string) => {
-    const digits = text.replace(/[^0-9]/g, '');
-    if (!digits) {
-      setInstPaidCount('');
-      return;
-    }
-    const num = parseInt(digits, 10);
-    const total = parseInt(instTotalCount, 10);
-    if (!isNaN(total) && total > 1 && num >= total) {
-      setInstPaidCount((total - 1).toString());
-    } else if (num > 60) {
-      setInstPaidCount('59');
-    } else {
-      setInstPaidCount(num.toString());
-    }
-  };
 
   return (
     <KeyboardAvoidingView
@@ -822,34 +571,12 @@ export default function RecurringScreen() {
         
         {/* Screen Header */}
         <View style={styles.screenHeader}>
-          <ThemedText style={styles.screenSubtitle}>OTOMATİK VE DÜZENLİ İŞLEMLER</ThemedText>
-          <ThemedText style={styles.screenTitle}>Düzenli & Taksitler</ThemedText>
+          <ThemedText style={styles.screenSubtitle}>{t('loopSubtitle')}</ThemedText>
+          <ThemedText style={styles.screenTitle}>{t('loopTitle')}</ThemedText>
         </View>
 
         {/* Segment Switcher */}
         <View style={styles.segmentContainer}>
-          <AnimatedPressable
-            onPress={() => {
-              Haptics.selectionAsync().catch(() => {});
-              setActiveTab('installment');
-            }}
-            style={[styles.segmentButton, activeTab === 'installment' && styles.segmentButtonActive]}>
-            <Ionicons
-              name="card-outline"
-              size={15}
-              color={activeTab === 'installment' ? Colors.tint : '#8E8E93'}
-              style={{ marginRight: 5 }}
-            />
-            <ThemedText style={[styles.segmentText, activeTab === 'installment' && styles.segmentTextActive]}>
-              Taksitler
-            </ThemedText>
-            <View style={[styles.segmentBadge, activeTab === 'installment' && styles.segmentBadgeActive]}>
-              <ThemedText style={[styles.segmentBadgeText, activeTab === 'installment' && styles.segmentBadgeTextActive]}>
-                {activeInstallments.length}
-              </ThemedText>
-            </View>
-          </AnimatedPressable>
-
           <AnimatedPressable
             onPress={() => {
               Haptics.selectionAsync().catch(() => {});
@@ -859,11 +586,11 @@ export default function RecurringScreen() {
             <Ionicons
               name="play-circle-outline"
               size={15}
-              color={activeTab === 'subscription' ? Colors.tint : '#8E8E93'}
+              color={activeTab === 'subscription' ? colors.tint : '#8E8E93'}
               style={{ marginRight: 5 }}
             />
             <ThemedText style={[styles.segmentText, activeTab === 'subscription' && styles.segmentTextActive]}>
-              Abonelikler
+              {t('tabSubscriptions')}
             </ThemedText>
             <View style={[styles.segmentBadge, activeTab === 'subscription' && styles.segmentBadgeActive]}>
               <ThemedText style={[styles.segmentBadgeText, activeTab === 'subscription' && styles.segmentBadgeTextActive]}>
@@ -881,11 +608,11 @@ export default function RecurringScreen() {
             <Ionicons
               name="trending-up-outline"
               size={15}
-              color={activeTab === 'income' ? Colors.income : '#8E8E93'}
+              color={activeTab === 'income' ? colors.income : '#8E8E93'}
               style={{ marginRight: 5 }}
             />
             <ThemedText style={[styles.segmentText, activeTab === 'income' && styles.segmentTextActive]}>
-              Gelirler
+              {t('tabRecurringIncomes')}
             </ThemedText>
             <View style={[styles.segmentBadge, activeTab === 'income' && styles.segmentBadgeActive]}>
               <ThemedText style={[styles.segmentBadgeText, activeTab === 'income' && styles.segmentBadgeTextActive]}>
@@ -895,402 +622,29 @@ export default function RecurringScreen() {
           </AnimatedPressable>
         </View>
 
-        {/* ================= INSTALLMENTS TAB ================= */}
-        {activeTab === 'installment' && (
-          <>
-            {/* KPI Dashboard Banner */}
-            <View style={styles.kpiContainer}>
-              <View style={styles.kpiCard}>
-                <ThemedText style={styles.kpiLabel}>AYLIK TAKSİT YÜKÜ</ThemedText>
-                <ThemedText style={[styles.kpiValue, { color: '#FF453A' }]}>
-                  -₺{totalMonthlyCommitment.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </ThemedText>
-                <ThemedText style={styles.kpiSub}>Her ay otomatik düşer</ThemedText>
-              </View>
-
-              <View style={styles.kpiCard}>
-                <ThemedText style={styles.kpiLabel}>KALAN TOPLAM BORÇ</ThemedText>
-                <ThemedText style={[styles.kpiValue, { color: '#FF9F0A' }]}>
-                  ₺{totalRemainingDebt.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </ThemedText>
-                <ThemedText style={styles.kpiSub}>{activeInstallments.length} aktif kart harcaması</ThemedText>
-              </View>
-            </View>
-
-            {/* Toggle Form Header / Button */}
-            <View style={styles.formToggleRow}>
-              <View style={styles.formCardTitleRow}>
-                <Ionicons name="add-circle" size={18} color={Colors.tint} />
-                <ThemedText style={styles.formCardTitle}>Yeni Taksit Tanımla</ThemedText>
-              </View>
-              <AnimatedPressable
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
-                  setIsFormExpanded(!isFormExpanded);
-                }}
-                style={styles.toggleCollapseBtn}>
-                <ThemedText style={styles.toggleCollapseText}>
-                  {isFormExpanded ? 'Gizle' : '+ Formu Aç'}
-                </ThemedText>
-                <Ionicons
-                  name={isFormExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={16}
-                  color={Colors.tint}
-                />
-              </AnimatedPressable>
-            </View>
-
-            {/* Collapsible Installment Form */}
-            {isFormExpanded && (
-              <View style={styles.formCard}>
-                {/* Product / Expense Title */}
-                <ThemedText style={styles.inputLabel}>HARCAMA / ÜRÜN ADI</ThemedText>
-                <View style={styles.inputWrap}>
-                  <Ionicons name="cart-outline" size={18} color="#8E8E93" style={styles.inputIcon} />
-                  <TextInput
-                    placeholder="Örn: iPhone 15 Pro, Dyson, Uçak Bileti"
-                    value={instTitle}
-                    onChangeText={setInstTitle}
-                    style={styles.textInput}
-                    maxLength={50}
-                    placeholderTextColor="#636366"
-                  />
-                </View>
-
-                {/* Bank Selection - Modal Selector */}
-                <ThemedText style={styles.inputLabel}>BANKA / KREDİ KARTI</ThemedText>
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  style={[styles.bankSelectorButton, instBank ? styles.bankSelectorButtonActive : null]}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
-                    setBankSearchQuery('');
-                    setBankModalVisible(true);
-                  }}>
-                  <View style={styles.bankSelectorLeft}>
-                    <View style={[styles.bankIconCircle, instBank ? styles.bankIconCircleActive : null]}>
-                      <Ionicons
-                        name="card-outline"
-                        size={18}
-                        color={instBank ? Colors.tint : '#8E8E93'}
-                      />
-                    </View>
-                    <ThemedText style={[styles.bankSelectorText, instBank ? styles.bankSelectorTextActive : null]}>
-                      {instBank || 'Banka veya Kredi Kartı Seçin'}
-                    </ThemedText>
-                  </View>
-                  <Ionicons name="chevron-down" size={17} color={instBank ? Colors.tint : '#8E8E93'} />
-                </TouchableOpacity>
-
-                {/* Quick Bank Chips */}
-                <View style={styles.chipRow}>
-                  {COMMON_BANKS.map((b) => {
-                    const isSelected = instBank === b;
-                    return (
-                      <TouchableOpacity
-                        activeOpacity={0.7}
-                        key={b}
-                        onPress={() => {
-                          Haptics.selectionAsync().catch(() => {});
-                          setInstBank(b);
-                        }}
-                        style={[styles.chip, isSelected && styles.chipActive]}>
-                        <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                          {b}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {/* Currency Selector */}
-                <ThemedText style={styles.inputLabel}>PARA BİRİMİ</ThemedText>
-                <View style={styles.currencyGroup}>
-                  {currencies.map((c) => {
-                    const isActive = instCurrency.code === c.code;
-                    return (
-                      <AnimatedPressable
-                        key={c.code}
-                        onPress={() => {
-                          Haptics.selectionAsync().catch(() => {});
-                          setInstCurrency(c);
-                        }}
-                        style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
-                        <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
-                          {c.label} ({c.symbol})
-                        </ThemedText>
-                      </AnimatedPressable>
-                    );
-                  })}
-                </View>
-
-                {/* Total Amount & Total Installments */}
-                <View style={styles.inputsRow}>
-                  <View style={[styles.inputGroupCol, { flex: 1.3 }]}>
-                    <ThemedText style={styles.inputLabel}>TOPLAM TUTAR</ThemedText>
-                    <View style={styles.inputWrap}>
-                      <ThemedText style={styles.inputPrefix}>{instCurrency.symbol}</ThemedText>
-                      <TextInput
-                        placeholder="Örn: 36000"
-                        value={instTotalAmount}
-                        onChangeText={(t) => formatNumberInput(t, setInstTotalAmount)}
-                        style={styles.textInput}
-                        keyboardType="numeric"
-                        maxLength={12}
-                        placeholderTextColor="#636366"
-                      />
-                    </View>
-                  </View>
-
-                  <View style={[styles.inputGroupCol, { flex: 1 }]}>
-                    <ThemedText style={styles.inputLabel}>TAKSİT SAYISI</ThemedText>
-                    <View style={styles.inputWrap}>
-                      <Ionicons name="repeat-outline" size={17} color="#8E8E93" style={styles.inputIcon} />
-                      <TextInput
-                        placeholder="Örn: 6"
-                        value={instTotalCount}
-                        onChangeText={handleTotalCountInput}
-                        style={styles.textInput}
-                        keyboardType="number-pad"
-                        maxLength={2}
-                        placeholderTextColor="#636366"
-                      />
-                    </View>
-                  </View>
-                </View>
-
-                {/* Quick Installment Chips */}
-                <View style={styles.chipRow}>
-                  {QUICK_INSTALLMENTS.map((count) => {
-                    const isSelected = instTotalCount === count;
-                    return (
-                      <AnimatedPressable
-                        key={count}
-                        onPress={() => {
-                          Haptics.selectionAsync().catch(() => {});
-                          setInstTotalCount(count);
-                        }}
-                        style={[styles.chip, isSelected && styles.chipActive]}>
-                        <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                          {count} Taksit
-                        </ThemedText>
-                      </AnimatedPressable>
-                    );
-                  })}
-                </View>
-
-                {/* Paid so far & Due Day */}
-                <View style={styles.inputsRow}>
-                  <View style={[styles.inputGroupCol, { flex: 1 }]}>
-                    <ThemedText style={styles.inputLabel}>ÖDENEN TAKSİT</ThemedText>
-                    <View style={styles.inputWrap}>
-                      <Ionicons name="checkmark-done-outline" size={17} color="#8E8E93" style={styles.inputIcon} />
-                      <TextInput
-                        placeholder="0"
-                        value={instPaidCount}
-                        onChangeText={handlePaidCountInput}
-                        style={styles.textInput}
-                        keyboardType="number-pad"
-                        maxLength={2}
-                        placeholderTextColor="#636366"
-                      />
-                    </View>
-                  </View>
-
-                  <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
-                    <ThemedText style={styles.inputLabel}>SON ÖDEME GÜNÜ</ThemedText>
-                    <View style={styles.inputWrap}>
-                      <Ionicons name="calendar-outline" size={17} color="#8E8E93" style={styles.inputIcon} />
-                      <TextInput
-                        placeholder="Gün (1-31)"
-                        value={instDueDay}
-                        onChangeText={(t) => handleDayInput(t, setInstDueDay)}
-                        onBlur={() => handleDayBlur(instDueDay, setInstDueDay)}
-                        style={styles.textInput}
-                        keyboardType="number-pad"
-                        maxLength={2}
-                        placeholderTextColor="#636366"
-                      />
-                    </View>
-                  </View>
-                </View>
-
-                {/* Live Preview Calculation */}
-                {parsedTotal > 0 && (
-                  <View style={styles.liveCalculationBox}>
-                    <View style={styles.calcRow}>
-                      <ThemedText style={styles.calcLabel}>Aylık Ödeme:</ThemedText>
-                      <ThemedText style={styles.calcValue}>
-                        {instCurrency.symbol}
-                        {liveMonthly.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / ay
-                      </ThemedText>
-                    </View>
-                    <View style={styles.calcRow}>
-                      <ThemedText style={styles.calcLabel}>Kalan Süre / Borç:</ThemedText>
-                      <ThemedText style={styles.calcValueSub}>
-                        {liveRemainingCount} ay • {instCurrency.symbol}
-                        {liveRemainingDebt.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </ThemedText>
-                    </View>
-                  </View>
-                )}
-
-                {/* Add Installment Button */}
-                <AnimatedPressable style={styles.addButton} onPress={handleAddInstallment}>
-                  <Ionicons name="checkmark-circle-outline" size={20} color="#000" />
-                  <ThemedText style={styles.addButtonText}>Taksit Planını Başlat</ThemedText>
-                </AnimatedPressable>
-              </View>
-            )}
-
-            {/* Section Title */}
-            <View style={styles.sectionHeaderRow}>
-              <ThemedText style={styles.sectionTitle}>Mevcut Taksitler & Kartlar</ThemedText>
-              <View style={styles.countBadge}>
-                <ThemedText style={styles.countBadgeText}>{installments.length}</ThemedText>
-              </View>
-            </View>
-
-            {/* Installments List */}
-            {installments.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <View style={styles.emptyIconCircle}>
-                  <Ionicons name="card-outline" size={32} color="#555" />
-                </View>
-                <ThemedText style={styles.emptyTitle}>Henüz Taksit Kaydı Yok</ThemedText>
-                <ThemedText style={styles.emptySubtitle}>
-                  Kredi kartı taksitlerinizi ekleyin; her ay son ödeme gününde taksit tutarı otomatik olarak bakiyenizden düşülsün.
-                </ThemedText>
-              </View>
-            ) : (
-              installments.map((item) => {
-                const itemCurrency = currencies.find((c) => c.code === item.currency) || { symbol: item.currency || '₺' };
-                const paid = item.paidInstallments || 0;
-                const total = item.totalInstallments || 1;
-                const remaining = item.remainingInstallments ?? Math.max(0, total - paid);
-                const remainingDebt = item.monthlyAmount * remaining;
-                const progress = Math.min(1, Math.max(0, paid / total));
-                const progressPercent = Math.round(progress * 100);
-
-                return (
-                  <View key={item.id} style={[styles.installmentCard, item.completed && styles.installmentCardCompleted]}>
-                    {/* Header row: Bank & Status */}
-                    <View style={styles.cardHeaderRow}>
-                      <View style={styles.bankPill}>
-                        <Ionicons name="card-outline" size={13} color={Colors.tint} style={{ marginRight: 5 }} />
-                        <ThemedText style={styles.bankPillText}>{item.bank || 'Banka'}</ThemedText>
-                      </View>
-
-                      <View style={styles.headerRightBadges}>
-                        <View style={styles.dueDayPill}>
-                          <Ionicons name="calendar-outline" size={12} color="#8E8E93" style={{ marginRight: 4 }} />
-                          <ThemedText style={styles.dueDayPillText}>Ayın {item.dueDay}. günü</ThemedText>
-                        </View>
-
-                        {item.completed ? (
-                          <View style={styles.completedBadge}>
-                            <Ionicons name="checkmark-done" size={12} color="#4CAF50" style={{ marginRight: 4 }} />
-                            <ThemedText style={styles.completedBadgeText}>Bitti</ThemedText>
-                          </View>
-                        ) : (
-                          <View style={styles.activeBadge}>
-                            <ThemedText style={styles.activeBadgeText}>{remaining} Taksit Kaldı</ThemedText>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-
-                    {/* Title & Monthly Amount Row */}
-                    <View style={styles.cardMainRow}>
-                      <View style={styles.cardTitleCol}>
-                        <ThemedText style={styles.installmentTitle} numberOfLines={2}>
-                          {item.title}
-                        </ThemedText>
-                        <ThemedText style={styles.installmentSub}>
-                          Toplam: {itemCurrency.symbol}
-                          {item.totalAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                        </ThemedText>
-                      </View>
-
-                      <View style={styles.cardAmountCol}>
-                        <ThemedText style={styles.installmentMonthlyAmount}>
-                          -{itemCurrency.symbol}
-                          {item.monthlyAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </ThemedText>
-                        <ThemedText style={styles.installmentPerMonth}>/ her ay</ThemedText>
-                      </View>
-                    </View>
-
-                    {/* Progress Bar Container */}
-                    <View style={styles.progressContainer}>
-                      <View style={styles.progressBarBackground}>
-                        <View
-                          style={[
-                            styles.progressBarFill,
-                            {
-                              width: `${progressPercent}%`,
-                              backgroundColor: item.completed ? '#4CAF50' : Colors.tint,
-                            },
-                          ]}
-                        />
-                      </View>
-                      <View style={styles.progressTextRow}>
-                        <ThemedText style={styles.progressText}>
-                          {paid} / {total} Taksit Ödendi (%{progressPercent})
-                        </ThemedText>
-                        <ThemedText style={styles.remainingDebtText}>
-                          Kalan: {itemCurrency.symbol}
-                          {remainingDebt.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
-                        </ThemedText>
-                      </View>
-                    </View>
-
-                    {/* Card Actions Footer */}
-                    <View style={styles.cardActionsRow}>
-                      {!item.completed && (
-                        <AnimatedPressable
-                          onPress={() => handlePayInstallment(item)}
-                          style={styles.payNowButton}>
-                          <Ionicons name="checkmark-circle" size={15} color="#000" style={{ marginRight: 5 }} />
-                          <ThemedText style={styles.payNowButtonText}>Bu Ayı Öde</ThemedText>
-                        </AnimatedPressable>
-                      )}
-
-                      <AnimatedPressable
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        onPress={() => handleDeleteInstallment(item.id, item.title)}
-                        style={styles.deleteButton}>
-                        <Ionicons name="trash-outline" size={17} color="#6E6E73" />
-                      </AnimatedPressable>
-                    </View>
-                  </View>
-                );
-              })
-            )}
-          </>
-        )}
-
         {/* ================= SUBSCRIPTIONS TAB ================= */}
         {activeTab === 'subscription' && (
           <>
             {/* KPI Dashboard Banner */}
             <View style={styles.kpiContainer}>
               <View style={styles.kpiCard}>
-                <ThemedText style={styles.kpiLabel}>AYLIK ABONELİK YÜKÜ</ThemedText>
+                <ThemedText style={styles.kpiLabel}>{t('monthlyTotalCommitment').toUpperCase()}</ThemedText>
                 <ThemedText style={[styles.kpiValue, { color: '#FF375F' }]}>
                   -₺{subMonthlyTotalTRY.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </ThemedText>
                 <ThemedText style={styles.kpiSub}>
-                  {foreignSubSummary ? `${activeSubscriptions.length} aktif • ${foreignSubSummary}` : `${activeSubscriptions.length} aktif servis`}
+                  {foreignSubSummary
+                    ? `${activeSubscriptions.length} ${language === 'tr' ? 'aktif' : 'active'} • ${foreignSubSummary}`
+                    : `${activeSubscriptions.length} ${language === 'tr' ? 'aktif servis' : 'active services'}`}
                 </ThemedText>
               </View>
 
               <View style={styles.kpiCard}>
-                <ThemedText style={styles.kpiLabel}>YILLIK TAHMİNİ MALİYET</ThemedText>
+                <ThemedText style={styles.kpiLabel}>{language === 'tr' ? 'YILLIK TAHMİNİ MALİYET' : 'ANNUAL ESTIMATE'}</ThemedText>
                 <ThemedText style={[styles.kpiValue, { color: '#BF5AF2' }]}>
                   ₺{(subMonthlyTotalTRY * 12).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </ThemedText>
-                <ThemedText style={styles.kpiSub}>Yıllık projeksiyon</ThemedText>
+                <ThemedText style={styles.kpiSub}>{language === 'tr' ? 'Yıllık projeksiyon' : 'Yearly projection'}</ThemedText>
               </View>
             </View>
 
@@ -1299,7 +653,7 @@ export default function RecurringScreen() {
               <View style={styles.formToggleRow}>
                 <View style={styles.formCardTitleRow}>
                   <Ionicons name="sparkles" size={18} color={Colors.tint} />
-                  <ThemedText style={styles.formCardTitle}>Yeni Abonelik Tanımla</ThemedText>
+                  <ThemedText style={styles.formCardTitle}>{t('newSubscription')}</ThemedText>
                 </View>
                 <AnimatedPressable
                   onPress={() => {
@@ -1308,7 +662,7 @@ export default function RecurringScreen() {
                   }}
                   style={styles.toggleCollapseBtn}>
                   <ThemedText style={styles.toggleCollapseText}>
-                    {isSubFormExpanded ? 'Gizle' : '+ Formu Aç'}
+                    {isSubFormExpanded ? (language === 'tr' ? 'Gizle' : 'Hide') : (language === 'tr' ? '+ Formu Aç' : '+ Open Form')}
                   </ThemedText>
                   <Ionicons
                     name={isSubFormExpanded ? 'chevron-up' : 'chevron-down'}
@@ -1322,7 +676,7 @@ export default function RecurringScreen() {
               {isSubFormExpanded && (
                 <View style={{ marginTop: 14 }}>
                   {/* Quick Preset Selector */}
-                  <ThemedText style={styles.inputLabel}>HIZLI SERVİS SEÇİN</ThemedText>
+                  <ThemedText style={styles.inputLabel}>{language === 'tr' ? 'HIZLI SERVİS SEÇİN' : 'QUICK SERVICE SELECTION'}</ThemedText>
                   <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -1362,7 +716,7 @@ export default function RecurringScreen() {
                   </ScrollView>
 
                   {/* Service Name Input */}
-                  <ThemedText style={styles.inputLabel}>PLATFORM / SERVİS ADI</ThemedText>
+                  <ThemedText style={styles.inputLabel}>{t('subName').toUpperCase()}</ThemedText>
                   <View style={styles.inputWrap}>
                     <Ionicons
                       name={(subIcon as any) || 'play-circle-outline'}
@@ -1371,7 +725,7 @@ export default function RecurringScreen() {
                       style={styles.inputIcon}
                     />
                     <TextInput
-                      placeholder="Örn: Netflix, Spotify, ChatGPT Plus..."
+                      placeholder={language === 'tr' ? 'Örn: Netflix, Spotify, ChatGPT Plus...' : 'e.g. Netflix, Spotify, ChatGPT Plus...'}
                       value={subName}
                       onChangeText={(t) => {
                         setSubName(t);
@@ -1386,11 +740,11 @@ export default function RecurringScreen() {
                   {/* Category & Billing Cycle Row */}
                   <View style={styles.inputsRow}>
                     <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
-                      <ThemedText style={styles.inputLabel}>KATEGORİ</ThemedText>
+                      <ThemedText style={styles.inputLabel}>{language === 'tr' ? 'KATEGORİ' : 'CATEGORY'}</ThemedText>
                       <View style={styles.inputWrap}>
                         <Ionicons name="pricetag-outline" size={16} color="#8E8E93" style={styles.inputIcon} />
                         <TextInput
-                          placeholder="Örn: Dizi / Film, Müzik"
+                          placeholder={language === 'tr' ? 'Örn: Dizi / Film, Müzik' : 'e.g. Video, Music, AI'}
                           value={subCategory}
                           onChangeText={setSubCategory}
                           style={styles.textInput}
@@ -1401,7 +755,7 @@ export default function RecurringScreen() {
                     </View>
 
                     <View style={[styles.inputGroupCol, { flex: 1 }]}>
-                      <ThemedText style={styles.inputLabel}>ÖDEME DÖNGÜSÜ</ThemedText>
+                      <ThemedText style={styles.inputLabel}>{t('billingCycle').toUpperCase()}</ThemedText>
                       <View style={styles.cycleToggleRow}>
                         <TouchableOpacity
                           activeOpacity={0.7}
@@ -1418,7 +772,7 @@ export default function RecurringScreen() {
                               styles.cyclePillText,
                               subBillingCycle === 'monthly' && styles.cyclePillTextActive,
                             ]}>
-                            Aylık
+                            {t('monthly')}
                           </ThemedText>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -1436,7 +790,7 @@ export default function RecurringScreen() {
                               styles.cyclePillText,
                               subBillingCycle === 'yearly' && styles.cyclePillTextActive,
                             ]}>
-                            Yıllık
+                            {t('yearly')}
                           </ThemedText>
                         </TouchableOpacity>
                       </View>
@@ -1444,7 +798,7 @@ export default function RecurringScreen() {
                   </View>
 
                   {/* Currency Switcher */}
-                  <ThemedText style={styles.inputLabel}>PARA BİRİMİ</ThemedText>
+                  <ThemedText style={styles.inputLabel}>{language === 'tr' ? 'PARA BİRİMİ' : 'CURRENCY'}</ThemedText>
                   <View style={styles.currencyGroup}>
                     {currencies.map((c) => {
                       const isActive = subCurrency.code === c.code;
@@ -1468,12 +822,12 @@ export default function RecurringScreen() {
                   <View style={styles.inputsRow}>
                     <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
                       <ThemedText style={styles.inputLabel}>
-                        {subBillingCycle === 'yearly' ? 'YILLIK TUTAR' : 'AYLIK TUTAR'}
+                        {subBillingCycle === 'yearly' ? (language === 'tr' ? 'YILLIK TUTAR' : 'YEARLY AMOUNT') : (language === 'tr' ? 'AYLIK TUTAR' : 'MONTHLY AMOUNT')}
                       </ThemedText>
                       <View style={styles.inputWrap}>
                         <ThemedText style={styles.inputPrefix}>{subCurrency.symbol}</ThemedText>
                         <TextInput
-                          placeholder="Örn: 229,99"
+                          placeholder="0.00"
                           value={subAmount}
                           onChangeText={(t) => formatNumberInput(t, setSubAmount)}
                           style={styles.textInput}
@@ -1485,11 +839,11 @@ export default function RecurringScreen() {
                     </View>
 
                     <View style={[styles.inputGroupCol, { flex: 1 }]}>
-                      <ThemedText style={styles.inputLabel}>ÇEKİLME GÜNÜ</ThemedText>
+                      <ThemedText style={styles.inputLabel}>{t('dueDay').toUpperCase()}</ThemedText>
                       <View style={styles.inputWrap}>
                         <Ionicons name="today-outline" size={17} color="#8E8E93" style={styles.inputIcon} />
                         <TextInput
-                          placeholder="Gün (1-31)"
+                          placeholder={language === 'tr' ? 'Gün (1-31)' : 'Day (1-31)'}
                           value={subDueDay}
                           onChangeText={(t) => handleDayInput(t, setSubDueDay)}
                           onBlur={() => handleDayBlur(subDueDay, setSubDueDay)}
@@ -1503,13 +857,12 @@ export default function RecurringScreen() {
                   </View>
 
                   {/* Optional Bank / Card Selector */}
-                  <ThemedText style={styles.inputLabel}>ÖDENEN KART / BANKA (OPSİYONEL)</ThemedText>
+                  <ThemedText style={styles.inputLabel}>{t('paymentMethodBank').toUpperCase()} ({language === 'tr' ? 'OPSİYONEL' : 'OPTIONAL'})</ThemedText>
                   <TouchableOpacity
                     activeOpacity={0.7}
                     style={[styles.bankSelectorButton, subBank ? styles.bankSelectorButtonActive : null]}
                     onPress={() => {
                       Haptics.selectionAsync().catch(() => {});
-                      setBankModalTarget('subscription');
                       setBankSearchQuery('');
                       setBankModalVisible(true);
                     }}>
@@ -1522,7 +875,7 @@ export default function RecurringScreen() {
                         />
                       </View>
                       <ThemedText style={[styles.bankSelectorText, subBank ? styles.bankSelectorTextActive : null]}>
-                        {subBank || 'Banka veya Kredi Kartı Seçin'}
+                        {subBank || (language === 'tr' ? 'Banka veya Kredi Kartı Seçin' : 'Select Bank or Card')}
                       </ThemedText>
                     </View>
                     <Ionicons name="chevron-down" size={17} color={subBank ? Colors.tint : '#8E8E93'} />
@@ -1555,7 +908,7 @@ export default function RecurringScreen() {
                     onPress={handleAddSubscription}>
                     <Ionicons name="add" size={20} color="#000" />
                     <ThemedText style={[styles.addButtonText, { color: '#000' }]}>
-                      Aboneliği Kaydet
+                      {t('saveSubscription')}
                     </ThemedText>
                   </AnimatedPressable>
                 </View>
@@ -1564,7 +917,7 @@ export default function RecurringScreen() {
 
             {/* Subscriptions List Section Header */}
             <View style={styles.sectionHeaderRow}>
-              <ThemedText style={styles.sectionTitle}>Kayıtlı Abonelikler</ThemedText>
+              <ThemedText style={styles.sectionTitle}>{t('activeSubscriptions')}</ThemedText>
               <View style={styles.countBadge}>
                 <ThemedText style={styles.countBadgeText}>{subscriptions.length}</ThemedText>
               </View>
@@ -1576,9 +929,9 @@ export default function RecurringScreen() {
                 <View style={styles.emptyIconCircle}>
                   <Ionicons name="play-circle-outline" size={34} color="#555" />
                 </View>
-                <ThemedText style={styles.emptyTitle}>Kayıtlı Abonelik Yok</ThemedText>
+                <ThemedText style={styles.emptyTitle}>{t('noSubscriptions')}</ThemedText>
                 <ThemedText style={styles.emptySubtitle}>
-                  Netflix, Spotify, iCloud gibi düzenli servislerinizi ekleyin, aylık sabit gider yükünüzü ve yaklaşan ödemelerinizi tek bakışta görün.
+                  {t('noSubscriptionsSub')}
                 </ThemedText>
               </View>
             ) : (
@@ -1611,18 +964,20 @@ export default function RecurringScreen() {
                           <ThemedText style={styles.subTitle}>{item.name}</ThemedText>
                           {!item.isActive && (
                             <View style={styles.pausedBadge}>
-                              <ThemedText style={styles.pausedBadgeText}>Duraklatıldı</ThemedText>
+                              <ThemedText style={styles.pausedBadgeText}>
+                                {language === 'tr' ? 'Duraklatıldı' : 'Paused'}
+                              </ThemedText>
                             </View>
                           )}
                         </View>
                         <ThemedText style={styles.subMeta}>
-                          {item.bank && item.bank !== 'Belirtilmedi' ? `${item.bank} • ` : ''}
-                          {item.category || 'Abonelik'} • {item.billingCycle === 'yearly' ? 'Yıllık' : 'Aylık'}
+                          {item.bank && item.bank !== 'Belirtilmedi' && item.bank !== 'Not specified' ? `${item.bank} • ` : ''}
+                          {getCategoryLabel(item.category, language) || t('tabSubscriptions')} • {item.billingCycle === 'yearly' ? t('yearly') : t('monthly')}
                         </ThemedText>
                         <View style={styles.dueDayPill}>
                           <Ionicons name="calendar-outline" size={12} color="#8E8E93" style={{ marginRight: 4 }} />
                           <ThemedText style={styles.dueDayPillText}>
-                            Her ayın {item.dueDay}. günü
+                            {t('dueDayPrefix')} {item.dueDay}{t('dueDaySuffix')}
                           </ThemedText>
                         </View>
                       </View>
@@ -1630,10 +985,10 @@ export default function RecurringScreen() {
                       <View style={styles.subRight}>
                         <ThemedText style={styles.subAmount}>
                           -{itemCurrency.symbol}
-                          {item.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {item.amount.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </ThemedText>
                         <ThemedText style={styles.subBillingPeriod}>
-                          {item.billingCycle === 'yearly' ? '/ yıl' : '/ ay'}
+                          {item.billingCycle === 'yearly' ? (language === 'tr' ? '/ yıl' : '/ yr') : (language === 'tr' ? '/ ay' : '/ mo')}
                         </ThemedText>
                       </View>
                     </View>
@@ -1648,7 +1003,7 @@ export default function RecurringScreen() {
                           setSubToPay(item);
                         }}>
                         <Ionicons name="flash" size={13} color="#000" style={{ marginRight: 5 }} />
-                        <ThemedText style={styles.subPayBtnText}>Şimdi İşle</ThemedText>
+                        <ThemedText style={styles.subPayBtnText}>{t('payNow')}</ThemedText>
                       </TouchableOpacity>
 
                       <TouchableOpacity
@@ -1662,7 +1017,7 @@ export default function RecurringScreen() {
                           style={{ marginRight: 4 }}
                         />
                         <ThemedText style={[styles.subPauseBtnText, !item.isActive && { color: Colors.tint }]}>
-                          {item.isActive ? 'Duraklat' : 'Aktif Et'}
+                          {item.isActive ? (language === 'tr' ? 'Duraklat' : 'Pause') : (language === 'tr' ? 'Aktif Et' : 'Resume')}
                         </ThemedText>
                       </TouchableOpacity>
 
@@ -1689,15 +1044,15 @@ export default function RecurringScreen() {
             <View style={styles.formCard}>
               <View style={styles.formCardTitleRow}>
                 <Ionicons name="calendar" size={16} color={Colors.income} />
-                <ThemedText style={styles.formCardTitle}>Yeni Düzenli Gelir Ekle</ThemedText>
+                <ThemedText style={styles.formCardTitle}>{t('newRecurringIncome')}</ThemedText>
               </View>
 
               {/* Source Input */}
-              <ThemedText style={styles.inputLabel}>GELİR KAYNAĞI / AÇIKLAMA</ThemedText>
+              <ThemedText style={styles.inputLabel}>{t('incomeSource').toUpperCase()}</ThemedText>
               <View style={styles.inputWrap}>
                 <Ionicons name="briefcase-outline" size={18} color="#8E8E93" style={styles.inputIcon} />
                 <TextInput
-                  placeholder="Örn: Maaş, Kira Geliri, Temettü"
+                  placeholder={language === 'tr' ? 'Örn: Maaş, Kira Geliri, Temettü' : 'e.g. Salary, Rent, Dividends'}
                   value={category}
                   onChangeText={setCategory}
                   style={styles.textInput}
@@ -1707,7 +1062,7 @@ export default function RecurringScreen() {
               </View>
 
               {/* Currency Switcher */}
-              <ThemedText style={styles.inputLabel}>PARA BİRİMİ</ThemedText>
+              <ThemedText style={styles.inputLabel}>{language === 'tr' ? 'PARA BİRİMİ' : 'CURRENCY'}</ThemedText>
               <View style={styles.currencyGroup}>
                 {currencies.map((c) => {
                   const isActive = incomeCurrency.code === c.code;
@@ -1730,11 +1085,11 @@ export default function RecurringScreen() {
               {/* Amount & Day Inputs Row */}
               <View style={styles.inputsRow}>
                 <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
-                  <ThemedText style={styles.inputLabel}>AYLIK TUTAR</ThemedText>
+                  <ThemedText style={styles.inputLabel}>{language === 'tr' ? 'AYLIK TUTAR' : 'MONTHLY AMOUNT'}</ThemedText>
                   <View style={styles.inputWrap}>
                     <ThemedText style={styles.inputPrefix}>{incomeCurrency.symbol}</ThemedText>
                     <TextInput
-                      placeholder="Örn: 45000"
+                      placeholder="0.00"
                       value={amount}
                       onChangeText={(t) => formatNumberInput(t, setAmount)}
                       style={styles.textInput}
@@ -1746,11 +1101,11 @@ export default function RecurringScreen() {
                 </View>
 
                 <View style={[styles.inputGroupCol, { flex: 1 }]}>
-                  <ThemedText style={styles.inputLabel}>YATIŞ GÜNÜ</ThemedText>
+                  <ThemedText style={styles.inputLabel}>{t('dayOfMonth').toUpperCase()}</ThemedText>
                   <View style={styles.inputWrap}>
                     <Ionicons name="today-outline" size={17} color="#8E8E93" style={styles.inputIcon} />
                     <TextInput
-                      placeholder="Gün (1-31)"
+                      placeholder={language === 'tr' ? 'Gün (1-31)' : 'Day (1-31)'}
                       value={dayOfMonth}
                       onChangeText={(t) => handleDayInput(t, setDayOfMonth)}
                       onBlur={() => handleDayBlur(dayOfMonth, setDayOfMonth)}
@@ -1768,13 +1123,13 @@ export default function RecurringScreen() {
                 style={[styles.addButton, { backgroundColor: Colors.income }]}
                 onPress={handleAddRecurringIncome}>
                 <Ionicons name="add" size={20} color="#000" />
-                <ThemedText style={styles.addButtonText}>Aylık Geliri Planla</ThemedText>
+                <ThemedText style={styles.addButtonText}>{t('saveRecurringIncome')}</ThemedText>
               </AnimatedPressable>
             </View>
 
             {/* Section Header */}
             <View style={styles.sectionHeaderRow}>
-              <ThemedText style={styles.sectionTitle}>Aktif Gelir Akışları</ThemedText>
+              <ThemedText style={styles.sectionTitle}>{t('registeredIncomes')}</ThemedText>
               <View style={styles.countBadge}>
                 <ThemedText style={styles.countBadgeText}>{recurringIncomes.length}</ThemedText>
               </View>
@@ -1786,9 +1141,11 @@ export default function RecurringScreen() {
                 <View style={styles.emptyIconCircle}>
                   <Ionicons name="repeat-outline" size={32} color="#555" />
                 </View>
-                <ThemedText style={styles.emptyTitle}>Düzenli Gelir Kaydı Yok</ThemedText>
+                <ThemedText style={styles.emptyTitle}>{t('noIncomes')}</ThemedText>
                 <ThemedText style={styles.emptySubtitle}>
-                  Maaş veya pasif gelir akışlarınızı ekleyin, her ay belirlediğiniz günde otomatik bakiyenize işlensin.
+                  {language === 'tr'
+                    ? 'Maaş veya pasif gelir akışlarınızı ekleyin, her ay belirlediğiniz günde otomatik bakiyenize işlensin.'
+                    : 'Add your salary or passive income streams to automatically sync to your balance on the scheduled day.'}
                 </ThemedText>
               </View>
             ) : (
@@ -1797,21 +1154,23 @@ export default function RecurringScreen() {
                 return (
                   <View key={item.id} style={styles.recurringCard}>
                     <View style={styles.dayCalendarBadge}>
-                      <ThemedText style={styles.dayBadgeLabel}>GÜN</ThemedText>
+                      <ThemedText style={styles.dayBadgeLabel}>{language === 'tr' ? 'GÜN' : 'DAY'}</ThemedText>
                       <ThemedText style={styles.dayBadgeNumber}>{item.dayOfMonth}</ThemedText>
                     </View>
 
                     <View style={styles.recurringCenter}>
                       <ThemedText style={styles.recurringTitle}>{item.category}</ThemedText>
                       <ThemedText style={styles.recurringSub}>
-                        Her ayın {item.dayOfMonth}. gününde otomatik bakiyeye eklenir
+                        {language === 'tr'
+                          ? `Her ayın ${item.dayOfMonth}. gününde otomatik bakiyeye eklenir`
+                          : `Automatically added on day ${item.dayOfMonth} each month`}
                       </ThemedText>
                     </View>
 
                     <View style={styles.recurringRight}>
                       <ThemedText style={styles.recurringAmount}>
                         +{itemCurrency.symbol}
-                        {item.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {item.amount.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </ThemedText>
                       <AnimatedPressable
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -1834,7 +1193,7 @@ export default function RecurringScreen() {
         onClose={() => setBankModalVisible(false)}
         sheetStyle={[styles.modalSheet, { maxHeight: '78%', paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
         <View style={styles.modalHeaderRow}>
-          <ThemedText style={styles.modalSheetTitle}>Banka / Kart Seçin</ThemedText>
+          <ThemedText style={styles.modalSheetTitle}>{t('chooseBank')}</ThemedText>
           <TouchableOpacity
             onPress={() => setBankModalVisible(false)}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -1846,7 +1205,7 @@ export default function RecurringScreen() {
         <View style={styles.modalSearchWrap}>
           <Ionicons name="search-outline" size={17} color="#8E8E93" style={styles.modalSearchIcon} />
           <TextInput
-            placeholder="Banka ara (örn: Ziraat, Garanti)..."
+            placeholder={t('searchBank')}
             value={bankSearchQuery}
             onChangeText={setBankSearchQuery}
             style={styles.modalSearchInput}
@@ -1868,7 +1227,7 @@ export default function RecurringScreen() {
           keyboardShouldPersistTaps="handled"
           style={{ marginTop: 8 }}>
           {filteredBanks.map((bankName) => {
-            const isSelected = bankModalTarget === 'installment' ? instBank === bankName : subBank === bankName;
+            const isSelected = subBank === bankName;
             return (
               <TouchableOpacity
                 key={bankName}
@@ -1876,11 +1235,7 @@ export default function RecurringScreen() {
                 style={[styles.modalItemRow, isSelected && styles.modalItemRowActive]}
                 onPress={() => {
                   Haptics.selectionAsync().catch(() => {});
-                  if (bankModalTarget === 'installment') {
-                    setInstBank(bankName);
-                  } else {
-                    setSubBank(bankName);
-                  }
+                  setSubBank(bankName);
                   setBankModalVisible(false);
                 }}>
                 <View style={styles.modalItemLeft}>
@@ -1901,7 +1256,9 @@ export default function RecurringScreen() {
           })}
           {filteredBanks.length === 0 && (
             <View style={styles.modalEmptyWrap}>
-              <ThemedText style={styles.modalEmptyText}>Eşleşen banka bulunamadı</ThemedText>
+              <ThemedText style={styles.modalEmptyText}>
+                {language === 'tr' ? 'Eşleşen banka bulunamadı' : 'No matching bank found'}
+              </ThemedText>
             </View>
           )}
         </ScrollView>
@@ -1917,9 +1274,9 @@ export default function RecurringScreen() {
           <View style={[styles.actionModalIconBadge, { backgroundColor: 'rgba(57, 255, 20, 0.15)' }]}>
             <Ionicons name="checkmark-circle" size={28} color={Colors.tint} />
           </View>
-          <ThemedText style={styles.actionModalTitle}>Abonelik Ödemesini Kaydet</ThemedText>
+          <ThemedText style={styles.actionModalTitle}>{t('payConfirmTitle')}</ThemedText>
           <ThemedText style={styles.actionModalDesc}>
-            Bu ödemeyi Harcamalar (Subscriptions) listenize hemen ekleyip bakiyenizden düşmek istiyor musunuz?
+            {t('payConfirmDesc')}
           </ThemedText>
         </View>
 
@@ -1928,12 +1285,12 @@ export default function RecurringScreen() {
             <View style={styles.previewLeft}>
               <ThemedText style={styles.previewTitle}>{subToPay.name}</ThemedText>
               <ThemedText style={styles.previewSub}>
-                {subToPay.category} • Her ayın {subToPay.dueDay}. günü
+                {getCategoryLabel(subToPay.category, language) || t('tabSubscriptions')} • {t('dueDayPrefix')} {subToPay.dueDay}{t('dueDaySuffix')}
               </ThemedText>
             </View>
             <ThemedText style={[styles.previewAmount, { color: '#FF453A' }]}>
               -{currencies.find((c) => c.code === subToPay.currency)?.symbol || subToPay.currency}
-              {subToPay.amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {subToPay.amount.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </ThemedText>
           </View>
         )}
@@ -1943,7 +1300,7 @@ export default function RecurringScreen() {
             activeOpacity={0.7}
             style={styles.actionModalCancelBtn}
             onPress={() => setSubToPay(null)}>
-            <ThemedText style={styles.actionModalCancelBtnText}>Vazgeç</ThemedText>
+            <ThemedText style={styles.actionModalCancelBtnText}>{t('cancel')}</ThemedText>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1951,7 +1308,7 @@ export default function RecurringScreen() {
             style={styles.actionModalConfirmBtn}
             onPress={handleConfirmPaySub}>
             <Ionicons name="card" size={17} color="#000" style={{ marginRight: 6 }} />
-            <ThemedText style={styles.actionModalConfirmBtnText}>Öde ve Kaydet</ThemedText>
+            <ThemedText style={styles.actionModalConfirmBtnText}>{t('payNow')}</ThemedText>
           </TouchableOpacity>
         </View>
       </SwipeableModal>
@@ -1966,9 +1323,9 @@ export default function RecurringScreen() {
           <View style={[styles.actionModalIconBadge, { backgroundColor: 'rgba(255, 69, 58, 0.15)' }]}>
             <Ionicons name="trash" size={26} color="#FF453A" />
           </View>
-          <ThemedText style={styles.actionModalTitle}>Aboneliği Kaldır</ThemedText>
+          <ThemedText style={styles.actionModalTitle}>{t('deleteSubTitle')}</ThemedText>
           <ThemedText style={styles.actionModalDesc}>
-            {`"${subToDelete?.name}" abonelik kaydını silmek istediğinize emin misiniz? Daha önce kaydedilen harcama geçmişiniz korunur.`}
+            {t('deleteSubDesc')}
           </ThemedText>
         </View>
 
@@ -1977,7 +1334,7 @@ export default function RecurringScreen() {
             activeOpacity={0.7}
             style={styles.actionModalCancelBtn}
             onPress={() => setSubToDelete(null)}>
-            <ThemedText style={styles.actionModalCancelBtnText}>Vazgeç</ThemedText>
+            <ThemedText style={styles.actionModalCancelBtnText}>{t('cancel')}</ThemedText>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1985,7 +1342,7 @@ export default function RecurringScreen() {
             style={[styles.actionModalConfirmBtn, { backgroundColor: '#FF453A' }]}
             onPress={handleConfirmDeleteSub}>
             <Ionicons name="trash" size={17} color="#FFF" style={{ marginRight: 6 }} />
-            <ThemedText style={[styles.actionModalConfirmBtnText, { color: '#FFF' }]}>Sil</ThemedText>
+            <ThemedText style={[styles.actionModalConfirmBtnText, { color: '#FFF' }]}>{t('delete')}</ThemedText>
           </TouchableOpacity>
         </View>
       </SwipeableModal>

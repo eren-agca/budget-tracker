@@ -23,111 +23,125 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
   const bottomOffset = Platform.OS === 'ios' ? Math.max(insets.bottom, 20) : 16;
   const inactiveIconColor = isDark ? '#7C7C82' : '#94A3B8';
 
+  const getTabConfig = (routeName: string, isFocused: boolean) => {
+    switch (routeName) {
+      case 'index':
+        return {
+          label: t('tabHome') || 'Wallet',
+          iconName: (isFocused ? 'wallet' : 'wallet-outline') as any,
+        };
+      case 'explore':
+        return {
+          label: t('tabCharts') || 'Charts',
+          iconName: (isFocused ? 'pie-chart' : 'pie-chart-outline') as any,
+        };
+      case 'recurring':
+        return {
+          label: t('tabRecurring') || 'Loop',
+          iconName: (isFocused ? 'sync' : 'sync-outline') as any,
+        };
+      case 'cards':
+        return {
+          label: t('tabCards') || 'Cards',
+          iconName: (isFocused ? 'card' : 'card-outline') as any,
+        };
+      default:
+        return {
+          label: routeName,
+          iconName: 'square-outline' as any,
+        };
+    }
+  };
+
+  const renderTabItem = (route: any, index: number) => {
+    if (!route) return null;
+    const isFocused = state.index === index;
+    const config = getTabConfig(route.name, isFocused);
+
+    const onPress = () => {
+      const event =
+        emitter?.emit?.({
+          type: 'tabPress',
+          target: route.key,
+          canPreventDefault: true,
+        }) ??
+        navigation?.emit?.({
+          type: 'tabPress',
+          target: route.key,
+          canPreventDefault: true,
+        });
+
+      if (!isFocused && !event?.defaultPrevented) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        if (typeof navigateToTab === 'function') {
+          navigateToTab(route.key);
+        } else if (navigation?.navigate) {
+          navigation.navigate(route.name, route.params);
+        } else {
+          router.navigate(route.name === 'index' ? '/(tabs)' : (`/(tabs)/${route.name}` as any));
+        }
+      }
+    };
+
+    return (
+      <AnimatedPressable
+        key={route.key}
+        onPress={onPress}
+        style={styles.tabItem}>
+        <Ionicons
+          size={22}
+          name={config.iconName}
+          color={isFocused ? colors.tint : inactiveIconColor}
+        />
+        <ThemedText
+          style={[
+            styles.tabLabel,
+            { color: isFocused ? colors.tint : inactiveIconColor },
+          ]}>
+          {config.label}
+        </ThemedText>
+      </AnimatedPressable>
+    );
+  };
+
+  const leftRoutes = state.routes.slice(0, 2);
+  const rightRoutes = state.routes.slice(2, 4);
+
   return (
     <View pointerEvents="box-none" style={[styles.tabBarContainer, { bottom: bottomOffset }]}>
-      {/* 
-        Semi-circular dome backing:
-        Directly unified with the top edge of the bottom bar, located right above the Charts tab
-      */}
-      <View
-        style={[
-          styles.halfCircleArch,
-          {
-            backgroundColor: isDark ? '#18181C' : '#FFFFFF',
-            borderColor: colors.border,
-          },
-        ]}
-        pointerEvents="none"
-      />
-
-      {/* The Dome-Shaped Action Button */}
+      {/* Floating Center Action Button (+), partially raised above the pill dock */}
       <AnimatedPressable
         style={[
-          styles.domeAddButton,
+          styles.floatingAddButton,
           {
             backgroundColor: colors.tint,
             shadowColor: isDark ? colors.tint : '#64748B',
           },
         ]}
-        hitSlop={{ top: 10, bottom: 8, left: 10, right: 10 }}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         onPress={onAddPress}>
-        <Ionicons name="add" size={24} color={isDark ? '#000000' : '#FFFFFF'} />
+        <Ionicons name="add" size={28} color={isDark ? '#000000' : '#FFFFFF'} />
       </AnimatedPressable>
 
-      {/* Main Tab Bar Body */}
+      {/* Main Pill Dock Body */}
       <View
         style={[
           styles.tabBarMain,
           {
-            backgroundColor: isDark ? '#18181C' : '#FFFFFF',
+            backgroundColor: isDark ? '#141722' : '#FFFFFF',
             borderColor: colors.border,
             shadowColor: isDark ? '#000000' : '#64748B',
             shadowOpacity: isDark ? 0.45 : 0.12,
           },
         ]}>
-        {state.routes.map((route: any, index: number) => {
-          const { options } = descriptors[route.key];
-          const isFocused = state.index === index;
+        {/* Left Side: Wallet & Charts */}
+        {leftRoutes.map((route: any, i: number) => renderTabItem(route, i))}
 
-          const onPress = () => {
-            const event = emitter?.emit?.({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            }) ?? navigation?.emit?.({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            });
+        {/* Center Space Reserved for the Floating + Button */}
+        <View style={styles.centerGap} pointerEvents="none" />
 
-            if (!isFocused && !event?.defaultPrevented) {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              if (typeof navigateToTab === 'function') {
-                navigateToTab(route.key);
-              } else if (navigation?.navigate) {
-                navigation.navigate(route.name, route.params);
-              } else {
-                router.navigate(route.name === 'index' ? '/(tabs)' : `/(tabs)/${route.name}` as any);
-              }
-            }
-          };
-
-          let iconName: any = 'square';
-          let label = options.title || route.name;
-
-          if (route.name === 'index') {
-            iconName = isFocused ? 'wallet' : 'wallet-outline';
-            label = t('tabHome');
-          } else if (route.name === 'explore') {
-            iconName = isFocused ? 'pie-chart' : 'pie-chart-outline';
-            label = t('tabCharts');
-          } else if (route.name === 'recurring') {
-            iconName = isFocused ? 'repeat' : 'repeat-outline';
-            label = t('tabRecurring');
-          }
-
-          const isChartsTab = route.name === 'explore';
-
-          return (
-            <AnimatedPressable
-              key={route.key}
-              onPress={onPress}
-              style={[styles.tabItem, isChartsTab && styles.chartsTabItem]}>
-              <Ionicons
-                size={isChartsTab ? 20 : 22}
-                name={iconName}
-                color={isFocused ? colors.tint : inactiveIconColor}
-              />
-              <ThemedText
-                style={[
-                  styles.tabLabel,
-                  { color: isFocused ? colors.tint : inactiveIconColor },
-                ]}>
-                {label}
-              </ThemedText>
-            </AnimatedPressable>
-          );
-        })}
+        {/* Right Side: Loop & Cards */}
+        {rightRoutes.map((route: any, i: number) => renderTabItem(route, i + 2))}
       </View>
     </View>
   );
@@ -143,7 +157,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: 'Wallet',
         }}
       />
       <Tabs.Screen
@@ -155,7 +169,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="recurring"
         options={{
-          title: 'Recurring',
+          title: 'Loop',
+        }}
+      />
+      <Tabs.Screen
+        name="cards"
+        options={{
+          title: 'Cards',
         }}
       />
     </Tabs>
@@ -167,76 +187,55 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    height: 122,
+    height: 90,
     justifyContent: 'flex-end',
     alignItems: 'center',
     zIndex: 100,
   },
-  halfCircleArch: {
+  floatingAddButton: {
     position: 'absolute',
-    bottom: 64,
+    top: 0,
     alignSelf: 'center',
-    width: 78,
-    height: 40,
-    borderTopLeftRadius: 39,
-    borderTopRightRadius: 39,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    backgroundColor: '#18181C',
-    borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderBottomWidth: 0,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    zIndex: 10,
-  },
-  domeAddButton: {
-    position: 'absolute',
-    bottom: 67,
-    alignSelf: 'center',
-    width: 62,
-    height: 33,
-    borderTopLeftRadius: 31,
-    borderTopRightRadius: 31,
-    borderBottomLeftRadius: 2,
-    borderBottomRightRadius: 2,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: Colors.tint,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 2,
     zIndex: 20,
     ...Platform.select({
       ios: {
         shadowColor: Colors.tint,
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.5,
-        shadowRadius: 8,
+        shadowRadius: 10,
       },
       android: {
-        elevation: 6,
+        elevation: 8,
       },
     }),
   },
   tabBarMain: {
     width: '100%',
-    height: 66,
-    backgroundColor: '#18181C',
-    borderRadius: 24,
+    height: 68,
+    backgroundColor: '#141722',
+    borderRadius: 36,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    zIndex: 5,
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    zIndex: 10,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.45,
+        shadowOpacity: 0.4,
         shadowRadius: 16,
       },
       android: {
-        elevation: 10,
+        elevation: 8,
       },
     }),
   },
@@ -245,14 +244,15 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    paddingVertical: 8,
   },
-  chartsTabItem: {
-    paddingTop: 8,
+  centerGap: {
+    width: 60,
   },
   tabLabel: {
     fontSize: 11,
     fontWeight: '700',
+    marginTop: 4,
     letterSpacing: 0.2,
   },
 });

@@ -19,26 +19,17 @@ import * as Haptics from 'expo-haptics';
 import { ThemedText } from '@/components/ThemedText';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
-import { expenseCategories } from '@/constants/Categories';
+import { expenseCategories, incomeCategories, getCategoryLabel, isSavingsCategory } from '@/constants/Categories';
 import { db } from '@/firebaseConfig';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings, ThemeColors } from '@/context/SettingsContext';
 import { Colors } from '@/constants/Colors';
 
-const INCOME_SHORTCUTS = [
-  { label: 'Salary', icon: 'cash-outline' },
-  { label: 'Freelance', icon: 'laptop-outline' },
-  { label: 'Investment', icon: 'trending-up-outline' },
-  { label: 'Gift', icon: 'gift-outline' },
-  { label: 'Rental', icon: 'key-outline' },
-  { label: 'Other', icon: 'apps-outline' },
-];
-
 export default function AddTransactionScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const { colors, isDark } = useSettings();
+  const { colors, isDark, t, language } = useSettings();
   const styles = React.useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
   const [description, setDescription] = useState('');
@@ -56,30 +47,31 @@ export default function AddTransactionScreen() {
     setPurchaseRate('');
   };
 
+  const isSavings = type === 'expense' && isSavingsCategory(category);
+
   const handleSaveTransaction = async () => {
     if (!user) {
-      Alert.alert('Error', 'User not authenticated. Please try again.');
+      Alert.alert(language === 'tr' ? 'Hata' : 'Error', language === 'tr' ? 'Kullanıcı oturumu bulunamadı.' : 'User not authenticated. Please try again.');
       return;
     }
 
     const isExpense = type === 'expense';
-    const isSavings = isExpense && category === 'Savings';
     const savingsFieldsValid = !isSavings || purchaseRate;
 
     if ((isExpense && !description) || !amount || !category || !savingsFieldsValid) {
-      Alert.alert('Incomplete Form', 'Please fill in all required fields.');
+      Alert.alert(language === 'tr' ? 'Eksik Alan' : 'Incomplete Form', t('fillAllFields'));
       return;
     }
 
     const numericAmount = parseFloat(amount.replace(',', '.'));
     if (isNaN(numericAmount) || numericAmount <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid positive number for the amount.');
+      Alert.alert(language === 'tr' ? 'Geçersiz Tutar' : 'Invalid Amount', t('invalidAmount'));
       return;
     }
 
     const numericPurchaseRate = parseFloat(purchaseRate.replace(',', '.'));
     if (isSavings && (isNaN(numericPurchaseRate) || numericPurchaseRate <= 0)) {
-      Alert.alert('Invalid Rate', 'Please enter a valid number for the purchase rate.');
+      Alert.alert(language === 'tr' ? 'Geçersiz Kur' : 'Invalid Rate', t('invalidRate'));
       return;
     }
 
@@ -90,7 +82,7 @@ export default function AddTransactionScreen() {
       const totalCost = isSavings ? numericAmount * numericPurchaseRate : numericAmount;
 
       const transactionData: any = {
-        description: isExpense ? description : category,
+        description: isExpense ? description : (getCategoryLabel(category, language) || category),
         amount: isExpense ? -Math.abs(totalCost) : Math.abs(totalCost),
         category,
         currency: transactionCurrency.code,
@@ -107,14 +99,14 @@ export default function AddTransactionScreen() {
 
       Toast.show({
         type: 'success',
-        text1: 'Saved',
-        text2: `${type === 'expense' ? 'Expense' : 'Income'} recorded successfully.`,
+        text1: t('transactionSaved'),
+        text2: t('transactionSavedDesc'),
       });
 
       router.back();
     } catch (error) {
       console.error('Error adding document: ', error);
-      Alert.alert('Error', 'An error occurred while saving the transaction.');
+      Alert.alert(language === 'tr' ? 'Hata' : 'Error', language === 'tr' ? 'İşlem kaydedilirken bir hata oluştu.' : 'An error occurred while saving the transaction.');
     } finally {
       setLoading(false);
     }
@@ -136,8 +128,6 @@ export default function AddTransactionScreen() {
     }
   };
 
-  const isSavings = type === 'expense' && category === 'Savings';
-
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -151,7 +141,7 @@ export default function AddTransactionScreen() {
           style={styles.closeButton}>
           <Ionicons name="close" size={22} color="#D1D1D6" />
         </AnimatedPressable>
-        <ThemedText style={styles.navTitle}>New Transaction</ThemedText>
+        <ThemedText style={styles.navTitle}>{t('newTransactionTitle')}</ThemedText>
         <View style={{ width: 36 }} />
       </View>
 
@@ -167,7 +157,7 @@ export default function AddTransactionScreen() {
             onPress={() => handleTypeChange('expense')}>
             <Ionicons name="arrow-up" size={15} color={type === 'expense' ? '#FFF' : '#8E8E93'} />
             <ThemedText style={[styles.typeButtonText, type === 'expense' && styles.typeButtonTextActive]}>
-              Expense
+              {t('expenseType')}
             </ThemedText>
           </AnimatedPressable>
 
@@ -180,14 +170,14 @@ export default function AddTransactionScreen() {
                 styles.typeButtonText,
                 type === 'income' && { color: '#000', fontWeight: '800' },
               ]}>
-              Income
+              {t('incomeType')}
             </ThemedText>
           </AnimatedPressable>
         </View>
 
         {/* Hero Amount Display & Input Card */}
         <View style={styles.amountCard}>
-          <ThemedText style={styles.amountLabel}>ENTER AMOUNT</ThemedText>
+          <ThemedText style={styles.amountLabel}>{t('enterAmount')}</ThemedText>
           <View style={styles.amountRow}>
             <ThemedText style={styles.currencySymbolLarge}>{transactionCurrency.symbol}</ThemedText>
             <TextInput
@@ -229,7 +219,7 @@ export default function AddTransactionScreen() {
             <View style={styles.inputRow}>
               <Ionicons name="create-outline" size={18} color="#8E8E93" style={styles.fieldIcon} />
               <TextInput
-                placeholder={isSavings ? "Asset Name (e.g. Gold Gram, Silver)" : "Description (e.g. Groceries at Market)"}
+                placeholder={isSavings ? t('assetNamePlaceholder') : t('descriptionPlaceholder')}
                 value={description}
                 onChangeText={setDescription}
                 style={styles.fieldInput}
@@ -246,7 +236,7 @@ export default function AddTransactionScreen() {
             <View style={styles.inputRow}>
               <Ionicons name="pricetag-outline" size={18} color="#8E8E93" style={styles.fieldIcon} />
               <TextInput
-                placeholder={`Purchase Rate (e.g. 1 Unit = 4180 ${transactionCurrency.symbol})`}
+                placeholder={`${t('purchaseRatePlaceholder')} ${transactionCurrency.symbol})`}
                 value={purchaseRate}
                 onChangeText={handleRateChange}
                 style={styles.fieldInput}
@@ -260,13 +250,14 @@ export default function AddTransactionScreen() {
         {/* Categories Section */}
         <View style={styles.sectionWrap}>
           <ThemedText style={styles.sectionTitle}>
-            {type === 'expense' ? 'Select Category' : 'Income Source'}
+            {type === 'expense' ? t('selectCategory') : t('incomeSourceSelect')}
           </ThemedText>
 
           {type === 'expense' ? (
             <View style={styles.categoryGrid}>
               {expenseCategories.map((cat) => {
-                const isSelected = category === cat.label;
+                const isSelected = category === cat.label || category === cat.key || category === cat.labelTr || category === cat.labelEn;
+                const label = language === 'tr' ? cat.labelTr : cat.labelEn;
                 return (
                   <AnimatedPressable
                     key={cat.key}
@@ -289,7 +280,7 @@ export default function AddTransactionScreen() {
                     <ThemedText
                       style={[styles.categoryLabel, isSelected && styles.categoryLabelActive]}
                       numberOfLines={1}>
-                      {cat.label}
+                      {label}
                     </ThemedText>
                   </AnimatedPressable>
                 );
@@ -299,11 +290,12 @@ export default function AddTransactionScreen() {
             <>
               {/* Income Shortcut Chips */}
               <View style={styles.incomeShortcuts}>
-                {INCOME_SHORTCUTS.map((item) => {
-                  const isSelected = category === item.label;
+                {incomeCategories.map((item) => {
+                  const isSelected = category === item.label || category === item.key || category === item.labelTr || category === item.labelEn;
+                  const label = language === 'tr' ? item.labelTr : item.labelEn;
                   return (
                     <AnimatedPressable
-                      key={item.label}
+                      key={item.key}
                       onPress={() => {
                         Haptics.selectionAsync().catch(() => {});
                         setCategory(item.label);
@@ -315,7 +307,7 @@ export default function AddTransactionScreen() {
                         color={isSelected ? Colors.tint : '#8E8E93'}
                       />
                       <ThemedText style={[styles.shortcutText, isSelected && styles.shortcutTextActive]}>
-                        {item.label}
+                        {label}
                       </ThemedText>
                     </AnimatedPressable>
                   );
@@ -327,7 +319,7 @@ export default function AddTransactionScreen() {
                 <View style={styles.inputRow}>
                   <Ionicons name="pencil-outline" size={18} color="#8E8E93" style={styles.fieldIcon} />
                   <TextInput
-                    placeholder="Or type custom source (e.g. Dividend)"
+                    placeholder={t('customIncomeSourcePlaceholder')}
                     value={category}
                     onChangeText={setCategory}
                     style={styles.fieldInput}
@@ -350,7 +342,7 @@ export default function AddTransactionScreen() {
             <>
               <Ionicons name="checkmark" size={20} color="#000" />
               <ThemedText style={styles.saveButtonText}>
-                {`Save ${type === 'expense' ? 'Expense' : 'Income'}`}
+                {t('saveTransaction')}
               </ThemedText>
             </>
           )}

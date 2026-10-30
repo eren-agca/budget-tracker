@@ -27,7 +27,7 @@ export default function LoginScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isDark, colors } = useSettings();
+  const { isDark, colors, t, language } = useSettings();
   const styles = createStyles(colors, isDark);
 
   const [email, setEmail] = useState('');
@@ -39,8 +39,8 @@ export default function LoginScreen() {
     if (!email || !password) {
       Toast.show({
         type: 'error',
-        text1: 'Missing Information',
-        text2: 'Please enter both email and password.',
+        text1: language === 'tr' ? 'Eksik Bilgi' : 'Missing Information',
+        text2: language === 'tr' ? 'Lütfen e-posta ve şifrenizi girin.' : 'Please enter both email and password.',
       });
       return;
     }
@@ -49,19 +49,19 @@ export default function LoginScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       await signInWithEmailAndPassword(auth, email.trim(), password);
     } catch (error: any) {
-      let errorMessage = 'An unexpected error occurred. Please try again.';
+      let errorMessage = language === 'tr' ? 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.' : 'An unexpected error occurred. Please try again.';
       if (
         error.code === 'auth/user-not-found' ||
         error.code === 'auth/wrong-password' ||
         error.code === 'auth/invalid-credential'
       ) {
-        errorMessage = 'Invalid email or password. Please try again.';
+        errorMessage = language === 'tr' ? 'Geçersiz e-posta veya şifre. Lütfen tekrar deneyin.' : 'Invalid email or password. Please try again.';
       } else if (error.message) {
         errorMessage = error.message;
       }
       Toast.show({
         type: 'error',
-        text1: 'Login Failed',
+        text1: language === 'tr' ? 'Giriş Başarısız' : 'Login Failed',
         text2: errorMessage,
       });
     } finally {
@@ -78,8 +78,8 @@ export default function LoginScreen() {
     } catch (error: any) {
       Toast.show({
         type: 'error',
-        text1: 'Sign-In Failed',
-        text2: error.message || 'Could not sign in anonymously.',
+        text1: language === 'tr' ? 'Giriş Başarısız' : 'Sign-In Failed',
+        text2: error.message || (language === 'tr' ? 'Misafir girişi yapılamadı.' : 'Could not sign in anonymously.'),
       });
     } finally {
       setLoading(false);
@@ -98,9 +98,9 @@ export default function LoginScreen() {
             <View style={styles.brandIconGlow}>
               <Ionicons name="wallet" size={32} color={Colors.tint} />
             </View>
-            <ThemedText style={styles.brandTitle}>Welcome Back</ThemedText>
+            <ThemedText style={styles.brandTitle}>{t('loginWelcomeTitle')}</ThemedText>
             <ThemedText style={styles.brandSubtitle}>
-              Log in to access and manage your personal wealth.
+              {t('loginWelcomeSubtitle')}
             </ThemedText>
           </View>
 
@@ -111,7 +111,7 @@ export default function LoginScreen() {
               <Ionicons name="mail-outline" size={19} color={colors.textSecondary} style={styles.fieldIcon} />
               <TextInput
                 style={styles.textInput}
-                placeholder="Email Address"
+                placeholder={t('emailPlaceholder')}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -126,7 +126,7 @@ export default function LoginScreen() {
               <Ionicons name="lock-closed-outline" size={19} color={colors.textSecondary} style={styles.fieldIcon} />
               <TextInput
                 style={styles.textInput}
-                placeholder="Password"
+                placeholder={t('passwordPlaceholder')}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
@@ -151,14 +151,14 @@ export default function LoginScreen() {
               {loading ? (
                 <ActivityIndicator color={isDark ? '#000000' : '#FFFFFF'} />
               ) : (
-                <ThemedText style={styles.primaryButtonText}>Log In</ThemedText>
+                <ThemedText style={styles.primaryButtonText}>{t('loginBtn')}</ThemedText>
               )}
             </AnimatedPressable>
 
             {/* Divider */}
             <View style={styles.dividerRow}>
               <View style={styles.dividerLine} />
-              <ThemedText style={styles.dividerLabel}>OR</ThemedText>
+              <ThemedText style={styles.dividerLabel}>{language === 'tr' ? 'VEYA' : 'OR'}</ThemedText>
               <View style={styles.dividerLine} />
             </View>
 
@@ -169,17 +169,17 @@ export default function LoginScreen() {
                 onPress={handleAnonymousSignIn}
                 disabled={loading}>
                 <Ionicons name="finger-print-outline" size={18} color={colors.textSecondary} />
-                <ThemedText style={styles.guestButtonText}>Continue as Guest</ThemedText>
+                <ThemedText style={styles.guestButtonText}>{t('guestBtn')}</ThemedText>
               </AnimatedPressable>
             )}
           </View>
 
           {/* Sign Up Footer Link */}
           <View style={styles.footerRow}>
-            <ThemedText style={styles.footerPrompt}>Don&apos;t have an account? </ThemedText>
+            <ThemedText style={styles.footerPrompt}>{t('noAccountPrompt')} </ThemedText>
             <Link href="/signup" asChild>
               <AnimatedPressable hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <ThemedText style={styles.footerLink}>Create Account</ThemedText>
+                <ThemedText style={styles.footerLink}>{t('signupBtn')}</ThemedText>
               </AnimatedPressable>
             </Link>
           </View>
