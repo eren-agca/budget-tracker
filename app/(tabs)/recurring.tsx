@@ -161,7 +161,8 @@ export default function RecurringScreen() {
 
   // --- Subscriptions State ---
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [isSubFormExpanded, setIsSubFormExpanded] = useState(true);
+  const [isSubModalVisible, setIsSubModalVisible] = useState(false);
+  const [isIncomeModalVisible, setIsIncomeModalVisible] = useState(false);
   const [subName, setSubName] = useState('Netflix');
   const [subAmount, setSubAmount] = useState('');
   const [subCurrency, setSubCurrency] = useState<Currency>(defaultCurrency);
@@ -345,6 +346,8 @@ export default function RecurringScreen() {
       setSubDueDay('');
       setSubBank('');
       setSelectedPreset(null);
+      setBankModalVisible(false);
+      setIsSubModalVisible(false);
     } catch (err) {
       console.error('Error adding subscription:', err);
       Toast.show({
@@ -481,6 +484,7 @@ export default function RecurringScreen() {
       setCategory('');
       setDayOfMonth('');
       setIncomeCurrency(defaultCurrency);
+      setIsIncomeModalVisible(false);
 
       Toast.show({
         type: 'success',
@@ -648,272 +652,34 @@ export default function RecurringScreen() {
               </View>
             </View>
 
-            {/* Collapsible New Subscription Form */}
-            <View style={styles.formCard}>
-              <View style={styles.formToggleRow}>
-                <View style={styles.formCardTitleRow}>
-                  <Ionicons name="sparkles" size={18} color={Colors.tint} />
-                  <ThemedText style={styles.formCardTitle}>{t('newSubscription')}</ThemedText>
+            {/* Open New Subscription Modal Button */}
+            <AnimatedPressable
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setBankModalVisible(false);
+                setIsSubModalVisible(true);
+              }}
+              style={styles.openModalCtaBtn}>
+              <View style={styles.openModalCtaLeft}>
+                <View style={[styles.openModalIconCircle, { backgroundColor: colors.tintSoft }]}>
+                  <Ionicons name="sparkles" size={19} color={colors.tint} />
                 </View>
-                <AnimatedPressable
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
-                    setIsSubFormExpanded(!isSubFormExpanded);
-                  }}
-                  style={styles.toggleCollapseBtn}>
-                  <ThemedText style={styles.toggleCollapseText}>
-                    {isSubFormExpanded ? (language === 'tr' ? 'Gizle' : 'Hide') : (language === 'tr' ? '+ Formu Aç' : '+ Open Form')}
+                <View style={styles.openModalTextCol}>
+                  <ThemedText style={styles.openModalTitle}>{t('newSubscription')}</ThemedText>
+                  <ThemedText style={styles.openModalSubtitle} numberOfLines={1}>
+                    {language === 'tr'
+                      ? 'Netflix, Spotify, iCloud veya özel abonelik ekleyin'
+                      : 'Add Netflix, Spotify, iCloud or custom service'}
                   </ThemedText>
-                  <Ionicons
-                    name={isSubFormExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={16}
-                    color={Colors.tint}
-                    style={{ marginLeft: 4 }}
-                  />
-                </AnimatedPressable>
-              </View>
-
-              {isSubFormExpanded && (
-                <View style={{ marginTop: 14 }}>
-                  {/* Quick Preset Selector */}
-                  <ThemedText style={styles.inputLabel}>{language === 'tr' ? 'HIZLI SERVİS SEÇİN' : 'QUICK SERVICE SELECTION'}</ThemedText>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.presetScrollContent}
-                    style={{ marginBottom: 14 }}>
-                    {PRESET_SUBSCRIPTIONS.map((preset) => {
-                      const isSelected = selectedPreset === preset.name;
-                      return (
-                        <TouchableOpacity
-                          key={preset.name}
-                          activeOpacity={0.7}
-                          onPress={() => handleSelectPreset(preset)}
-                          style={[
-                            styles.presetChip,
-                            isSelected && {
-                              borderColor: preset.color,
-                              backgroundColor: `${preset.color}22`,
-                            },
-                          ]}>
-                          <View
-                            style={[
-                              styles.presetDot,
-                              { backgroundColor: preset.color },
-                              isSelected && { transform: [{ scale: 1.25 }] },
-                            ]}
-                          />
-                          <ThemedText
-                            style={[
-                              styles.presetChipText,
-                              isSelected && { color: '#FFFFFF', fontWeight: '700' },
-                            ]}>
-                            {preset.name}
-                          </ThemedText>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-
-                  {/* Service Name Input */}
-                  <ThemedText style={styles.inputLabel}>{t('subName').toUpperCase()}</ThemedText>
-                  <View style={styles.inputWrap}>
-                    <Ionicons
-                      name={(subIcon as any) || 'play-circle-outline'}
-                      size={18}
-                      color={subColor || Colors.tint}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      placeholder={language === 'tr' ? 'Örn: Netflix, Spotify, ChatGPT Plus...' : 'e.g. Netflix, Spotify, ChatGPT Plus...'}
-                      value={subName}
-                      onChangeText={(t) => {
-                        setSubName(t);
-                        setSelectedPreset(null);
-                      }}
-                      style={styles.textInput}
-                      maxLength={40}
-                      placeholderTextColor="#636366"
-                    />
-                  </View>
-
-                  {/* Category & Billing Cycle Row */}
-                  <View style={styles.inputsRow}>
-                    <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
-                      <ThemedText style={styles.inputLabel}>{language === 'tr' ? 'KATEGORİ' : 'CATEGORY'}</ThemedText>
-                      <View style={styles.inputWrap}>
-                        <Ionicons name="pricetag-outline" size={16} color="#8E8E93" style={styles.inputIcon} />
-                        <TextInput
-                          placeholder={language === 'tr' ? 'Örn: Dizi / Film, Müzik' : 'e.g. Video, Music, AI'}
-                          value={subCategory}
-                          onChangeText={setSubCategory}
-                          style={styles.textInput}
-                          maxLength={30}
-                          placeholderTextColor="#636366"
-                        />
-                      </View>
-                    </View>
-
-                    <View style={[styles.inputGroupCol, { flex: 1 }]}>
-                      <ThemedText style={styles.inputLabel}>{t('billingCycle').toUpperCase()}</ThemedText>
-                      <View style={styles.cycleToggleRow}>
-                        <TouchableOpacity
-                          activeOpacity={0.7}
-                          onPress={() => {
-                            Haptics.selectionAsync().catch(() => {});
-                            setSubBillingCycle('monthly');
-                          }}
-                          style={[
-                            styles.cyclePill,
-                            subBillingCycle === 'monthly' && styles.cyclePillActive,
-                          ]}>
-                          <ThemedText
-                            style={[
-                              styles.cyclePillText,
-                              subBillingCycle === 'monthly' && styles.cyclePillTextActive,
-                            ]}>
-                            {t('monthly')}
-                          </ThemedText>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          activeOpacity={0.7}
-                          onPress={() => {
-                            Haptics.selectionAsync().catch(() => {});
-                            setSubBillingCycle('yearly');
-                          }}
-                          style={[
-                            styles.cyclePill,
-                            subBillingCycle === 'yearly' && styles.cyclePillActive,
-                          ]}>
-                          <ThemedText
-                            style={[
-                              styles.cyclePillText,
-                              subBillingCycle === 'yearly' && styles.cyclePillTextActive,
-                            ]}>
-                            {t('yearly')}
-                          </ThemedText>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Currency Switcher */}
-                  <ThemedText style={styles.inputLabel}>{language === 'tr' ? 'PARA BİRİMİ' : 'CURRENCY'}</ThemedText>
-                  <View style={styles.currencyGroup}>
-                    {currencies.map((c) => {
-                      const isActive = subCurrency.code === c.code;
-                      return (
-                        <AnimatedPressable
-                          key={c.code}
-                          onPress={() => {
-                            Haptics.selectionAsync().catch(() => {});
-                            setSubCurrency(c);
-                          }}
-                          style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
-                          <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
-                            {c.label}
-                          </ThemedText>
-                        </AnimatedPressable>
-                      );
-                    })}
-                  </View>
-
-                  {/* Amount & Due Day Row */}
-                  <View style={styles.inputsRow}>
-                    <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
-                      <ThemedText style={styles.inputLabel}>
-                        {subBillingCycle === 'yearly' ? (language === 'tr' ? 'YILLIK TUTAR' : 'YEARLY AMOUNT') : (language === 'tr' ? 'AYLIK TUTAR' : 'MONTHLY AMOUNT')}
-                      </ThemedText>
-                      <View style={styles.inputWrap}>
-                        <ThemedText style={styles.inputPrefix}>{subCurrency.symbol}</ThemedText>
-                        <TextInput
-                          placeholder="0.00"
-                          value={subAmount}
-                          onChangeText={(t) => formatNumberInput(t, setSubAmount)}
-                          style={styles.textInput}
-                          keyboardType="numeric"
-                          maxLength={12}
-                          placeholderTextColor="#636366"
-                        />
-                      </View>
-                    </View>
-
-                    <View style={[styles.inputGroupCol, { flex: 1 }]}>
-                      <ThemedText style={styles.inputLabel}>{t('dueDay').toUpperCase()}</ThemedText>
-                      <View style={styles.inputWrap}>
-                        <Ionicons name="today-outline" size={17} color="#8E8E93" style={styles.inputIcon} />
-                        <TextInput
-                          placeholder={language === 'tr' ? 'Gün (1-31)' : 'Day (1-31)'}
-                          value={subDueDay}
-                          onChangeText={(t) => handleDayInput(t, setSubDueDay)}
-                          onBlur={() => handleDayBlur(subDueDay, setSubDueDay)}
-                          style={styles.textInput}
-                          keyboardType="number-pad"
-                          maxLength={2}
-                          placeholderTextColor="#636366"
-                        />
-                      </View>
-                    </View>
-                  </View>
-
-                  {/* Optional Bank / Card Selector */}
-                  <ThemedText style={styles.inputLabel}>{t('paymentMethodBank').toUpperCase()} ({language === 'tr' ? 'OPSİYONEL' : 'OPTIONAL'})</ThemedText>
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    style={[styles.bankSelectorButton, subBank ? styles.bankSelectorButtonActive : null]}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setBankSearchQuery('');
-                      setBankModalVisible(true);
-                    }}>
-                    <View style={styles.bankSelectorLeft}>
-                      <View style={[styles.bankIconCircle, subBank ? styles.bankIconCircleActive : null]}>
-                        <Ionicons
-                          name="card-outline"
-                          size={18}
-                          color={subBank ? Colors.tint : '#8E8E93'}
-                        />
-                      </View>
-                      <ThemedText style={[styles.bankSelectorText, subBank ? styles.bankSelectorTextActive : null]}>
-                        {subBank || (language === 'tr' ? 'Banka veya Kredi Kartı Seçin' : 'Select Bank or Card')}
-                      </ThemedText>
-                    </View>
-                    <Ionicons name="chevron-down" size={17} color={subBank ? Colors.tint : '#8E8E93'} />
-                  </TouchableOpacity>
-
-                  {/* Quick Bank Chips */}
-                  <View style={styles.chipRow}>
-                    {COMMON_BANKS.map((b) => {
-                      const isSelected = subBank === b;
-                      return (
-                        <TouchableOpacity
-                          activeOpacity={0.7}
-                          key={b}
-                          onPress={() => {
-                            Haptics.selectionAsync().catch(() => {});
-                            setSubBank(isSelected ? '' : b);
-                          }}
-                          style={[styles.chip, isSelected && styles.chipActive]}>
-                          <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                            {b}
-                          </ThemedText>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  {/* Add Subscription Button */}
-                  <AnimatedPressable
-                    style={[styles.addButton, { backgroundColor: Colors.tint, marginTop: 6 }]}
-                    onPress={handleAddSubscription}>
-                    <Ionicons name="add" size={20} color="#000" />
-                    <ThemedText style={[styles.addButtonText, { color: '#000' }]}>
-                      {t('saveSubscription')}
-                    </ThemedText>
-                  </AnimatedPressable>
                 </View>
-              )}
-            </View>
+              </View>
+              <View style={[styles.openModalActionBadge, { backgroundColor: colors.tint }]}>
+                <Ionicons name="add" size={18} color={isDark ? '#000000' : '#FFFFFF'} />
+                <ThemedText style={[styles.openModalActionBadgeText, { color: isDark ? '#000000' : '#FFFFFF' }]}>
+                  {language === 'tr' ? 'Ekle' : 'Add'}
+                </ThemedText>
+              </View>
+            </AnimatedPressable>
 
             {/* Subscriptions List Section Header */}
             <View style={styles.sectionHeaderRow}>
@@ -1041,91 +807,33 @@ export default function RecurringScreen() {
         {/* ================= RECURRING INCOMES TAB ================= */}
         {activeTab === 'income' && (
           <>
-            <View style={styles.formCard}>
-              <View style={styles.formCardTitleRow}>
-                <Ionicons name="calendar" size={16} color={Colors.income} />
-                <ThemedText style={styles.formCardTitle}>{t('newRecurringIncome')}</ThemedText>
-              </View>
-
-              {/* Source Input */}
-              <ThemedText style={styles.inputLabel}>{t('incomeSource').toUpperCase()}</ThemedText>
-              <View style={styles.inputWrap}>
-                <Ionicons name="briefcase-outline" size={18} color="#8E8E93" style={styles.inputIcon} />
-                <TextInput
-                  placeholder={language === 'tr' ? 'Örn: Maaş, Kira Geliri, Temettü' : 'e.g. Salary, Rent, Dividends'}
-                  value={category}
-                  onChangeText={setCategory}
-                  style={styles.textInput}
-                  maxLength={40}
-                  placeholderTextColor="#636366"
-                />
-              </View>
-
-              {/* Currency Switcher */}
-              <ThemedText style={styles.inputLabel}>{language === 'tr' ? 'PARA BİRİMİ' : 'CURRENCY'}</ThemedText>
-              <View style={styles.currencyGroup}>
-                {currencies.map((c) => {
-                  const isActive = incomeCurrency.code === c.code;
-                  return (
-                    <AnimatedPressable
-                      key={c.code}
-                      onPress={() => {
-                        Haptics.selectionAsync().catch(() => {});
-                        setIncomeCurrency(c);
-                      }}
-                      style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
-                      <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
-                        {c.label}
-                      </ThemedText>
-                    </AnimatedPressable>
-                  );
-                })}
-              </View>
-
-              {/* Amount & Day Inputs Row */}
-              <View style={styles.inputsRow}>
-                <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
-                  <ThemedText style={styles.inputLabel}>{language === 'tr' ? 'AYLIK TUTAR' : 'MONTHLY AMOUNT'}</ThemedText>
-                  <View style={styles.inputWrap}>
-                    <ThemedText style={styles.inputPrefix}>{incomeCurrency.symbol}</ThemedText>
-                    <TextInput
-                      placeholder="0.00"
-                      value={amount}
-                      onChangeText={(t) => formatNumberInput(t, setAmount)}
-                      style={styles.textInput}
-                      keyboardType="numeric"
-                      maxLength={12}
-                      placeholderTextColor="#636366"
-                    />
-                  </View>
+            {/* Open New Recurring Income Modal Button */}
+            <AnimatedPressable
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setIsIncomeModalVisible(true);
+              }}
+              style={styles.openModalCtaBtn}>
+              <View style={styles.openModalCtaLeft}>
+                <View style={[styles.openModalIconCircle, { backgroundColor: colors.incomeSoft }]}>
+                  <Ionicons name="calendar" size={19} color={colors.income} />
                 </View>
-
-                <View style={[styles.inputGroupCol, { flex: 1 }]}>
-                  <ThemedText style={styles.inputLabel}>{t('dayOfMonth').toUpperCase()}</ThemedText>
-                  <View style={styles.inputWrap}>
-                    <Ionicons name="today-outline" size={17} color="#8E8E93" style={styles.inputIcon} />
-                    <TextInput
-                      placeholder={language === 'tr' ? 'Gün (1-31)' : 'Day (1-31)'}
-                      value={dayOfMonth}
-                      onChangeText={(t) => handleDayInput(t, setDayOfMonth)}
-                      onBlur={() => handleDayBlur(dayOfMonth, setDayOfMonth)}
-                      style={styles.textInput}
-                      keyboardType="number-pad"
-                      maxLength={2}
-                      placeholderTextColor="#636366"
-                    />
-                  </View>
+                <View style={styles.openModalTextCol}>
+                  <ThemedText style={styles.openModalTitle}>{t('newRecurringIncome')}</ThemedText>
+                  <ThemedText style={styles.openModalSubtitle} numberOfLines={1}>
+                    {language === 'tr'
+                      ? 'Maaş, kira veya aylık düzenli gelir ekleyin'
+                      : 'Add salary, rent or monthly recurring income'}
+                  </ThemedText>
                 </View>
               </View>
-
-              {/* Add Button */}
-              <AnimatedPressable
-                style={[styles.addButton, { backgroundColor: Colors.income }]}
-                onPress={handleAddRecurringIncome}>
-                <Ionicons name="add" size={20} color="#000" />
-                <ThemedText style={styles.addButtonText}>{t('saveRecurringIncome')}</ThemedText>
-              </AnimatedPressable>
-            </View>
+              <View style={[styles.openModalActionBadge, { backgroundColor: colors.income }]}>
+                <Ionicons name="add" size={18} color="#000000" />
+                <ThemedText style={[styles.openModalActionBadgeText, { color: '#000000' }]}>
+                  {language === 'tr' ? 'Ekle' : 'Add'}
+                </ThemedText>
+              </View>
+            </AnimatedPressable>
 
             {/* Section Header */}
             <View style={styles.sectionHeaderRow}>
@@ -1187,81 +895,491 @@ export default function RecurringScreen() {
         )}
       </ScrollView>
 
-      {/* Bank Selection Bottom Sheet Modal */}
+      {/* Add New Subscription Modal (with integrated Bank Picker view) */}
       <SwipeableModal
-        visible={isBankModalVisible}
-        onClose={() => setBankModalVisible(false)}
-        sheetStyle={[styles.modalSheet, { maxHeight: '78%', paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
-        <View style={styles.modalHeaderRow}>
-          <ThemedText style={styles.modalSheetTitle}>{t('chooseBank')}</ThemedText>
-          <TouchableOpacity
-            onPress={() => setBankModalVisible(false)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="close-circle" size={24} color="#8E8E93" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Bank Search Input */}
-        <View style={styles.modalSearchWrap}>
-          <Ionicons name="search-outline" size={17} color="#8E8E93" style={styles.modalSearchIcon} />
-          <TextInput
-            placeholder={t('searchBank')}
-            value={bankSearchQuery}
-            onChangeText={setBankSearchQuery}
-            style={styles.modalSearchInput}
-            maxLength={30}
-            placeholderTextColor="#636366"
-            autoCorrect={false}
-          />
-          {bankSearchQuery.length > 0 && (
-            <TouchableOpacity
-              onPress={() => setBankSearchQuery('')}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="close-circle-sharp" size={17} color="#8E8E93" />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          style={{ marginTop: 8 }}>
-          {filteredBanks.map((bankName) => {
-            const isSelected = subBank === bankName;
-            return (
-              <TouchableOpacity
-                key={bankName}
-                activeOpacity={0.7}
-                style={[styles.modalItemRow, isSelected && styles.modalItemRowActive]}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
-                  setSubBank(bankName);
-                  setBankModalVisible(false);
-                }}>
-                <View style={styles.modalItemLeft}>
-                  <View style={[styles.modalBankIcon, isSelected && styles.modalBankIconActive]}>
-                    <Ionicons
-                      name={bankName === 'Diğer' ? 'ellipsis-horizontal' : 'business-outline'}
-                      size={18}
-                      color={isSelected ? Colors.tint : '#8E8E93'}
-                    />
-                  </View>
-                  <ThemedText style={[styles.modalItemText, isSelected && styles.modalItemTextActive]}>
-                    {bankName}
+        visible={isSubModalVisible}
+        onClose={() => {
+          setBankModalVisible(false);
+          setIsSubModalVisible(false);
+        }}
+        sheetStyle={[
+          styles.modalSheet,
+          { maxHeight: '88%', paddingBottom: Math.max(insets.bottom, 16) + 12 },
+        ]}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          {isBankModalVisible ? (
+            <>
+              <View style={styles.modalHeaderRow}>
+                <TouchableOpacity
+                  onPress={() => setBankModalVisible(false)}
+                  style={styles.modalBackBtn}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="arrow-back" size={20} color={colors.tint} />
+                  <ThemedText style={[styles.modalSheetTitle, { marginLeft: 6 }]}>
+                    {t('chooseBank')}
                   </ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setBankModalVisible(false)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="close-circle" size={24} color="#8E8E93" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.modalSearchWrap}>
+                <Ionicons name="search-outline" size={17} color="#8E8E93" style={styles.modalSearchIcon} />
+                <TextInput
+                  placeholder={t('searchBank')}
+                  value={bankSearchQuery}
+                  onChangeText={setBankSearchQuery}
+                  style={styles.modalSearchInput}
+                  maxLength={30}
+                  placeholderTextColor="#636366"
+                  autoCorrect={false}
+                />
+                {bankSearchQuery.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => setBankSearchQuery('')}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name="close-circle-sharp" size={17} color="#8E8E93" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                style={{ marginTop: 8, maxHeight: 420 }}>
+                {filteredBanks.map((bankName) => {
+                  const isSelected = subBank === bankName;
+                  return (
+                    <TouchableOpacity
+                      key={bankName}
+                      activeOpacity={0.7}
+                      style={[styles.modalItemRow, isSelected && styles.modalItemRowActive]}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => {});
+                        setSubBank(bankName);
+                        setBankModalVisible(false);
+                      }}>
+                      <View style={styles.modalItemLeft}>
+                        <View style={[styles.modalBankIcon, isSelected && styles.modalBankIconActive]}>
+                          <Ionicons
+                            name={bankName === 'Diğer' ? 'ellipsis-horizontal' : 'business-outline'}
+                            size={18}
+                            color={isSelected ? Colors.tint : '#8E8E93'}
+                          />
+                        </View>
+                        <ThemedText style={[styles.modalItemText, isSelected && styles.modalItemTextActive]}>
+                          {bankName}
+                        </ThemedText>
+                      </View>
+                      {isSelected && <Ionicons name="checkmark-circle" size={20} color={Colors.tint} />}
+                    </TouchableOpacity>
+                  );
+                })}
+                {filteredBanks.length === 0 && (
+                  <View style={styles.modalEmptyWrap}>
+                    <ThemedText style={styles.modalEmptyText}>
+                      {language === 'tr' ? 'Eşleşen banka bulunamadı' : 'No matching bank found'}
+                    </ThemedText>
+                  </View>
+                )}
+              </ScrollView>
+            </>
+          ) : (
+            <>
+              <View style={styles.modalHeaderRow}>
+                <View style={styles.formCardTitleRow}>
+                  <Ionicons name="sparkles" size={18} color={colors.tint} />
+                  <ThemedText style={styles.modalSheetTitle}>{t('newSubscription')}</ThemedText>
                 </View>
-                {isSelected && <Ionicons name="checkmark-circle" size={20} color={Colors.tint} />}
-              </TouchableOpacity>
-            );
-          })}
-          {filteredBanks.length === 0 && (
-            <View style={styles.modalEmptyWrap}>
-              <ThemedText style={styles.modalEmptyText}>
-                {language === 'tr' ? 'Eşleşen banka bulunamadı' : 'No matching bank found'}
-              </ThemedText>
-            </View>
+                <TouchableOpacity
+                  onPress={() => setIsSubModalVisible(false)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="close-circle" size={24} color="#8E8E93" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingBottom: 12 }}>
+                {/* Quick Preset Selector */}
+                <ThemedText style={styles.inputLabel}>
+                  {language === 'tr' ? 'HIZLI SERVİS SEÇİN' : 'QUICK SERVICE SELECTION'}
+                </ThemedText>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.presetScrollContent}
+                  style={{ marginBottom: 14 }}>
+                  {PRESET_SUBSCRIPTIONS.map((preset) => {
+                    const isSelected = selectedPreset === preset.name;
+                    return (
+                      <TouchableOpacity
+                        key={preset.name}
+                        activeOpacity={0.7}
+                        onPress={() => handleSelectPreset(preset)}
+                        style={[
+                          styles.presetChip,
+                          isSelected && {
+                            borderColor: preset.color,
+                            backgroundColor: `${preset.color}22`,
+                          },
+                        ]}>
+                        <View
+                          style={[
+                            styles.presetDot,
+                            { backgroundColor: preset.color },
+                            isSelected && { transform: [{ scale: 1.25 }] },
+                          ]}
+                        />
+                        <ThemedText
+                          style={[
+                            styles.presetChipText,
+                            isSelected && { color: colors.text, fontWeight: '700' },
+                          ]}>
+                          {preset.name}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* Service Name Input */}
+                <ThemedText style={styles.inputLabel}>{t('subName').toUpperCase()}</ThemedText>
+                <View style={styles.inputWrap}>
+                  <Ionicons
+                    name={(subIcon as any) || 'play-circle-outline'}
+                    size={18}
+                    color={subColor || Colors.tint}
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    placeholder={
+                      language === 'tr'
+                        ? 'Örn: Netflix, Spotify, ChatGPT Plus...'
+                        : 'e.g. Netflix, Spotify, ChatGPT Plus...'
+                    }
+                    value={subName}
+                    onChangeText={(txt) => {
+                      setSubName(txt);
+                      setSelectedPreset(null);
+                    }}
+                    style={styles.textInput}
+                    maxLength={40}
+                    placeholderTextColor="#636366"
+                  />
+                </View>
+
+                {/* Category & Billing Cycle Row */}
+                <View style={styles.inputsRow}>
+                  <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
+                    <ThemedText style={styles.inputLabel}>
+                      {language === 'tr' ? 'KATEGORİ' : 'CATEGORY'}
+                    </ThemedText>
+                    <View style={styles.inputWrap}>
+                      <Ionicons name="pricetag-outline" size={16} color="#8E8E93" style={styles.inputIcon} />
+                      <TextInput
+                        placeholder={language === 'tr' ? 'Örn: Dizi / Film, Müzik' : 'e.g. Video, Music, AI'}
+                        value={subCategory}
+                        onChangeText={setSubCategory}
+                        style={styles.textInput}
+                        maxLength={30}
+                        placeholderTextColor="#636366"
+                      />
+                    </View>
+                  </View>
+
+                  <View style={[styles.inputGroupCol, { flex: 1 }]}>
+                    <ThemedText style={styles.inputLabel}>{t('billingCycle').toUpperCase()}</ThemedText>
+                    <View style={styles.cycleToggleRow}>
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          setSubBillingCycle('monthly');
+                        }}
+                        style={[
+                          styles.cyclePill,
+                          subBillingCycle === 'monthly' && styles.cyclePillActive,
+                        ]}>
+                        <ThemedText
+                          style={[
+                            styles.cyclePillText,
+                            subBillingCycle === 'monthly' && styles.cyclePillTextActive,
+                          ]}>
+                          {t('monthly')}
+                        </ThemedText>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          setSubBillingCycle('yearly');
+                        }}
+                        style={[
+                          styles.cyclePill,
+                          subBillingCycle === 'yearly' && styles.cyclePillActive,
+                        ]}>
+                        <ThemedText
+                          style={[
+                            styles.cyclePillText,
+                            subBillingCycle === 'yearly' && styles.cyclePillTextActive,
+                          ]}>
+                          {t('yearly')}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Currency Switcher */}
+                <ThemedText style={styles.inputLabel}>
+                  {language === 'tr' ? 'PARA BİRİMİ' : 'CURRENCY'}
+                </ThemedText>
+                <View style={styles.currencyGroup}>
+                  {currencies.map((c) => {
+                    const isActive = subCurrency.code === c.code;
+                    return (
+                      <AnimatedPressable
+                        key={c.code}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          setSubCurrency(c);
+                        }}
+                        style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
+                        <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
+                          {c.label}
+                        </ThemedText>
+                      </AnimatedPressable>
+                    );
+                  })}
+                </View>
+
+                {/* Amount & Due Day Row */}
+                <View style={styles.inputsRow}>
+                  <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
+                    <ThemedText style={styles.inputLabel}>
+                      {subBillingCycle === 'yearly'
+                        ? language === 'tr'
+                          ? 'YILLIK TUTAR'
+                          : 'YEARLY AMOUNT'
+                        : language === 'tr'
+                        ? 'AYLIK TUTAR'
+                        : 'MONTHLY AMOUNT'}
+                    </ThemedText>
+                    <View style={styles.inputWrap}>
+                      <ThemedText style={styles.inputPrefix}>{subCurrency.symbol}</ThemedText>
+                      <TextInput
+                        placeholder="0.00"
+                        value={subAmount}
+                        onChangeText={(txt) => formatNumberInput(txt, setSubAmount)}
+                        style={styles.textInput}
+                        keyboardType="numeric"
+                        maxLength={12}
+                        placeholderTextColor="#636366"
+                      />
+                    </View>
+                  </View>
+
+                  <View style={[styles.inputGroupCol, { flex: 1 }]}>
+                    <ThemedText style={styles.inputLabel}>{t('dueDay').toUpperCase()}</ThemedText>
+                    <View style={styles.inputWrap}>
+                      <Ionicons name="today-outline" size={17} color="#8E8E93" style={styles.inputIcon} />
+                      <TextInput
+                        placeholder={language === 'tr' ? 'Gün (1-31)' : 'Day (1-31)'}
+                        value={subDueDay}
+                        onChangeText={(txt) => handleDayInput(txt, setSubDueDay)}
+                        onBlur={() => handleDayBlur(subDueDay, setSubDueDay)}
+                        style={styles.textInput}
+                        keyboardType="number-pad"
+                        maxLength={2}
+                        placeholderTextColor="#636366"
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                {/* Optional Bank / Card Selector */}
+                <ThemedText style={styles.inputLabel}>
+                  {t('paymentMethodBank').toUpperCase()} ({language === 'tr' ? 'OPSİYONEL' : 'OPTIONAL'})
+                </ThemedText>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  style={[styles.bankSelectorButton, subBank ? styles.bankSelectorButtonActive : null]}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    setBankSearchQuery('');
+                    setBankModalVisible(true);
+                  }}>
+                  <View style={styles.bankSelectorLeft}>
+                    <View style={[styles.bankIconCircle, subBank ? styles.bankIconCircleActive : null]}>
+                      <Ionicons
+                        name="card-outline"
+                        size={18}
+                        color={subBank ? Colors.tint : '#8E8E93'}
+                      />
+                    </View>
+                    <ThemedText style={[styles.bankSelectorText, subBank ? styles.bankSelectorTextActive : null]}>
+                      {subBank || (language === 'tr' ? 'Banka veya Kredi Kartı Seçin' : 'Select Bank or Card')}
+                    </ThemedText>
+                  </View>
+                  <Ionicons name="chevron-down" size={17} color={subBank ? Colors.tint : '#8E8E93'} />
+                </TouchableOpacity>
+
+                {/* Quick Bank Chips */}
+                <View style={styles.chipRow}>
+                  {COMMON_BANKS.map((b) => {
+                    const isSelected = subBank === b;
+                    return (
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        key={b}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          setSubBank(isSelected ? '' : b);
+                        }}
+                        style={[styles.chip, isSelected && styles.chipActive]}>
+                        <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                          {b}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Add Subscription Button */}
+                <AnimatedPressable
+                  style={[styles.addButton, { backgroundColor: colors.tint, marginTop: 8 }]}
+                  onPress={handleAddSubscription}>
+                  <Ionicons name="add" size={20} color={isDark ? '#000000' : '#FFFFFF'} />
+                  <ThemedText style={[styles.addButtonText, { color: isDark ? '#000000' : '#FFFFFF' }]}>
+                    {t('saveSubscription')}
+                  </ThemedText>
+                </AnimatedPressable>
+              </ScrollView>
+            </>
           )}
-        </ScrollView>
+        </KeyboardAvoidingView>
+      </SwipeableModal>
+
+      {/* Add New Recurring Income Modal */}
+      <SwipeableModal
+        visible={isIncomeModalVisible}
+        onClose={() => setIsIncomeModalVisible(false)}
+        sheetStyle={[
+          styles.modalSheet,
+          { maxHeight: '85%', paddingBottom: Math.max(insets.bottom, 16) + 12 },
+        ]}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.modalHeaderRow}>
+            <View style={styles.formCardTitleRow}>
+              <Ionicons name="calendar" size={18} color={colors.income} />
+              <ThemedText style={styles.modalSheetTitle}>{t('newRecurringIncome')}</ThemedText>
+            </View>
+            <TouchableOpacity
+              onPress={() => setIsIncomeModalVisible(false)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close-circle" size={24} color="#8E8E93" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 12 }}>
+            {/* Source Input */}
+            <ThemedText style={styles.inputLabel}>{t('incomeSource').toUpperCase()}</ThemedText>
+            <View style={styles.inputWrap}>
+              <Ionicons name="briefcase-outline" size={18} color="#8E8E93" style={styles.inputIcon} />
+              <TextInput
+                placeholder={
+                  language === 'tr'
+                    ? 'Örn: Maaş, Kira Geliri, Temettü'
+                    : 'e.g. Salary, Rent, Dividends'
+                }
+                value={category}
+                onChangeText={setCategory}
+                style={styles.textInput}
+                maxLength={40}
+                placeholderTextColor="#636366"
+              />
+            </View>
+
+            {/* Currency Switcher */}
+            <ThemedText style={styles.inputLabel}>
+              {language === 'tr' ? 'PARA BİRİMİ' : 'CURRENCY'}
+            </ThemedText>
+            <View style={styles.currencyGroup}>
+              {currencies.map((c) => {
+                const isActive = incomeCurrency.code === c.code;
+                return (
+                  <AnimatedPressable
+                    key={c.code}
+                    onPress={() => {
+                      Haptics.selectionAsync().catch(() => {});
+                      setIncomeCurrency(c);
+                    }}
+                    style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
+                    <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
+                      {c.label}
+                    </ThemedText>
+                  </AnimatedPressable>
+                );
+              })}
+            </View>
+
+            {/* Amount & Day Inputs Row */}
+            <View style={styles.inputsRow}>
+              <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
+                <ThemedText style={styles.inputLabel}>
+                  {language === 'tr' ? 'AYLIK TUTAR' : 'MONTHLY AMOUNT'}
+                </ThemedText>
+                <View style={styles.inputWrap}>
+                  <ThemedText style={styles.inputPrefix}>{incomeCurrency.symbol}</ThemedText>
+                  <TextInput
+                    placeholder="0.00"
+                    value={amount}
+                    onChangeText={(txt) => formatNumberInput(txt, setAmount)}
+                    style={styles.textInput}
+                    keyboardType="numeric"
+                    maxLength={12}
+                    placeholderTextColor="#636366"
+                  />
+                </View>
+              </View>
+
+              <View style={[styles.inputGroupCol, { flex: 1 }]}>
+                <ThemedText style={styles.inputLabel}>{t('dayOfMonth').toUpperCase()}</ThemedText>
+                <View style={styles.inputWrap}>
+                  <Ionicons name="today-outline" size={17} color="#8E8E93" style={styles.inputIcon} />
+                  <TextInput
+                    placeholder={language === 'tr' ? 'Gün (1-31)' : 'Day (1-31)'}
+                    value={dayOfMonth}
+                    onChangeText={(txt) => handleDayInput(txt, setDayOfMonth)}
+                    onBlur={() => handleDayBlur(dayOfMonth, setDayOfMonth)}
+                    style={styles.textInput}
+                    keyboardType="number-pad"
+                    maxLength={2}
+                    placeholderTextColor="#636366"
+                  />
+                </View>
+              </View>
+            </View>
+
+            {/* Add Button */}
+            <AnimatedPressable
+              style={[styles.addButton, { backgroundColor: colors.income, marginTop: 8 }]}
+              onPress={handleAddRecurringIncome}>
+              <Ionicons name="add" size={20} color="#000000" />
+              <ThemedText style={[styles.addButtonText, { color: '#000000' }]}>
+                {t('saveRecurringIncome')}
+              </ThemedText>
+            </AnimatedPressable>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SwipeableModal>
 
       {/* Subscription Pay Confirm Modal */}
@@ -1460,6 +1578,73 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       alignItems: 'center',
       justifyContent: 'space-between',
       marginBottom: 10,
+    },
+    openModalCtaBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: colors.card,
+      borderRadius: 18,
+      paddingVertical: 14,
+      paddingHorizontal: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: 20,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.shadow.shadowColor,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: colors.shadow.shadowOpacity,
+          shadowRadius: 8,
+        },
+        android: {
+          elevation: 2,
+        },
+      }),
+    },
+    openModalCtaLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+      marginRight: 10,
+    },
+    openModalIconCircle: {
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    openModalTextCol: {
+      flex: 1,
+    },
+    openModalTitle: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: colors.text,
+      letterSpacing: -0.2,
+    },
+    openModalSubtitle: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    openModalActionBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 12,
+      gap: 4,
+    },
+    openModalActionBadgeText: {
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    modalBackBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
     },
     toggleCollapseBtn: {
       flexDirection: 'row',

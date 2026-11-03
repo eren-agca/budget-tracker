@@ -1,5 +1,6 @@
 import React, { useEffect, useCallback } from 'react';
 import { View, StyleSheet, LayoutChangeEvent, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -12,8 +13,13 @@ import { ThemedText } from './ThemedText';
 import { Colors } from '@/constants/Colors';
 import { useSettings } from '@/context/SettingsContext';
 
+export interface TickerItemData {
+  text: string;
+  direction?: 'up' | 'down' | 'flat';
+}
+
 interface TickerProps {
-  data: string[];
+  data: (string | TickerItemData)[];
   height?: number;
   speed?: number;
   badgeLabel?: string;
@@ -31,7 +37,8 @@ export const Ticker: React.FC<TickerProps> = ({
   const textWidth = useSharedValue(0);
   const translateX = useSharedValue(0);
 
-  const isUnavailable = isError || (data.length === 1 && data[0].includes('devre dışı'));
+  const firstItemText = typeof data[0] === 'string' ? data[0] : data[0]?.text || '';
+  const isUnavailable = isError || (data.length === 1 && firstItemText.includes('devre dışı'));
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -83,12 +90,40 @@ export const Ticker: React.FC<TickerProps> = ({
 
   const renderGroup = (prefix: string, onLayout?: (e: LayoutChangeEvent) => void) => (
     <View onLayout={onLayout} style={styles.tickerGroup}>
-      {data.map((item, idx) => (
-        <View key={`${prefix}-${idx}`} style={styles.tickerItem}>
-          <ThemedText style={[styles.text, { color: itemTextColor }]}>{item}</ThemedText>
-          <ThemedText style={[styles.separator, { color: separatorColor }]}>◆</ThemedText>
-        </View>
-      ))}
+      {data.map((item, idx) => {
+        const text = typeof item === 'string' ? item : item.text;
+        const direction = typeof item === 'string' ? undefined : item.direction;
+        return (
+          <View key={`${prefix}-${idx}`} style={styles.tickerItem}>
+            <ThemedText style={[styles.text, { color: itemTextColor }]}>{text}</ThemedText>
+            {direction === 'up' && (
+              <Ionicons
+                name="arrow-up"
+                size={12}
+                color={colors.tint}
+                style={styles.directionArrow}
+              />
+            )}
+            {direction === 'down' && (
+              <Ionicons
+                name="arrow-down"
+                size={12}
+                color={colors.expense}
+                style={styles.directionArrow}
+              />
+            )}
+            {direction === 'flat' && (
+              <Ionicons
+                name="remove"
+                size={13}
+                color={isDark ? '#8E8E93' : '#64748B'}
+                style={styles.directionArrow}
+              />
+            )}
+            <ThemedText style={[styles.separator, { color: separatorColor }]}>◆</ThemedText>
+          </View>
+        );
+      })}
     </View>
   );
 
@@ -185,6 +220,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     includeFontPadding: false,
     textAlignVertical: 'center',
+  },
+  directionArrow: {
+    marginLeft: 4,
   },
   separator: {
     fontSize: 8,

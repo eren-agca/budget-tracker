@@ -1,8 +1,7 @@
-import { Tabs, useRouter } from 'expo-router';
-import React from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { Tabs, useRouter } from 'expo-router';
+import { Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedPressable } from '@/components/AnimatedPressable';
@@ -16,11 +15,12 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
   const { t, isDark, colors } = useSettings();
 
   const onAddPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => { });
     router.push('/add-transaction');
   };
 
-  const bottomOffset = Platform.OS === 'ios' ? Math.max(insets.bottom, 20) : 16;
+
+  const bottomOffset = Platform.OS === 'ios' ? Math.max(insets.bottom - 15, 12) : 10;
   const inactiveIconColor = isDark ? '#7C7C82' : '#94A3B8';
 
   const getTabConfig = (routeName: string, isFocused: boolean) => {
@@ -72,7 +72,7 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
         });
 
       if (!isFocused && !event?.defaultPrevented) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => { });
         if (typeof navigateToTab === 'function') {
           navigateToTab(route.key);
         } else if (navigation?.navigate) {

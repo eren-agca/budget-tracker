@@ -20,6 +20,8 @@ import { ThemedText } from '@/components/ThemedText';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { expenseCategories, incomeCategories, getCategoryLabel, isSavingsCategory } from '@/constants/Categories';
+import { INVESTMENT_PRESETS, getLiveAssetRateInTRY, getPresetLabel } from '@/constants/Investments';
+import { ExchangeRates, getExchangeRates } from '@/services/currencyService';
 import { db } from '@/firebaseConfig';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings, ThemeColors } from '@/context/SettingsContext';
@@ -36,18 +38,58 @@ export default function AddTransactionScreen() {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('');
   const [purchaseRate, setPurchaseRate] = useState('');
+  const [selectedAssetCode, setSelectedAssetCode] = useState<string>('XAU_GRAM');
+  const [liveRates, setLiveRates] = useState<ExchangeRates | null>(null);
   const [transactionCurrency, setTransactionCurrency] = useState<Currency>(defaultCurrency);
-  const [type, setType] = useState<'expense' | 'income'>('expense');
+  const [type, setType] = useState<'expense' | 'income' | 'investment'>('expense');
   const [loading, setLoading] = useState(false);
 
-  const handleTypeChange = (newType: 'expense' | 'income') => {
-    Haptics.selectionAsync().catch(() => {});
-    setType(newType);
-    setCategory('');
-    setPurchaseRate('');
+  React.useEffect(() => {
+    getExchangeRates()
+      .then((r) => {
+        if (r) setLiveRates(r);
+      })
+      .catch(() => {});
+  }, []);
+
+  const applyPresetRate = (assetCode: string, curr: Currency, ratesObj: ExchangeRates | null) => {
+    if (!ratesObj || assetCode === 'CUSTOM') return;
+    const { unitRateInTRY } = getLiveAssetRateInTRY(ratesObj, assetCode);
+    if (unitRateInTRY && unitRateInTRY > 0) {
+      const currRate = ratesObj[curr.code] || 1;
+      const converted = unitRateInTRY / currRate;
+      setPurchaseRate(converted.toFixed(2));
+    }
   };
 
-  const isSavings = type === 'expense' && isSavingsCategory(category);
+  const handleTypeChange = (newType: 'expense' | 'income' | 'investment') => {
+    Haptics.selectionAsync().catch(() => {});
+    setType(newType);
+    if (newType === 'investment') {
+      setCategory('Savings');
+      setSelectedAssetCode('XAU_GRAM');
+      setDescription(getPresetLabel('XAU_GRAM', language));
+      applyPresetRate('XAU_GRAM', transactionCurrency, liveRates);
+    } else {
+      setCategory('');
+      setPurchaseRate('');
+      setDescription('');
+    }
+  };
+
+  const isSavings = type === 'investment' || (type === 'expense' && isSavingsCategory(category));
+
+  const handleSelectAssetPreset = (presetCode: string) => {
+    Haptics.selectionAsync().catch(() => {});
+    setSelectedAssetCode(presetCode);
+    if (presetCode === 'CUSTOM') {
+      setDescription('');
+      setPurchaseRate('');
+    } else {
+      setDescription(getPresetLabel(presetCode, language));
+      applyPresetRate(presetCode, transactionCurrency, liveRates);
+    }
+  };
 
   const handleSaveTransaction = async () => {
     if (!user) {
@@ -55,10 +97,15 @@ export default function AddTransactionScreen() {
       return;
     }
 
-    const isExpense = type === 'expense';
+    const isExpenseOrInv = type === 'expense' || type === 'investment';
+    const effectiveCategory = type === 'investment' ? 'Savings' : category;
+    const effectiveDescription =
+      isSavings && selectedAssetCode !== 'CUSTOM' && !description
+        ? getPresetLabel(selectedAssetCode, language)
+        : description;
     const savingsFieldsValid = !isSavings || purchaseRate;
 
-    if ((isExpense && !description) || !amount || !category || !savingsFieldsValid) {
+    if ((isExpenseOrInv && !effectiveDescription) || !amount || !effectiveCategory || !savingsFieldsValid) {
       Alert.alert(language === 'tr' ? 'Eksik Alan' : 'Incomplete Form', t('fillAllFields'));
       return;
     }
@@ -82,17 +129,18 @@ export default function AddTransactionScreen() {
       const totalCost = isSavings ? numericAmount * numericPurchaseRate : numericAmount;
 
       const transactionData: any = {
-        description: isExpense ? description : (getCategoryLabel(category, language) || category),
-        amount: isExpense ? -Math.abs(totalCost) : Math.abs(totalCost),
-        category,
+        description: isExpenseOrInv ? effectiveDescription : (getCategoryLabel(effectiveCategory, language) || effectiveCategory),
+        amount: isExpenseOrInv ? -Math.abs(totalCost) : Math.abs(totalCost),
+        category: effectiveCategory,
         currency: transactionCurrency.code,
-        type,
+        type: isExpenseOrInv ? 'expense' : 'income',
         date: Timestamp.now(),
       };
 
       if (isSavings) {
         transactionData.purchaseRate = numericPurchaseRate;
         transactionData.assetQuantity = numericAmount;
+        transactionData.assetCode = selectedAssetCode;
       }
 
       await addDoc(collection(db, 'users', user.uid, 'transactions'), transactionData);
@@ -150,12 +198,12 @@ export default function AddTransactionScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}>
         
-        {/* Segmented Type Toggle (Expense / Income) */}
+        {/* Segmented Type Toggle (Expense / Income / Investment) */}
         <View style={styles.typeSwitcher}>
           <AnimatedPressable
             style={[styles.typeButton, type === 'expense' && styles.typeButtonActiveExpense]}
             onPress={() => handleTypeChange('expense')}>
-            <Ionicons name="arrow-up" size={15} color={type === 'expense' ? '#FFF' : '#8E8E93'} />
+            <Ionicons name="arrow-up" size={15} color={type === 'expense' ? colors.text : colors.textSecondary} />
             <ThemedText style={[styles.typeButtonText, type === 'expense' && styles.typeButtonTextActive]}>
               {t('expenseType')}
             </ThemedText>
@@ -164,24 +212,45 @@ export default function AddTransactionScreen() {
           <AnimatedPressable
             style={[styles.typeButton, type === 'income' && styles.typeButtonActiveIncome]}
             onPress={() => handleTypeChange('income')}>
-            <Ionicons name="arrow-down" size={15} color={type === 'income' ? '#000' : '#8E8E93'} />
+            <Ionicons name="arrow-down" size={15} color={type === 'income' ? (isDark ? '#000' : '#FFF') : colors.textSecondary} />
             <ThemedText
               style={[
                 styles.typeButtonText,
-                type === 'income' && { color: '#000', fontWeight: '800' },
+                type === 'income' && { color: isDark ? '#000' : '#FFF', fontWeight: '800' },
               ]}>
               {t('incomeType')}
             </ThemedText>
           </AnimatedPressable>
+
+          <AnimatedPressable
+            style={[styles.typeButton, type === 'investment' && styles.typeButtonActiveIncome]}
+            onPress={() => handleTypeChange('investment')}>
+            <Ionicons
+              name="trending-up"
+              size={15}
+              color={type === 'investment' ? (isDark ? '#000' : '#FFF') : colors.textSecondary}
+            />
+            <ThemedText
+              style={[
+                styles.typeButtonText,
+                type === 'investment' && { color: isDark ? '#000' : '#FFF', fontWeight: '800' },
+              ]}>
+              {t('investmentType')}
+            </ThemedText>
+          </AnimatedPressable>
         </View>
 
-        {/* Hero Amount Display & Input Card */}
+        {/* Hero Amount / Quantity Display & Input Card */}
         <View style={styles.amountCard}>
-          <ThemedText style={styles.amountLabel}>{t('enterAmount')}</ThemedText>
+          <ThemedText style={styles.amountLabel}>
+            {isSavings ? t('enterQuantityLabel') : t('enterAmount')}
+          </ThemedText>
           <View style={styles.amountRow}>
-            <ThemedText style={styles.currencySymbolLarge}>{transactionCurrency.symbol}</ThemedText>
+            {!isSavings && (
+              <ThemedText style={styles.currencySymbolLarge}>{transactionCurrency.symbol}</ThemedText>
+            )}
             <TextInput
-              placeholder="0.00"
+              placeholder={isSavings ? '1' : '0.00'}
               value={amount}
               onChangeText={handleAmountChange}
               style={styles.amountInput}
@@ -202,6 +271,9 @@ export default function AddTransactionScreen() {
                   onPress={() => {
                     Haptics.selectionAsync().catch(() => {});
                     setTransactionCurrency(c);
+                    if (isSavings && selectedAssetCode !== 'CUSTOM') {
+                      applyPresetRate(selectedAssetCode, c, liveRates);
+                    }
                   }}
                   style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
                   <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
@@ -213,8 +285,8 @@ export default function AddTransactionScreen() {
           </View>
         </View>
 
-        {/* Description Field (For Expense) */}
-        {type === 'expense' && (
+        {/* Description Field (For regular Expense or Custom Investment) */}
+        {(type === 'expense' && !isSavings) || (isSavings && selectedAssetCode === 'CUSTOM') ? (
           <View style={styles.inputCard}>
             <View style={styles.inputRow}>
               <Ionicons name="create-outline" size={18} color="#8E8E93" style={styles.fieldIcon} />
@@ -228,9 +300,9 @@ export default function AddTransactionScreen() {
               />
             </View>
           </View>
-        )}
+        ) : null}
 
-        {/* Savings Special Fields */}
+        {/* Savings / Investment Purchase Rate Field */}
         {isSavings && (
           <View style={styles.inputCard}>
             <View style={styles.inputRow}>
@@ -247,13 +319,39 @@ export default function AddTransactionScreen() {
           </View>
         )}
 
-        {/* Categories Section */}
+        {/* Categories or Investment Asset Selection Section */}
         <View style={styles.sectionWrap}>
           <ThemedText style={styles.sectionTitle}>
-            {type === 'expense' ? t('selectCategory') : t('incomeSourceSelect')}
+            {isSavings
+              ? t('selectInvestmentAsset')
+              : type === 'expense'
+              ? t('selectCategory')
+              : t('incomeSourceSelect')}
           </ThemedText>
 
-          {type === 'expense' ? (
+          {isSavings ? (
+            <View style={styles.incomeShortcuts}>
+              {INVESTMENT_PRESETS.map((preset) => {
+                const isSelected = selectedAssetCode === preset.code;
+                const label = language === 'tr' ? preset.labelTr : preset.labelEn;
+                return (
+                  <AnimatedPressable
+                    key={preset.code}
+                    onPress={() => handleSelectAssetPreset(preset.code)}
+                    style={[styles.shortcutChip, isSelected && styles.shortcutChipActive]}>
+                    <Ionicons
+                      name={preset.icon}
+                      size={15}
+                      color={isSelected ? colors.tint : colors.textSecondary}
+                    />
+                    <ThemedText style={[styles.shortcutText, isSelected && styles.shortcutTextActive]}>
+                      {label}
+                    </ThemedText>
+                  </AnimatedPressable>
+                );
+              })}
+            </View>
+          ) : type === 'expense' ? (
             <View style={styles.categoryGrid}>
               {expenseCategories.map((cat) => {
                 const isSelected = category === cat.label || category === cat.key || category === cat.labelTr || category === cat.labelEn;
@@ -264,6 +362,11 @@ export default function AddTransactionScreen() {
                     onPress={() => {
                       Haptics.selectionAsync().catch(() => {});
                       setCategory(cat.label);
+                      if (isSavingsCategory(cat.label)) {
+                        setSelectedAssetCode('XAU_GRAM');
+                        setDescription(getPresetLabel('XAU_GRAM', language));
+                        applyPresetRate('XAU_GRAM', transactionCurrency, liveRates);
+                      }
                     }}
                     style={[styles.categoryTile, isSelected && styles.categoryTileActive]}>
                     <View

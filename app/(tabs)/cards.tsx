@@ -104,7 +104,7 @@ export default function CardsScreen() {
   // Installments State
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [filterMode, setFilterMode] = useState<'all' | 'active' | 'completed'>('all');
-  const [isFormExpanded, setIsFormExpanded] = useState(false);
+  const [isAddModalVisible, setIsAddModalVisible] = useState(false);
 
   // Form State
   const [instTitle, setInstTitle] = useState('');
@@ -293,7 +293,8 @@ export default function CardsScreen() {
       setInstPaidCount('0');
       setInstDueDay('');
       setInstCurrency(defaultCurrency);
-      setIsFormExpanded(false);
+      setBankModalVisible(false);
+      setIsAddModalVisible(false);
 
       Toast.show({
         type: 'success',
@@ -450,231 +451,34 @@ export default function CardsScreen() {
           </View>
         </View>
 
-        {/* Toggle Form Header / Button */}
-        <View style={styles.formToggleRow}>
-          <View style={styles.formCardTitleRow}>
-            <Ionicons name="add-circle" size={18} color={colors.tint} />
-            <ThemedText style={styles.formCardTitle}>{t('newInstallment')}</ThemedText>
+        {/* Open New Installment Modal CTA Button */}
+        <AnimatedPressable
+          onPress={() => {
+            Haptics.selectionAsync().catch(() => {});
+            setBankModalVisible(false);
+            setIsAddModalVisible(true);
+          }}
+          style={styles.openModalCtaBtn}>
+          <View style={styles.openModalCtaLeft}>
+            <View style={[styles.openModalIconCircle, { backgroundColor: colors.tintSoft }]}>
+              <Ionicons name="card-outline" size={20} color={colors.tint} />
+            </View>
+            <View style={styles.openModalTextCol}>
+              <ThemedText style={styles.openModalTitle}>{t('newInstallment')}</ThemedText>
+              <ThemedText style={styles.openModalSubtitle} numberOfLines={1}>
+                {language === 'tr'
+                  ? 'Kredi kartı taksiti ve aylık ödeme planı ekleyin'
+                  : 'Add a credit card installment & monthly plan'}
+              </ThemedText>
+            </View>
           </View>
-          <AnimatedPressable
-            onPress={() => {
-              Haptics.selectionAsync().catch(() => {});
-              setIsFormExpanded(!isFormExpanded);
-            }}
-            style={styles.toggleCollapseBtn}>
-            <ThemedText style={styles.toggleCollapseText}>
-              {isFormExpanded ? (language === 'tr' ? 'Gizle' : 'Hide') : (language === 'tr' ? '+ Formu Aç' : '+ Open Form')}
+          <View style={[styles.openModalActionBadge, { backgroundColor: colors.tint }]}>
+            <Ionicons name="add" size={18} color={isDark ? '#000000' : '#FFFFFF'} />
+            <ThemedText style={[styles.openModalActionBadgeText, { color: isDark ? '#000000' : '#FFFFFF' }]}>
+              {language === 'tr' ? 'Ekle' : 'Add'}
             </ThemedText>
-            <Ionicons
-              name={isFormExpanded ? 'chevron-up' : 'chevron-down'}
-              size={16}
-              color={colors.tint}
-            />
-          </AnimatedPressable>
-        </View>
-
-        {/* Collapsible Installment Form */}
-        {isFormExpanded && (
-          <View style={styles.formCard}>
-            {/* Product / Expense Title */}
-            <ThemedText style={styles.inputLabel}>{t('instTitle').toUpperCase()}</ThemedText>
-            <View style={styles.inputWrap}>
-              <Ionicons name="cart-outline" size={18} color={colors.textSecondary} style={styles.inputIcon} />
-              <TextInput
-                placeholder={t('instTitlePlaceholder')}
-                value={instTitle}
-                onChangeText={setInstTitle}
-                style={styles.textInput}
-                maxLength={50}
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-
-            {/* Bank Selection - Modal Selector */}
-            <ThemedText style={styles.inputLabel}>{language === 'tr' ? 'BANKA / KREDİ KARTI' : 'BANK / CREDIT CARD'}</ThemedText>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={[styles.bankSelectorButton, instBank ? styles.bankSelectorButtonActive : null]}
-              onPress={() => {
-                Haptics.selectionAsync().catch(() => {});
-                setBankSearchQuery('');
-                setBankModalVisible(true);
-              }}>
-              <View style={styles.bankSelectorLeft}>
-                <View style={[styles.bankIconCircle, instBank ? styles.bankIconCircleActive : null]}>
-                  <Ionicons
-                    name="card-outline"
-                    size={18}
-                    color={instBank ? colors.tint : colors.textSecondary}
-                  />
-                </View>
-                <ThemedText style={[styles.bankSelectorText, instBank ? styles.bankSelectorTextActive : null]}>
-                  {instBank || t('selectBank')}
-                </ThemedText>
-              </View>
-              <Ionicons name="chevron-down" size={17} color={instBank ? colors.tint : colors.textSecondary} />
-            </TouchableOpacity>
-
-            {/* Quick Bank Chips */}
-            <View style={styles.chipRow}>
-              {COMMON_BANKS.map((b) => {
-                const isSelected = instBank === b;
-                return (
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    key={b}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setInstBank(b);
-                    }}
-                    style={[styles.chip, isSelected && styles.chipActive]}>
-                    <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                      {b}
-                    </ThemedText>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Currency Selector */}
-            <ThemedText style={styles.inputLabel}>{language === 'tr' ? 'PARA BİRİMİ' : 'CURRENCY'}</ThemedText>
-            <View style={styles.currencyGroup}>
-              {currencies.map((c) => {
-                const isActive = instCurrency.code === c.code;
-                return (
-                  <AnimatedPressable
-                    key={c.code}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setInstCurrency(c);
-                    }}
-                    style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
-                    <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
-                      {c.label} ({c.symbol})
-                    </ThemedText>
-                  </AnimatedPressable>
-                );
-              })}
-            </View>
-
-            {/* Total Amount & Total Installments */}
-            <View style={styles.inputsRow}>
-              <View style={[styles.inputGroupCol, { flex: 1.3 }]}>
-                <ThemedText style={styles.inputLabel}>{t('totalExpenseAmount').toUpperCase()}</ThemedText>
-                <View style={styles.inputWrap}>
-                  <ThemedText style={styles.inputPrefix}>{instCurrency.symbol}</ThemedText>
-                  <TextInput
-                    placeholder="Örn: 36000"
-                    value={instTotalAmount}
-                    onChangeText={(t) => formatNumberInput(t, setInstTotalAmount)}
-                    style={styles.textInput}
-                    keyboardType="numeric"
-                    maxLength={12}
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
-              </View>
-
-              <View style={[styles.inputGroupCol, { flex: 1 }]}>
-                <ThemedText style={styles.inputLabel}>{t('totalInstallmentsCount').toUpperCase()}</ThemedText>
-                <View style={styles.inputWrap}>
-                  <Ionicons name="repeat-outline" size={17} color={colors.textSecondary} style={styles.inputIcon} />
-                  <TextInput
-                    placeholder="Örn: 6"
-                    value={instTotalCount}
-                    onChangeText={handleTotalCountInput}
-                    style={styles.textInput}
-                    keyboardType="number-pad"
-                    maxLength={2}
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
-              </View>
-            </View>
-
-            {/* Quick Installment Chips */}
-            <View style={styles.chipRow}>
-              {QUICK_INSTALLMENTS.map((count) => {
-                const isSelected = instTotalCount === count;
-                return (
-                  <AnimatedPressable
-                    key={count}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setInstTotalCount(count);
-                    }}
-                    style={[styles.chip, isSelected && styles.chipActive]}>
-                    <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                      {count} {t('installmentOf')}
-                    </ThemedText>
-                  </AnimatedPressable>
-                );
-              })}
-            </View>
-
-            {/* Paid so far & Due Day */}
-            <View style={styles.inputsRow}>
-              <View style={[styles.inputGroupCol, { flex: 1 }]}>
-                <ThemedText style={styles.inputLabel}>{t('paidInstallmentsCount').toUpperCase()}</ThemedText>
-                <View style={styles.inputWrap}>
-                  <Ionicons name="checkmark-done-outline" size={17} color={colors.textSecondary} style={styles.inputIcon} />
-                  <TextInput
-                    placeholder="0"
-                    value={instPaidCount}
-                    onChangeText={handlePaidCountInput}
-                    style={styles.textInput}
-                    keyboardType="number-pad"
-                    maxLength={2}
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
-              </View>
-
-              <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
-                <ThemedText style={styles.inputLabel}>{t('dueDay').toUpperCase()}</ThemedText>
-                <View style={styles.inputWrap}>
-                  <Ionicons name="calendar-outline" size={17} color={colors.textSecondary} style={styles.inputIcon} />
-                  <TextInput
-                    placeholder={language === 'tr' ? 'Gün (1-31)' : 'Day (1-31)'}
-                    value={instDueDay}
-                    onChangeText={(t) => handleDayInput(t, setInstDueDay)}
-                    onBlur={() => handleDayBlur(instDueDay, setInstDueDay)}
-                    style={styles.textInput}
-                    keyboardType="number-pad"
-                    maxLength={2}
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
-              </View>
-            </View>
-
-            {/* Live Preview Calculation */}
-            {parsedTotal > 0 && (
-              <View style={styles.liveCalculationBox}>
-                <View style={styles.calcRow}>
-                  <ThemedText style={styles.calcLabel}>{language === 'tr' ? 'Aylık Ödeme:' : 'Monthly Payment:'}</ThemedText>
-                  <ThemedText style={styles.calcValue}>
-                    {instCurrency.symbol}
-                    {liveMonthly.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {language === 'tr' ? '/ ay' : '/ mo'}
-                  </ThemedText>
-                </View>
-                <View style={styles.calcRow}>
-                  <ThemedText style={styles.calcLabel}>{language === 'tr' ? 'Kalan Süre / Borç:' : 'Remaining / Debt:'}</ThemedText>
-                  <ThemedText style={styles.calcValueSub}>
-                    {liveRemainingCount} {language === 'tr' ? 'ay' : 'mo'} • {instCurrency.symbol}
-                    {liveRemainingDebt.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </ThemedText>
-                </View>
-              </View>
-            )}
-
-            {/* Add Installment Button */}
-            <AnimatedPressable style={styles.addButton} onPress={handleAddInstallment}>
-              <Ionicons name="checkmark-circle-outline" size={20} color={isDark ? '#000000' : '#FFFFFF'} />
-              <ThemedText style={styles.addButtonText}>{t('saveInstallment')}</ThemedText>
-            </AnimatedPressable>
           </View>
-        )}
+        </AnimatedPressable>
 
         {/* Section Filter Pills */}
         <View style={styles.sectionHeaderRow}>
@@ -826,105 +630,375 @@ export default function CardsScreen() {
         )}
       </ScrollView>
 
-      {/* Bank Picker Modal with Search */}
+      {/* Add Installment Modal (with integrated Bank Picker view) */}
       <SwipeableModal
-        visible={isBankModalVisible}
-        onClose={() => setBankModalVisible(false)}
-        sheetStyle={{ maxHeight: '80%', paddingBottom: Math.max(insets.bottom, 20) + 16 }}>
-        <View style={styles.bankModalHeader}>
-          <ThemedText style={styles.bankModalTitle}>{t('chooseBank')}</ThemedText>
-          <TouchableOpacity
-            onPress={() => setBankModalVisible(false)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="close-circle" size={24} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Search input */}
-        <View style={styles.bankSearchWrap}>
-          <Ionicons name="search" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
-          <TextInput
-            placeholder={t('searchBank')}
-            value={bankSearchQuery}
-            onChangeText={setBankSearchQuery}
-            style={styles.bankSearchInput}
-            placeholderTextColor={colors.textMuted}
-            autoCorrect={false}
-          />
-          {bankSearchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setBankSearchQuery('')}>
-              <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
-          {/* Common Banks section */}
-          {!bankSearchQuery && (
-            <View style={{ marginBottom: 14 }}>
-              <ThemedText style={styles.bankSectionTitle}>{language === 'tr' ? 'SIK KULLANILANLAR' : 'FREQUENTLY USED'}</ThemedText>
-              <View style={styles.quickBankGrid}>
-                {COMMON_BANKS.map((b) => (
-                  <TouchableOpacity
-                    key={b}
-                    activeOpacity={0.7}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setInstBank(b);
-                      setBankModalVisible(false);
-                    }}
-                    style={[styles.quickBankTile, instBank === b && styles.quickBankTileActive]}>
-                    <Ionicons
-                      name="card-outline"
-                      size={16}
-                      color={instBank === b ? colors.tint : colors.textSecondary}
-                      style={{ marginRight: 6 }}
-                    />
-                    <ThemedText
-                      style={[
-                        styles.quickBankText,
-                        instBank === b && { color: colors.tint, fontWeight: '800' },
-                      ]}
-                      numberOfLines={1}>
-                      {b}
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* All Banks List */}
-          <ThemedText style={styles.bankSectionTitle}>{language === 'tr' ? 'TÜM BANKALAR & KURUMLAR' : 'ALL BANKS & INSTITUTIONS'}</ThemedText>
-          {filteredBanks.map((bankName) => {
-            const isSelected = instBank === bankName;
-            return (
-              <TouchableOpacity
-                key={bankName}
-                activeOpacity={0.7}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
-                  setInstBank(bankName);
-                  setBankModalVisible(false);
-                }}
-                style={[styles.bankListItem, isSelected && styles.bankListItemActive]}>
-                <View style={styles.bankListLeft}>
-                  <View style={[styles.bankListIconCircle, isSelected && styles.bankListIconCircleActive]}>
-                    <Ionicons
-                      name="business-outline"
-                      size={18}
-                      color={isSelected ? colors.tint : colors.textSecondary}
-                    />
-                  </View>
-                  <ThemedText style={[styles.bankListName, isSelected && styles.bankListNameActive]}>
-                    {bankName}
+        visible={isAddModalVisible}
+        onClose={() => {
+          setBankModalVisible(false);
+          setIsAddModalVisible(false);
+        }}
+        sheetStyle={{
+          maxHeight: '88%',
+          paddingHorizontal: 18,
+          paddingBottom: Math.max(insets.bottom, 16) + 12,
+        }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          {isBankModalVisible ? (
+            <>
+              <View style={styles.bankModalHeader}>
+                <TouchableOpacity
+                  onPress={() => setBankModalVisible(false)}
+                  style={styles.modalBackBtn}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="arrow-back" size={20} color={colors.tint} />
+                  <ThemedText style={[styles.bankModalTitle, { marginLeft: 6 }]}>
+                    {t('chooseBank')}
                   </ThemedText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setBankModalVisible(false)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="close-circle" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={[styles.bankSearchWrap, { marginHorizontal: 0 }]}>
+                <Ionicons name="search" size={18} color={colors.textSecondary} style={{ marginRight: 8 }} />
+                <TextInput
+                  placeholder={t('searchBank')}
+                  value={bankSearchQuery}
+                  onChangeText={setBankSearchQuery}
+                  style={styles.bankSearchInput}
+                  placeholderTextColor={colors.textMuted}
+                  autoCorrect={false}
+                />
+                {bankSearchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setBankSearchQuery('')}>
+                    <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                style={{ maxHeight: 420 }}
+                contentContainerStyle={{ paddingBottom: 20 }}>
+                {!bankSearchQuery && (
+                  <View style={{ marginBottom: 14 }}>
+                    <ThemedText style={[styles.bankSectionTitle, { paddingHorizontal: 0 }]}>
+                      {language === 'tr' ? 'SIK KULLANILANLAR' : 'FREQUENTLY USED'}
+                    </ThemedText>
+                    <View style={[styles.quickBankGrid, { paddingHorizontal: 0 }]}>
+                      {COMMON_BANKS.map((b) => (
+                        <TouchableOpacity
+                          key={b}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            Haptics.selectionAsync().catch(() => {});
+                            setInstBank(b);
+                            setBankModalVisible(false);
+                          }}
+                          style={[styles.quickBankTile, instBank === b && styles.quickBankTileActive]}>
+                          <Ionicons
+                            name="card-outline"
+                            size={16}
+                            color={instBank === b ? colors.tint : colors.textSecondary}
+                            style={{ marginRight: 6 }}
+                          />
+                          <ThemedText
+                            style={[
+                              styles.quickBankText,
+                              instBank === b && { color: colors.tint, fontWeight: '800' },
+                            ]}
+                            numberOfLines={1}>
+                            {b}
+                          </ThemedText>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                <ThemedText style={[styles.bankSectionTitle, { paddingHorizontal: 0 }]}>
+                  {language === 'tr' ? 'TÜM BANKALAR & KURUMLAR' : 'ALL BANKS & INSTITUTIONS'}
+                </ThemedText>
+                {filteredBanks.map((bankName) => {
+                  const isSelected = instBank === bankName;
+                  return (
+                    <TouchableOpacity
+                      key={bankName}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => {});
+                        setInstBank(bankName);
+                        setBankModalVisible(false);
+                      }}
+                      style={[
+                        styles.bankListItem,
+                        { paddingHorizontal: 10, borderRadius: 12 },
+                        isSelected && styles.bankListItemActive,
+                      ]}>
+                      <View style={styles.bankListLeft}>
+                        <View style={[styles.bankListIconCircle, isSelected && styles.bankListIconCircleActive]}>
+                          <Ionicons
+                            name="business-outline"
+                            size={18}
+                            color={isSelected ? (isDark ? '#000000' : '#FFFFFF') : colors.textSecondary}
+                          />
+                        </View>
+                        <ThemedText style={[styles.bankListName, isSelected && styles.bankListNameActive]}>
+                          {bankName}
+                        </ThemedText>
+                      </View>
+                      {isSelected && <Ionicons name="checkmark-circle" size={20} color={colors.tint} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </>
+          ) : (
+            <>
+              <View style={[styles.bankModalHeader, { paddingHorizontal: 0 }]}>
+                <View style={styles.formCardTitleRow}>
+                  <Ionicons name="add-circle" size={20} color={colors.tint} />
+                  <ThemedText style={styles.bankModalTitle}>{t('newInstallment')}</ThemedText>
                 </View>
-                {isSelected && <Ionicons name="checkmark-circle" size={20} color={colors.tint} />}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                <TouchableOpacity
+                  onPress={() => setIsAddModalVisible(false)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="close-circle" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingBottom: 12 }}>
+                {/* Product / Expense Title */}
+                <ThemedText style={[styles.inputLabel, { marginTop: 2 }]}>
+                  {t('instTitle').toUpperCase()}
+                </ThemedText>
+                <View style={styles.inputWrap}>
+                  <Ionicons name="cart-outline" size={18} color={colors.textSecondary} style={styles.inputIcon} />
+                  <TextInput
+                    placeholder={t('instTitlePlaceholder')}
+                    value={instTitle}
+                    onChangeText={setInstTitle}
+                    style={styles.textInput}
+                    maxLength={50}
+                    placeholderTextColor={colors.textMuted}
+                  />
+                </View>
+
+                {/* Bank Selection - Modal Selector */}
+                <ThemedText style={styles.inputLabel}>
+                  {language === 'tr' ? 'BANKA / KREDİ KARTI' : 'BANK / CREDIT CARD'}
+                </ThemedText>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  style={[styles.bankSelectorButton, instBank ? styles.bankSelectorButtonActive : null]}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    setBankSearchQuery('');
+                    setBankModalVisible(true);
+                  }}>
+                  <View style={styles.bankSelectorLeft}>
+                    <View style={[styles.bankIconCircle, instBank ? styles.bankIconCircleActive : null]}>
+                      <Ionicons
+                        name="card-outline"
+                        size={18}
+                        color={instBank ? colors.tint : colors.textSecondary}
+                      />
+                    </View>
+                    <ThemedText style={[styles.bankSelectorText, instBank ? styles.bankSelectorTextActive : null]}>
+                      {instBank || t('selectBank')}
+                    </ThemedText>
+                  </View>
+                  <Ionicons name="chevron-down" size={17} color={instBank ? colors.tint : colors.textSecondary} />
+                </TouchableOpacity>
+
+                {/* Quick Bank Chips */}
+                <View style={styles.chipRow}>
+                  {COMMON_BANKS.map((b) => {
+                    const isSelected = instBank === b;
+                    return (
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        key={b}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          setInstBank(b);
+                        }}
+                        style={[styles.chip, isSelected && styles.chipActive]}>
+                        <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                          {b}
+                        </ThemedText>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Currency Selector */}
+                <ThemedText style={styles.inputLabel}>
+                  {language === 'tr' ? 'PARA BİRİMİ' : 'CURRENCY'}
+                </ThemedText>
+                <View style={styles.currencyGroup}>
+                  {currencies.map((c) => {
+                    const isActive = instCurrency.code === c.code;
+                    return (
+                      <AnimatedPressable
+                        key={c.code}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          setInstCurrency(c);
+                        }}
+                        style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
+                        <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
+                          {c.label} ({c.symbol})
+                        </ThemedText>
+                      </AnimatedPressable>
+                    );
+                  })}
+                </View>
+
+                {/* Total Amount & Total Installments */}
+                <View style={styles.inputsRow}>
+                  <View style={[styles.inputGroupCol, { flex: 1.3 }]}>
+                    <ThemedText style={styles.inputLabel}>
+                      {t('totalExpenseAmount').toUpperCase()}
+                    </ThemedText>
+                    <View style={styles.inputWrap}>
+                      <ThemedText style={styles.inputPrefix}>{instCurrency.symbol}</ThemedText>
+                      <TextInput
+                        placeholder="Örn: 36000"
+                        value={instTotalAmount}
+                        onChangeText={(txt) => formatNumberInput(txt, setInstTotalAmount)}
+                        style={styles.textInput}
+                        keyboardType="numeric"
+                        maxLength={12}
+                        placeholderTextColor={colors.textMuted}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={[styles.inputGroupCol, { flex: 1 }]}>
+                    <ThemedText style={styles.inputLabel}>
+                      {t('totalInstallmentsCount').toUpperCase()}
+                    </ThemedText>
+                    <View style={styles.inputWrap}>
+                      <Ionicons name="repeat-outline" size={17} color={colors.textSecondary} style={styles.inputIcon} />
+                      <TextInput
+                        placeholder="Örn: 6"
+                        value={instTotalCount}
+                        onChangeText={handleTotalCountInput}
+                        style={styles.textInput}
+                        keyboardType="number-pad"
+                        maxLength={2}
+                        placeholderTextColor={colors.textMuted}
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                {/* Quick Installment Chips */}
+                <View style={styles.chipRow}>
+                  {QUICK_INSTALLMENTS.map((count) => {
+                    const isSelected = instTotalCount === count;
+                    return (
+                      <AnimatedPressable
+                        key={count}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          setInstTotalCount(count);
+                        }}
+                        style={[styles.chip, isSelected && styles.chipActive]}>
+                        <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                          {count} {t('installmentOf')}
+                        </ThemedText>
+                      </AnimatedPressable>
+                    );
+                  })}
+                </View>
+
+                {/* Paid so far & Due Day */}
+                <View style={styles.inputsRow}>
+                  <View style={[styles.inputGroupCol, { flex: 1 }]}>
+                    <ThemedText style={styles.inputLabel}>
+                      {t('paidInstallmentsCount').toUpperCase()}
+                    </ThemedText>
+                    <View style={styles.inputWrap}>
+                      <Ionicons name="checkmark-done-outline" size={17} color={colors.textSecondary} style={styles.inputIcon} />
+                      <TextInput
+                        placeholder="0"
+                        value={instPaidCount}
+                        onChangeText={handlePaidCountInput}
+                        style={styles.textInput}
+                        keyboardType="number-pad"
+                        maxLength={2}
+                        placeholderTextColor={colors.textMuted}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
+                    <ThemedText style={styles.inputLabel}>{t('dueDay').toUpperCase()}</ThemedText>
+                    <View style={styles.inputWrap}>
+                      <Ionicons name="calendar-outline" size={17} color={colors.textSecondary} style={styles.inputIcon} />
+                      <TextInput
+                        placeholder={language === 'tr' ? 'Gün (1-31)' : 'Day (1-31)'}
+                        value={instDueDay}
+                        onChangeText={(txt) => handleDayInput(txt, setInstDueDay)}
+                        onBlur={() => handleDayBlur(instDueDay, setInstDueDay)}
+                        style={styles.textInput}
+                        keyboardType="number-pad"
+                        maxLength={2}
+                        placeholderTextColor={colors.textMuted}
+                      />
+                    </View>
+                  </View>
+                </View>
+
+                {/* Live Preview Calculation */}
+                {parsedTotal > 0 && (
+                  <View style={styles.liveCalculationBox}>
+                    <View style={styles.calcRow}>
+                      <ThemedText style={styles.calcLabel}>
+                        {language === 'tr' ? 'Aylık Ödeme:' : 'Monthly Payment:'}
+                      </ThemedText>
+                      <ThemedText style={styles.calcValue}>
+                        {instCurrency.symbol}
+                        {liveMonthly.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}{' '}
+                        {language === 'tr' ? '/ ay' : '/ mo'}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.calcRow}>
+                      <ThemedText style={styles.calcLabel}>
+                        {language === 'tr' ? 'Kalan Süre / Borç:' : 'Remaining / Debt:'}
+                      </ThemedText>
+                      <ThemedText style={styles.calcValueSub}>
+                        {liveRemainingCount} {language === 'tr' ? 'ay' : 'mo'} • {instCurrency.symbol}
+                        {liveRemainingDebt.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </ThemedText>
+                    </View>
+                  </View>
+                )}
+
+                {/* Add Installment Button */}
+                <AnimatedPressable style={styles.addButton} onPress={handleAddInstallment}>
+                  <Ionicons name="checkmark-circle-outline" size={20} color={isDark ? '#000000' : '#FFFFFF'} />
+                  <ThemedText style={styles.addButtonText}>{t('saveInstallment')}</ThemedText>
+                </AnimatedPressable>
+              </ScrollView>
+            </>
+          )}
+        </KeyboardAvoidingView>
       </SwipeableModal>
     </KeyboardAvoidingView>
   );
@@ -1007,6 +1081,73 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       alignItems: 'center',
       marginBottom: 12,
       marginTop: 4,
+    },
+    openModalCtaBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: colors.card,
+      borderRadius: 18,
+      paddingVertical: 14,
+      paddingHorizontal: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: 20,
+      ...Platform.select({
+        ios: {
+          shadowColor: colors.shadow,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: isDark ? 0.25 : 0.06,
+          shadowRadius: 8,
+        },
+        android: {
+          elevation: 2,
+        },
+      }),
+    },
+    openModalCtaLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+      marginRight: 10,
+    },
+    openModalIconCircle: {
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    openModalTextCol: {
+      flex: 1,
+    },
+    openModalTitle: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: colors.text,
+      letterSpacing: -0.2,
+    },
+    openModalSubtitle: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    openModalActionBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 12,
+      gap: 4,
+    },
+    openModalActionBadgeText: {
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    modalBackBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
     },
     formCardTitleRow: {
       flexDirection: 'row',

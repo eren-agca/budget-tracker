@@ -2,226 +2,337 @@ export interface ExchangeRates {
   [key: string]: number;
 }
 
-const getFiatRates = async (): Promise<ExchangeRates> => {
-  let rates: ExchangeRates = {};
-  try {
-    const response = await fetch('https://api.frankfurter.app/latest?from=USD&to=TRY,EUR,GBP');
-    if (!response.ok) throw new Error('Frankfurter API request failed');
-    const data = await response.json();
-    if (!data.rates || !data.rates.TRY) throw new Error('Invalid data from Frankfurter API');
+interface RawFiatResult {
+  rates: ExchangeRates;
+  openRates: ExchangeRates;
+}
 
-    const usdToTry = data.rates.TRY;
-    const usdToEur = data.rates.EUR;
-    const usdToGbp = data.rates.GBP;
+interface RawMetalResult {
+  xauUsd?: number;
+  xagUsd?: number;
+  xauOpenUsd?: number;
+  xagOpenUsd?: number;
+}
 
-    rates.USD = usdToTry;
-    if (usdToEur) {
-        rates['EUR'] = usdToTry / usdToEur;
-    }
-    if (usdToGbp) {
-        rates['GBP'] = usdToTry / usdToGbp;
-    }
-  } catch (error) {
-    console.warn('Primary Fiat API (Frankfurter) failed:', error, 'Trying fallback...');
-    try {
-      const response = await fetch('https://open.er-api.com/v6/latest/USD');
-      if (!response.ok) throw new Error('Fallback Fiat API request failed');
-      const data = await response.json();
-      if (!data.rates || !data.rates.TRY) throw new Error('Invalid data from Fallback Fiat API');
+interface RawCryptoResult {
+  tryRates: ExchangeRates;
+  tryOpenRates: ExchangeRates;
+  usdRates: ExchangeRates;
+  usdOpenRates: ExchangeRates;
+}
 
-      const usdToTry = data.rates.TRY;
-      const usdToEur = data.rates.EUR;
-      const usdToGbp = data.rates.GBP;
+const OUNCE_TO_GRAM = 31.1035;
 
-      if (!rates.USD) rates.USD = usdToTry;
-      if (usdToEur) { rates['EUR'] = usdToTry / usdToEur; }
-      if (usdToGbp) { rates['GBP'] = usdToTry / usdToGbp; }
-    } catch (fallbackError) {
-      console.error('Could not fetch main fiat rates from primary/secondary source:', fallbackError);
-    }
+// In-memory cache with 25-second TTL for fast 30s polling without hitting rate limits
+let cachedRates: ExchangeRates | null = null;
+let cachedOpenRates: ExchangeRates | null = null;
+let lastCacheTime = 0;
+const CACHE_TTL_MS = 25 * 1000; // 25 seconds
+
+const getPreviousBusinessDateString = (): string => {
+  const d = new Date();
+  const day = d.getDay();
+  if (day === 1) {
+    d.setDate(d.getDate() - 3); // Monday -> Friday
+  } else if (day === 0) {
+    d.setDate(d.getDate() - 2); // Sunday -> Friday
+  } else {
+    d.setDate(d.getDate() - 1);
   }
-
-  return rates;
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 };
 
-// In-memory cache with 5-minute TTL to prevent rate limits and redundant network calls
-let cachedRates: ExchangeRates | null = null;
-let lastCacheTime = 0;
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
-const getMetalRates = async (usdToTryRate: number): Promise<ExchangeRates> => {
-  if (!usdToTryRate) {
-    return {};
-  }
-
+const getFiatRatesRaw = async (): Promise<RawFiatResult> => {
   const rates: ExchangeRates = {};
-  const OUNCE_TO_GRAM = 31.1035;
+  const openRates: ExchangeRates = {};
 
-  // 1. Primary: api.gold-api.com (Dedicated free real-time spot metal API)
   try {
-    const [goldRes, silverRes] = await Promise.all([
-      fetch('https://api.gold-api.com/price/XAU'),
-      fetch('https://api.gold-api.com/price/XAG'),
+    const prevDateStr = getPreviousBusinessDateString();
+    const [latestRes, prevRes] = await Promise.allSettled([
+      fetch('https://open.er-api.com/v6/latest/USD'),
+      fetch(`https://api.frankfurter.app/${prevDateStr}?from=USD&to=TRY,EUR,GBP`),
     ]);
 
-    if (goldRes.ok && silverRes.ok) {
-      const goldData = await goldRes.json();
-      const silverData = await silverRes.json();
-
-      if (goldData && typeof goldData.price === 'number') {
-        rates['XAU_GRAM'] = Number(((goldData.price / OUNCE_TO_GRAM) * usdToTryRate).toFixed(2));
+    if (latestRes.status === 'fulfilled' && latestRes.value.ok) {
+      const data = await latestRes.value.json();
+      if (data?.rates?.TRY) {
+        const usdToTry = data.rates.TRY;
+        const usdToEur = data.rates.EUR;
+        const usdToGbp = data.rates.GBP;
+        rates.USD = usdToTry;
+        if (usdToEur) rates.EUR = usdToTry / usdToEur;
+        if (usdToGbp) rates.GBP = usdToTry / usdToGbp;
       }
-      if (silverData && typeof silverData.price === 'number') {
-        rates['XAG_GRAM'] = Number(((silverData.price / OUNCE_TO_GRAM) * usdToTryRate).toFixed(2));
-      }
+    }
 
-      if (rates['XAU_GRAM'] && rates['XAG_GRAM']) {
-        return rates;
+    if (!rates.USD) {
+      const frankfurterLatest = await fetch('https://api.frankfurter.app/latest?from=USD&to=TRY,EUR,GBP');
+      if (frankfurterLatest.ok) {
+        const data = await frankfurterLatest.json();
+        if (data?.rates?.TRY) {
+          const usdToTry = data.rates.TRY;
+          const usdToEur = data.rates.EUR;
+          const usdToGbp = data.rates.GBP;
+          rates.USD = usdToTry;
+          if (usdToEur) rates.EUR = usdToTry / usdToEur;
+          if (usdToGbp) rates.GBP = usdToTry / usdToGbp;
+        }
+      }
+    }
+
+    if (prevRes.status === 'fulfilled' && prevRes.value.ok) {
+      const prevData = await prevRes.value.json();
+      if (prevData?.rates?.TRY) {
+        const prevUsdToTry = prevData.rates.TRY;
+        const prevUsdToEur = prevData.rates.EUR;
+        const prevUsdToGbp = prevData.rates.GBP;
+        openRates.USD = prevUsdToTry;
+        if (prevUsdToEur) openRates.EUR = prevUsdToTry / prevUsdToEur;
+        if (prevUsdToGbp) openRates.GBP = prevUsdToTry / prevUsdToGbp;
       }
     }
   } catch (error) {
-    console.warn('Primary Gold API (gold-api.com) failed, trying fallback...', error);
+    console.warn('Error fetching fiat rates:', error);
   }
 
-  // 2. Secondary fallback: jsdelivr currency-api
-  try {
-    const fallbackRes = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json');
-    if (fallbackRes.ok) {
-      const data = await fallbackRes.json();
-      if (data?.usd?.xau) {
-        const ounceGoldInUsd = 1 / data.usd.xau;
-        rates['XAU_GRAM'] = Number(((ounceGoldInUsd / OUNCE_TO_GRAM) * usdToTryRate).toFixed(2));
-      }
-      if (data?.usd?.xag) {
-        const ounceSilverInUsd = 1 / data.usd.xag;
-        rates['XAG_GRAM'] = Number(((ounceSilverInUsd / OUNCE_TO_GRAM) * usdToTryRate).toFixed(2));
-      }
+  return { rates, openRates };
+};
 
-      if (rates['XAU_GRAM']) {
-        return rates;
+const getMetalRatesRaw = async (): Promise<RawMetalResult> => {
+  const result: RawMetalResult = {};
+
+  try {
+    // Fetch real-time spot prices and daily open/close metadata in parallel
+    const [goldRes, silverRes, gpRes] = await Promise.allSettled([
+      fetch('https://api.gold-api.com/price/XAU'),
+      fetch('https://api.gold-api.com/price/XAG'),
+      fetch('https://data-asg.goldprice.org/dbXRates/USD'),
+    ]);
+
+    if (goldRes.status === 'fulfilled' && goldRes.value.ok) {
+      const goldData = await goldRes.value.json();
+      if (typeof goldData?.price === 'number') {
+        result.xauUsd = goldData.price;
+      }
+    }
+
+    if (silverRes.status === 'fulfilled' && silverRes.value.ok) {
+      const silverData = await silverRes.value.json();
+      if (typeof silverData?.price === 'number') {
+        result.xagUsd = silverData.price;
+      }
+    }
+
+    if (gpRes.status === 'fulfilled' && gpRes.value.ok) {
+      const gpData = await gpRes.value.json();
+      const item = gpData?.items?.[0];
+      if (item) {
+        if (!result.xauUsd && typeof item.xauPrice === 'number') {
+          result.xauUsd = item.xauPrice;
+        }
+        if (!result.xagUsd && typeof item.xagPrice === 'number') {
+          result.xagUsd = item.xagPrice;
+        }
+        if (typeof item.xauClose === 'number' && item.xauClose > 0) {
+          result.xauOpenUsd = item.xauClose;
+        }
+        if (typeof item.xagClose === 'number' && item.xagClose > 0) {
+          result.xagOpenUsd = item.xagClose;
+        }
+      }
+    }
+
+    if (!result.xauUsd || !result.xagUsd) {
+      const fallbackRes = await fetch(
+        'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json'
+      );
+      if (fallbackRes.ok) {
+        const data = await fallbackRes.json();
+        if (!result.xauUsd && data?.usd?.xau) {
+          result.xauUsd = 1 / data.usd.xau;
+        }
+        if (!result.xagUsd && data?.usd?.xag) {
+          result.xagUsd = 1 / data.usd.xag;
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('Error fetching metal rates:', error);
+  }
+
+  return result;
+};
+
+const getCryptoRatesRaw = async (): Promise<RawCryptoResult> => {
+  const tryRates: ExchangeRates = {};
+  const tryOpenRates: ExchangeRates = {};
+  const usdRates: ExchangeRates = {};
+  const usdOpenRates: ExchangeRates = {};
+
+  // 1. Primary: Binance 24hr Ticker API (Ultra-fast ~60ms, high rate limit, direct TRY & openPrice)
+  try {
+    const binanceUrl =
+      'https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22BTCTRY%22,%22ETHTRY%22,%22XRPTRY%22%5D';
+    const response = await fetch(binanceUrl);
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        for (const ticker of data) {
+          const lastPrice = parseFloat(ticker.lastPrice);
+          const openPrice = parseFloat(ticker.openPrice);
+          if (ticker.symbol === 'BTCTRY' && lastPrice > 0) {
+            tryRates.BTC = lastPrice;
+            if (openPrice > 0) tryOpenRates.BTC = openPrice;
+          } else if (ticker.symbol === 'ETHTRY' && lastPrice > 0) {
+            tryRates.ETH = lastPrice;
+            if (openPrice > 0) tryOpenRates.ETH = openPrice;
+          } else if (ticker.symbol === 'XRPTRY' && lastPrice > 0) {
+            tryRates.XRP = lastPrice;
+            if (openPrice > 0) tryOpenRates.XRP = openPrice;
+          }
+        }
+      }
+      if (tryRates.BTC && tryRates.ETH && tryRates.XRP) {
+        return { tryRates, tryOpenRates, usdRates, usdOpenRates };
+      }
+    }
+  } catch (error) {
+    console.warn('Primary Crypto API (Binance) failed, trying CoinGecko fallback:', error);
+  }
+
+  // 2. Secondary: CoinGecko with 24hr change
+  try {
+    const response = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,ripple&vs_currencies=try&include_24hr_change=true'
+    );
+    if (response.ok) {
+      const data = await response.json();
+      if (data.bitcoin?.try) {
+        tryRates.BTC = data.bitcoin.try;
+        if (typeof data.bitcoin.try_24h_change === 'number') {
+          tryOpenRates.BTC = data.bitcoin.try / (1 + data.bitcoin.try_24h_change / 100);
+        }
+      }
+      if (data.ethereum?.try) {
+        tryRates.ETH = data.ethereum.try;
+        if (typeof data.ethereum.try_24h_change === 'number') {
+          tryOpenRates.ETH = data.ethereum.try / (1 + data.ethereum.try_24h_change / 100);
+        }
+      }
+      if (data.ripple?.try) {
+        tryRates.XRP = data.ripple.try;
+        if (typeof data.ripple.try_24h_change === 'number') {
+          tryOpenRates.XRP = data.ripple.try / (1 + data.ripple.try_24h_change / 100);
+        }
+      }
+      if (Object.keys(tryRates).length > 0) {
+        return { tryRates, tryOpenRates, usdRates, usdOpenRates };
+      }
+    }
+  } catch (error) {
+    console.warn('Secondary Crypto API (CoinGecko) failed, trying CoinCap fallback:', error);
+  }
+
+  // 3. Tertiary: CoinCap USD
+  try {
+    const response = await fetch('https://api.coincap.io/v2/assets?ids=bitcoin,ethereum,ripple');
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data?.data)) {
+        for (const asset of data.data) {
+          const priceUsd = parseFloat(asset.priceUsd);
+          const changePct = parseFloat(asset.changePercent24Hr || '0');
+          const openUsd = priceUsd / (1 + changePct / 100);
+          if (asset.id === 'bitcoin' && priceUsd > 0) {
+            usdRates.BTC = priceUsd;
+            usdOpenRates.BTC = openUsd;
+          } else if (asset.id === 'ethereum' && priceUsd > 0) {
+            usdRates.ETH = priceUsd;
+            usdOpenRates.ETH = openUsd;
+          } else if (asset.id === 'ripple' && priceUsd > 0) {
+            usdRates.XRP = priceUsd;
+            usdOpenRates.XRP = openUsd;
+          }
+        }
       }
     }
   } catch (fallbackError) {
-    console.warn('Secondary metal fallback (currency-api) failed:', fallbackError);
+    console.error('All Crypto APIs failed:', fallbackError);
   }
 
-  // 3. Tertiary fallback: goldprice.org
-  try {
-    const metalResponse = await fetch('https://data-asg.goldprice.org/dbXRates/USD');
-    if (metalResponse.ok) {
-      const metalData = await metalResponse.json();
-      const item = metalData.items?.[0];
-      if (item?.xauPrice) {
-        rates['XAU_GRAM'] = Number(((item.xauPrice / OUNCE_TO_GRAM) * usdToTryRate).toFixed(2));
-      }
-      if (item?.xagPrice) {
-        rates['XAG_GRAM'] = Number(((item.xagPrice / OUNCE_TO_GRAM) * usdToTryRate).toFixed(2));
-      }
-    }
-  } catch (tertiaryError) {
-    console.warn('Tertiary metal API (goldprice.org) failed:', tertiaryError);
-  }
-
-  return rates;
+  return { tryRates, tryOpenRates, usdRates, usdOpenRates };
 };
 
-const getCryptoRates = async (usdToTryRate?: number): Promise<ExchangeRates> => {
-  try {
-    const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,ripple&vs_currencies=try');
-    if (!response.ok) throw new Error(`CoinGecko API request failed with status ${response.status}`);
-    const data = await response.json();
-
-    const rates: ExchangeRates = {};
-    if (data.bitcoin?.try) rates['BTC'] = data.bitcoin.try;
-    if (data.ethereum?.try) rates['ETH'] = data.ethereum.try;
-    if (data.ripple?.try) rates['XRP'] = data.ripple.try;
-
-    if (Object.keys(rates).length > 0) {
-      return rates;
-    }
-    throw new Error('Invalid data format from CoinGecko: bitcoin.try missing');
-  } catch (error) {
-    console.warn(`Primary Crypto API (CoinGecko) failed: ${error}. Trying fallback...`);
-
-    if (!usdToTryRate) {
-      console.error('Cannot use Crypto fallback API without USD/TRY rate.');
-      return {};
-    }
-
-    try {
-      const response = await fetch('https://api.coincap.io/v2/assets?ids=bitcoin,ethereum,ripple');
-      if (!response.ok) throw new Error(`CoinCap API request failed with status ${response.status}`);
-      const data = await response.json();
-
-      const rates: ExchangeRates = {};
-      if (data.data && Array.isArray(data.data)) {
-        data.data.forEach((asset: any) => {
-          if (asset.id === 'bitcoin' && asset.priceUsd) {
-            rates['BTC'] = parseFloat(asset.priceUsd) * usdToTryRate;
-          }
-          if (asset.id === 'ethereum' && asset.priceUsd) {
-            rates['ETH'] = parseFloat(asset.priceUsd) * usdToTryRate;
-          }
-          if (asset.id === 'ripple' && asset.priceUsd) {
-            rates['XRP'] = parseFloat(asset.priceUsd) * usdToTryRate;
-          }
-        });
-      }
-
-      if (Object.keys(rates).length > 0) {
-        return rates;
-      }
-      
-      throw new Error('Invalid data format from CoinCap or bitcoin asset not found');
-    } catch (fallbackError) {
-      console.error(`Crypto fallback API (CoinCap) also failed: ${fallbackError}`);
-      return {};
-    }
-  }
+export const getDailyOpenRatesSnapshot = (): ExchangeRates | null => {
+  return cachedOpenRates;
 };
 
 export const getExchangeRates = async (forceRefresh = false): Promise<ExchangeRates | null> => {
   const now = Date.now();
 
-  // Return cached rates if fresh within TTL to avoid hitting API rate limits
   if (!forceRefresh && cachedRates && now - lastCacheTime < CACHE_TTL_MS) {
     return cachedRates;
   }
 
   const combinedRates: ExchangeRates = { TRY: 1 };
+  const combinedOpenRates: ExchangeRates = { TRY: 1 };
 
-  const fiatRates = await getFiatRates();
-  if (fiatRates && Object.keys(fiatRates).length > 0) {
-    Object.assign(combinedRates, fiatRates);
-  } else {
-    console.error("Warning: Could not fetch base fiat rates. Metal and Crypto fallback rates will be skipped.");
+  // Fetch Fiat, Metal, and Crypto 100% in parallel to minimize latency
+  const [fiatSettled, metalSettled, cryptoSettled] = await Promise.allSettled([
+    getFiatRatesRaw(),
+    getMetalRatesRaw(),
+    getCryptoRatesRaw(),
+  ]);
+
+  if (fiatSettled.status === 'fulfilled') {
+    Object.assign(combinedRates, fiatSettled.value.rates);
+    Object.assign(combinedOpenRates, fiatSettled.value.openRates);
   }
 
-  const usdToTryRate = combinedRates['USD'];
-  const promisesToSettle = [];
+  const usdToTry = combinedRates.USD;
+  const openUsdToTry = combinedOpenRates.USD || usdToTry;
 
-  promisesToSettle.push(getCryptoRates(usdToTryRate));
-  
-  if (usdToTryRate) {
-    promisesToSettle.push(getMetalRates(usdToTryRate));
-  }
-
-  const otherResults = await Promise.allSettled(promisesToSettle);
-
-  otherResults.forEach((result) => {
-    if (result.status === 'fulfilled' && result.value) {
-      Object.assign(combinedRates, result.value);
+  if (metalSettled.status === 'fulfilled' && usdToTry) {
+    const { xauUsd, xagUsd, xauOpenUsd, xagOpenUsd } = metalSettled.value;
+    if (xauUsd) {
+      combinedRates.XAU_GRAM = Number(((xauUsd / OUNCE_TO_GRAM) * usdToTry).toFixed(2));
     }
-  });
+    if (xagUsd) {
+      combinedRates.XAG_GRAM = Number(((xagUsd / OUNCE_TO_GRAM) * usdToTry).toFixed(2));
+    }
+    if (xauOpenUsd && openUsdToTry) {
+      combinedOpenRates.XAU_GRAM = Number(((xauOpenUsd / OUNCE_TO_GRAM) * openUsdToTry).toFixed(2));
+    }
+    if (xagOpenUsd && openUsdToTry) {
+      combinedOpenRates.XAG_GRAM = Number(((xagOpenUsd / OUNCE_TO_GRAM) * openUsdToTry).toFixed(2));
+    }
+  }
+
+  if (cryptoSettled.status === 'fulfilled') {
+    const { tryRates, tryOpenRates, usdRates, usdOpenRates } = cryptoSettled.value;
+    if (Object.keys(tryRates).length > 0) {
+      Object.assign(combinedRates, tryRates);
+      Object.assign(combinedOpenRates, tryOpenRates);
+    } else if (usdToTry && Object.keys(usdRates).length > 0) {
+      for (const [k, v] of Object.entries(usdRates)) {
+        combinedRates[k] = v * usdToTry;
+      }
+      for (const [k, v] of Object.entries(usdOpenRates)) {
+        combinedOpenRates[k] = v * (openUsdToTry || usdToTry);
+      }
+    }
+  }
 
   if (Object.keys(combinedRates).length <= 1) {
     console.error('Error fetching exchange rates: All API calls failed.');
-    // If we have a stale cache, fall back to it gracefully rather than returning null
     return cachedRates;
   }
 
-  // Update in-memory cache
   cachedRates = combinedRates;
+  cachedOpenRates = combinedOpenRates;
   lastCacheTime = now;
 
   return combinedRates;
