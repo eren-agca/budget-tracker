@@ -1,38 +1,38 @@
-import React, { ComponentProps, useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Alert,
-  TextInput,
-  Platform,
-  KeyboardAvoidingView,
-  Modal,
-  TouchableOpacity,
-} from 'react-native';
-import {
-  collection,
-  addDoc,
-  onSnapshot,
-  deleteDoc,
-  doc,
-  updateDoc,
-  Timestamp,
-} from 'firebase/firestore';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import {
+  Timestamp,
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  updateDoc,
+} from 'firebase/firestore';
+import { ComponentProps, useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
-import { db } from '@/firebaseConfig';
-import { ThemedText } from '@/components/ThemedText';
-import { useAuth } from '@/context/AuthContext';
-import { useSettings, ThemeColors } from '@/context/SettingsContext';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
+import { BankBrandBadge, SubscriptionBrandIcon } from '@/components/BrandLogo';
 import { SwipeableModal } from '@/components/SwipeableModal';
-import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
-import { Colors } from '@/constants/Colors';
+import { ThemedText } from '@/components/ThemedText';
 import { getCategoryLabel } from '@/constants/Categories';
+import { Colors } from '@/constants/Colors';
+import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
+import { useAuth } from '@/context/AuthContext';
+import { ThemeColors, useSettings } from '@/context/SettingsContext';
+import { db } from '@/firebaseConfig';
 
 export interface RecurringIncome {
   id: string;
@@ -61,6 +61,8 @@ export interface Installment {
 export interface Subscription {
   id: string;
   name: string;
+  nameEn?: string;
+  categoryEn?: string;
   amount: number;
   currency: 'TRY' | 'USD' | 'EUR' | 'GBP';
   billingCycle: 'monthly' | 'yearly';
@@ -76,6 +78,8 @@ export interface Subscription {
 
 export interface PresetSubscription {
   name: string;
+  nameEn?: string;
+  categoryEn?: string;
   category: string;
   defaultCurrency: 'TRY' | 'USD' | 'EUR' | 'GBP';
   icon: ComponentProps<typeof Ionicons>['name'];
@@ -83,24 +87,24 @@ export interface PresetSubscription {
 }
 
 export const PRESET_SUBSCRIPTIONS: PresetSubscription[] = [
-  { name: 'Netflix', category: 'Dizi / Film', defaultCurrency: 'TRY', icon: 'film-outline', color: '#E50914' },
-  { name: 'Spotify', category: 'Müzik', defaultCurrency: 'TRY', icon: 'musical-notes-outline', color: '#1DB954' },
-  { name: 'YouTube Premium', category: 'Video / Müzik', defaultCurrency: 'TRY', icon: 'play-outline', color: '#FF0000' },
-  { name: 'ChatGPT Plus', category: 'Yapay Zeka', defaultCurrency: 'USD', icon: 'hardware-chip-outline', color: '#10A37F' },
-  { name: 'iCloud+', category: 'Bulut Depolama', defaultCurrency: 'TRY', icon: 'cloud-outline', color: '#007AFF' },
-  { name: 'Disney+', category: 'Dizi / Film', defaultCurrency: 'TRY', icon: 'tv-outline', color: '#113CCF' },
-  { name: 'Amazon Prime', category: 'Alışveriş / Dizi', defaultCurrency: 'TRY', icon: 'cart-outline', color: '#00A8E1' },
-  { name: 'BluTV', category: 'Dizi / Film', defaultCurrency: 'TRY', icon: 'videocam-outline', color: '#00D2D3' },
-  { name: 'Gain', category: 'Dizi / Film', defaultCurrency: 'TRY', icon: 'film-outline', color: '#D92546' },
-  { name: 'Apple Music', category: 'Müzik', defaultCurrency: 'TRY', icon: 'disc-outline', color: '#FA243C' },
-  { name: 'Google One', category: 'Bulut Depolama', defaultCurrency: 'TRY', icon: 'cloud-upload-outline', color: '#4285F4' },
-  { name: 'Claude Pro', category: 'Yapay Zeka', defaultCurrency: 'USD', icon: 'sparkles-outline', color: '#D97706' },
-  { name: 'Midjourney', category: 'Yapay Zeka', defaultCurrency: 'USD', icon: 'color-palette-outline', color: '#6366F1' },
-  { name: 'GitHub Copilot', category: 'Yazılım', defaultCurrency: 'USD', icon: 'code-slash-outline', color: '#8957E5' },
-  { name: 'PlayStation Plus', category: 'Oyun', defaultCurrency: 'TRY', icon: 'game-controller-outline', color: '#00439C' },
-  { name: 'Xbox Game Pass', category: 'Oyun', defaultCurrency: 'TRY', icon: 'game-controller-outline', color: '#107C10' },
-  { name: 'Spor Salonu (Gym)', category: 'Sağlık & Spor', defaultCurrency: 'TRY', icon: 'fitness-outline', color: '#10B981' },
-  { name: 'Özel / Diğer', category: 'Genel', defaultCurrency: 'TRY', icon: 'apps-outline', color: '#39FF14' },
+  { name: 'Netflix', category: 'Dizi / Film', categoryEn: 'Streaming', defaultCurrency: 'TRY', icon: 'film-outline', color: '#E50914' },
+  { name: 'Spotify', category: 'Müzik', categoryEn: 'Music', defaultCurrency: 'TRY', icon: 'musical-notes-outline', color: '#1DB954' },
+  { name: 'YouTube Premium', category: 'Video / Müzik', categoryEn: 'Video / Music', defaultCurrency: 'TRY', icon: 'play-outline', color: '#FF0000' },
+  { name: 'ChatGPT Plus', category: 'Yapay Zeka', categoryEn: 'AI', defaultCurrency: 'USD', icon: 'hardware-chip-outline', color: '#10A37F' },
+  { name: 'iCloud+', category: 'Bulut Depolama', categoryEn: 'Cloud Storage', defaultCurrency: 'TRY', icon: 'cloud-outline', color: '#007AFF' },
+  { name: 'Disney+', category: 'Dizi / Film', categoryEn: 'Streaming', defaultCurrency: 'TRY', icon: 'tv-outline', color: '#113CCF' },
+  { name: 'Amazon Prime', category: 'Alışveriş / Dizi', categoryEn: 'Shopping / Video', defaultCurrency: 'TRY', icon: 'cart-outline', color: '#00A8E1' },
+  { name: 'BluTV', category: 'Dizi / Film', categoryEn: 'Streaming', defaultCurrency: 'TRY', icon: 'videocam-outline', color: '#00D2D3' },
+  { name: 'Gain', category: 'Dizi / Film', categoryEn: 'Streaming', defaultCurrency: 'TRY', icon: 'film-outline', color: '#D92546' },
+  { name: 'Apple Music', category: 'Müzik', categoryEn: 'Music', defaultCurrency: 'TRY', icon: 'disc-outline', color: '#FA243C' },
+  { name: 'Google One', category: 'Bulut Depolama', categoryEn: 'Cloud Storage', defaultCurrency: 'TRY', icon: 'cloud-upload-outline', color: '#4285F4' },
+  { name: 'Claude Pro', category: 'Yapay Zeka', categoryEn: 'AI', defaultCurrency: 'USD', icon: 'sparkles-outline', color: '#D97706' },
+  { name: 'Midjourney', category: 'Yapay Zeka', categoryEn: 'AI', defaultCurrency: 'USD', icon: 'color-palette-outline', color: '#6366F1' },
+  { name: 'GitHub Copilot', category: 'Yazılım', categoryEn: 'Software', defaultCurrency: 'USD', icon: 'code-slash-outline', color: '#8957E5' },
+  { name: 'PlayStation Plus', category: 'Oyun', categoryEn: 'Gaming', defaultCurrency: 'TRY', icon: 'game-controller-outline', color: '#00439C' },
+  { name: 'Xbox Game Pass', category: 'Oyun', categoryEn: 'Gaming', defaultCurrency: 'TRY', icon: 'game-controller-outline', color: '#107C10' },
+  { name: 'Spor Salonu (Gym)', nameEn: 'Gym / Fitness', category: 'Sağlık & Spor', categoryEn: 'Health & Fitness', defaultCurrency: 'TRY', icon: 'fitness-outline', color: '#10B981' },
+  { name: 'Özel / Diğer', nameEn: 'Custom / Other', category: 'Genel', categoryEn: 'General', defaultCurrency: 'TRY', icon: 'apps-outline', color: '#39FF14' },
 ];
 
 const COMMON_BANKS = [
@@ -150,6 +154,24 @@ const ALL_BANKS = [
 
 const QUICK_INSTALLMENTS = ['3', '6', '9', '12'];
 
+const formatBankLabel = (bankName: string, lang: 'tr' | 'en') => {
+  if (lang === 'tr') return bankName;
+  if (bankName === 'Diğer') return 'Other';
+  return bankName
+    .replace(/İ/g, 'I')
+    .replace(/ı/g, 'i')
+    .replace(/Ü/g, 'U')
+    .replace(/ü/g, 'u')
+    .replace(/Ö/g, 'O')
+    .replace(/ö/g, 'o')
+    .replace(/Ş/g, 'S')
+    .replace(/ş/g, 's')
+    .replace(/Ç/g, 'C')
+    .replace(/ç/g, 'c')
+    .replace(/Ğ/g, 'G')
+    .replace(/ğ/g, 'g');
+};
+
 export default function RecurringScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -166,6 +188,7 @@ export default function RecurringScreen() {
   const [subName, setSubName] = useState('Netflix');
   const [subAmount, setSubAmount] = useState('');
   const [subCurrency, setSubCurrency] = useState<Currency>(defaultCurrency);
+  const [isSubCurrencyDropdownOpen, setIsSubCurrencyDropdownOpen] = useState(false);
   const [subBillingCycle, setSubBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [subDueDay, setSubDueDay] = useState('');
   const [subBank, setSubBank] = useState('');
@@ -182,6 +205,7 @@ export default function RecurringScreen() {
   const [category, setCategory] = useState('');
   const [dayOfMonth, setDayOfMonth] = useState('');
   const [incomeCurrency, setIncomeCurrency] = useState<Currency>(defaultCurrency);
+  const [isIncomeCurrencyDropdownOpen, setIsIncomeCurrencyDropdownOpen] = useState(false);
 
   // Bank selector for subscriptions
   const [isBankModalVisible, setBankModalVisible] = useState(false);
@@ -190,7 +214,7 @@ export default function RecurringScreen() {
   const filteredBanks = useMemo(() => {
     if (!bankSearchQuery.trim()) return ALL_BANKS;
     const q = bankSearchQuery.toLowerCase().trim();
-    return ALL_BANKS.filter((b) => b.toLowerCase().includes(q));
+    return ALL_BANKS.filter((b) => b.toLowerCase().includes(q) || formatBankLabel(b, 'en').toLowerCase().includes(q));
   }, [bankSearchQuery]);
 
   // Subscribe to Recurring Incomes
@@ -252,16 +276,16 @@ export default function RecurringScreen() {
     if (entries.length === 0) return '';
     return entries.map(([curr, amt]) => {
       const sym = currencies.find((c) => c.code === curr)?.symbol || curr;
-      return `+ ${sym}${amt.toFixed(0)}/ay`;
+      return `+ ${sym}${amt.toFixed(0)}/${language === 'tr' ? 'ay' : 'mo'}`;
     }).join(' ');
   }, [activeSubscriptions]);
 
   // --- Handlers: Subscriptions ---
   const handleSelectPreset = (preset: PresetSubscription) => {
-    Haptics.selectionAsync().catch(() => {});
+    Haptics.selectionAsync().catch(() => { });
     setSelectedPreset(preset.name);
-    setSubName(preset.name === 'Özel / Diğer' ? '' : preset.name);
-    setSubCategory(preset.category);
+    setSubName(preset.name === 'Özel / Diğer' ? '' : (language === 'tr' ? preset.name : (preset.nameEn || preset.name)));
+    setSubCategory(language === 'tr' ? preset.category : (preset.categoryEn || preset.category));
     setSubIcon(preset.icon);
     setSubColor(preset.color);
     const matchingCurr = currencies.find((c) => c.code === preset.defaultCurrency) || defaultCurrency;
@@ -302,7 +326,7 @@ export default function RecurringScreen() {
 
     try {
       if (!user) throw new Error('User not authenticated');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
 
       const today = new Date();
       const isDueToday = numericDueDay === today.getDate();
@@ -361,7 +385,7 @@ export default function RecurringScreen() {
   const handleToggleSubStatus = async (item: Subscription) => {
     try {
       if (!user) return;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => { });
       const nextActive = !item.isActive;
       await updateDoc(doc(db, 'users', user.uid, 'subscriptions', item.id), {
         isActive: nextActive,
@@ -379,7 +403,7 @@ export default function RecurringScreen() {
   const handleConfirmPaySub = async () => {
     if (!subToPay || !user) return;
     try {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
       const currSymbol = currencies.find((c) => c.code === subToPay.currency)?.symbol || subToPay.currency;
 
       await addDoc(collection(db, 'users', user.uid, 'transactions'), {
@@ -417,7 +441,7 @@ export default function RecurringScreen() {
   const handleConfirmDeleteSub = async () => {
     if (!subToDelete || !user) return;
     try {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => { });
       const name = subToDelete.name;
       await deleteDoc(doc(db, 'users', user.uid, 'subscriptions', subToDelete.id));
       setSubToDelete(null);
@@ -470,7 +494,7 @@ export default function RecurringScreen() {
 
     try {
       if (!user) throw new Error('User not authenticated');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
 
       await addDoc(collection(db, 'users', user.uid, 'recurringIncomes'), {
         amount: numericAmount,
@@ -510,7 +534,7 @@ export default function RecurringScreen() {
         onPress: async () => {
           try {
             if (!user) return;
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => { });
             await deleteDoc(doc(db, 'users', user.uid, 'recurringIncomes', id));
           } catch (error) {
             console.error('Error deleting recurring income: ', error);
@@ -572,7 +596,7 @@ export default function RecurringScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 120 }]}>
-        
+
         {/* Screen Header */}
         <View style={styles.screenHeader}>
           <ThemedText style={styles.screenSubtitle}>{t('loopSubtitle')}</ThemedText>
@@ -583,7 +607,7 @@ export default function RecurringScreen() {
         <View style={styles.segmentContainer}>
           <AnimatedPressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => {});
+              Haptics.selectionAsync().catch(() => { });
               setActiveTab('subscription');
             }}
             style={[styles.segmentButton, activeTab === 'subscription' && styles.segmentButtonActive]}>
@@ -605,7 +629,7 @@ export default function RecurringScreen() {
 
           <AnimatedPressable
             onPress={() => {
-              Haptics.selectionAsync().catch(() => {});
+              Haptics.selectionAsync().catch(() => { });
               setActiveTab('income');
             }}
             style={[styles.segmentButton, activeTab === 'income' && styles.segmentButtonActive]}>
@@ -655,7 +679,7 @@ export default function RecurringScreen() {
             {/* Open New Subscription Modal Button */}
             <AnimatedPressable
               onPress={() => {
-                Haptics.selectionAsync().catch(() => {});
+                Haptics.selectionAsync().catch(() => { });
                 setBankModalVisible(false);
                 setIsSubModalVisible(true);
               }}
@@ -666,11 +690,6 @@ export default function RecurringScreen() {
                 </View>
                 <View style={styles.openModalTextCol}>
                   <ThemedText style={styles.openModalTitle}>{t('newSubscription')}</ThemedText>
-                  <ThemedText style={styles.openModalSubtitle} numberOfLines={1}>
-                    {language === 'tr'
-                      ? 'Netflix, Spotify, iCloud veya özel abonelik ekleyin'
-                      : 'Add Netflix, Spotify, iCloud or custom service'}
-                  </ThemedText>
                 </View>
               </View>
               <View style={[styles.openModalActionBadge, { backgroundColor: colors.tint }]}>
@@ -718,10 +737,11 @@ export default function RecurringScreen() {
                             borderColor: `${brandColor}40`,
                           },
                         ]}>
-                        <Ionicons
-                          name={(item.iconName as any) || 'play-circle-outline'}
+                        <SubscriptionBrandIcon
+                          name={item.name}
+                          fallbackIcon={item.iconName}
+                          fallbackColor={brandColor}
                           size={22}
-                          color={brandColor}
                         />
                       </View>
 
@@ -737,7 +757,7 @@ export default function RecurringScreen() {
                           )}
                         </View>
                         <ThemedText style={styles.subMeta}>
-                          {item.bank && item.bank !== 'Belirtilmedi' && item.bank !== 'Not specified' ? `${item.bank} • ` : ''}
+                          {item.bank && item.bank !== 'Belirtilmedi' && item.bank !== 'Not specified' ? `${formatBankLabel(item.bank, language)} • ` : ''}
                           {getCategoryLabel(item.category, language) || t('tabSubscriptions')} • {item.billingCycle === 'yearly' ? t('yearly') : t('monthly')}
                         </ThemedText>
                         <View style={styles.dueDayPill}>
@@ -765,7 +785,7 @@ export default function RecurringScreen() {
                         activeOpacity={0.7}
                         style={styles.subPayBtn}
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => {});
+                          Haptics.selectionAsync().catch(() => { });
                           setSubToPay(item);
                         }}>
                         <Ionicons name="flash" size={13} color="#000" style={{ marginRight: 5 }} />
@@ -791,7 +811,7 @@ export default function RecurringScreen() {
                         activeOpacity={0.7}
                         style={styles.subDeleteBtn}
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => {});
+                          Haptics.selectionAsync().catch(() => { });
                           setSubToDelete(item);
                         }}>
                         <Ionicons name="trash-outline" size={16} color="#8E8E93" />
@@ -810,7 +830,7 @@ export default function RecurringScreen() {
             {/* Open New Recurring Income Modal Button */}
             <AnimatedPressable
               onPress={() => {
-                Haptics.selectionAsync().catch(() => {});
+                Haptics.selectionAsync().catch(() => { });
                 setIsIncomeModalVisible(true);
               }}
               style={styles.openModalCtaBtn}>
@@ -958,20 +978,21 @@ export default function RecurringScreen() {
                       activeOpacity={0.7}
                       style={[styles.modalItemRow, isSelected && styles.modalItemRowActive]}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => {});
+                        Haptics.selectionAsync().catch(() => { });
                         setSubBank(bankName);
                         setBankModalVisible(false);
                       }}>
                       <View style={styles.modalItemLeft}>
-                        <View style={[styles.modalBankIcon, isSelected && styles.modalBankIconActive]}>
-                          <Ionicons
-                            name={bankName === 'Diğer' ? 'ellipsis-horizontal' : 'business-outline'}
-                            size={18}
-                            color={isSelected ? Colors.tint : '#8E8E93'}
+                        <View style={{ marginRight: 10 }}>
+                          <BankBrandBadge
+                            bankName={bankName}
+                            size={32}
+                            iconSize={16}
+                            language={language}
                           />
                         </View>
                         <ThemedText style={[styles.modalItemText, isSelected && styles.modalItemTextActive]}>
-                          {bankName}
+                          {formatBankLabel(bankName, language)}
                         </ThemedText>
                       </View>
                       {isSelected && <Ionicons name="checkmark-circle" size={20} color={Colors.tint} />}
@@ -1028,19 +1049,20 @@ export default function RecurringScreen() {
                             backgroundColor: `${preset.color}22`,
                           },
                         ]}>
-                        <View
-                          style={[
-                            styles.presetDot,
-                            { backgroundColor: preset.color },
-                            isSelected && { transform: [{ scale: 1.25 }] },
-                          ]}
-                        />
+                        <View style={{ marginRight: 6 }}>
+                          <SubscriptionBrandIcon
+                            name={preset.name}
+                            fallbackIcon={preset.icon}
+                            fallbackColor={preset.color}
+                            size={16}
+                          />
+                        </View>
                         <ThemedText
                           style={[
                             styles.presetChipText,
                             isSelected && { color: colors.text, fontWeight: '700' },
                           ]}>
-                          {preset.name}
+                          {language === 'tr' ? preset.name : (preset.nameEn || preset.name)}
                         </ThemedText>
                       </TouchableOpacity>
                     );
@@ -1050,12 +1072,14 @@ export default function RecurringScreen() {
                 {/* Service Name Input */}
                 <ThemedText style={styles.inputLabel}>{t('subName').toUpperCase()}</ThemedText>
                 <View style={styles.inputWrap}>
-                  <Ionicons
-                    name={(subIcon as any) || 'play-circle-outline'}
-                    size={18}
-                    color={subColor || Colors.tint}
-                    style={styles.inputIcon}
-                  />
+                  <View style={styles.inputIcon}>
+                    <SubscriptionBrandIcon
+                      name={subName || selectedPreset || ''}
+                      fallbackIcon={subIcon}
+                      fallbackColor={subColor || Colors.tint}
+                      size={18}
+                    />
+                  </View>
                   <TextInput
                     placeholder={
                       language === 'tr'
@@ -1098,7 +1122,7 @@ export default function RecurringScreen() {
                       <TouchableOpacity
                         activeOpacity={0.7}
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => {});
+                          Haptics.selectionAsync().catch(() => { });
                           setSubBillingCycle('monthly');
                         }}
                         style={[
@@ -1116,7 +1140,7 @@ export default function RecurringScreen() {
                       <TouchableOpacity
                         activeOpacity={0.7}
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => {});
+                          Haptics.selectionAsync().catch(() => { });
                           setSubBillingCycle('yearly');
                         }}
                         style={[
@@ -1139,24 +1163,72 @@ export default function RecurringScreen() {
                 <ThemedText style={styles.inputLabel}>
                   {language === 'tr' ? 'PARA BİRİMİ' : 'CURRENCY'}
                 </ThemedText>
-                <View style={styles.currencyGroup}>
-                  {currencies.map((c) => {
-                    const isActive = subCurrency.code === c.code;
-                    return (
-                      <AnimatedPressable
-                        key={c.code}
-                        onPress={() => {
-                          Haptics.selectionAsync().catch(() => {});
-                          setSubCurrency(c);
-                        }}
-                        style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
-                        <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
-                          {c.label}
-                        </ThemedText>
-                      </AnimatedPressable>
-                    );
-                  })}
-                </View>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  style={[styles.bankSelectorButton, styles.bankSelectorButtonActive]}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => { });
+                    setIsSubCurrencyDropdownOpen((prev) => !prev);
+                  }}>
+                  <View style={styles.bankSelectorLeft}>
+                    <View style={[styles.bankIconCircle, styles.bankIconCircleActive]}>
+                      <ThemedText style={styles.currencySelectorSymbol}>
+                        {subCurrency.symbol}
+                      </ThemedText>
+                    </View>
+                    <ThemedText style={[styles.bankSelectorText, styles.bankSelectorTextActive]}>
+                      {subCurrency.label} ({subCurrency.symbol})
+                    </ThemedText>
+                  </View>
+                  <Ionicons
+                    name={isSubCurrencyDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                    size={17}
+                    color={colors.tint}
+                  />
+                </TouchableOpacity>
+
+                {isSubCurrencyDropdownOpen && (
+                  <View style={styles.currencyDropdownList}>
+                    {currencies.map((c, idx) => {
+                      const isActive = subCurrency.code === c.code;
+                      return (
+                        <TouchableOpacity
+                          key={c.code}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            Haptics.selectionAsync().catch(() => { });
+                            setSubCurrency(c);
+                            setIsSubCurrencyDropdownOpen(false);
+                          }}
+                          style={[
+                            styles.currencyDropdownItem,
+                            idx > 0 && styles.currencyDropdownItemBorder,
+                            isActive && styles.currencyDropdownItemActive,
+                          ]}>
+                          <View style={styles.bankSelectorLeft}>
+                            <View style={[styles.bankIconCircle, isActive && styles.bankIconCircleActive]}>
+                              <ThemedText
+                                style={[
+                                  styles.currencySelectorSymbol,
+                                  { color: isActive ? colors.tint : colors.textSecondary },
+                                ]}>
+                                {c.symbol}
+                              </ThemedText>
+                            </View>
+                            <ThemedText
+                              style={[
+                                styles.bankSelectorText,
+                                isActive ? styles.bankSelectorTextActive : { color: colors.textSecondary },
+                              ]}>
+                              {c.label} ({c.symbol})
+                            </ThemedText>
+                          </View>
+                          {isActive && <Ionicons name="checkmark-circle" size={20} color={colors.tint} />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
 
                 {/* Amount & Due Day Row */}
                 <View style={styles.inputsRow}>
@@ -1167,8 +1239,8 @@ export default function RecurringScreen() {
                           ? 'YILLIK TUTAR'
                           : 'YEARLY AMOUNT'
                         : language === 'tr'
-                        ? 'AYLIK TUTAR'
-                        : 'MONTHLY AMOUNT'}
+                          ? 'AYLIK TUTAR'
+                          : 'MONTHLY AMOUNT'}
                     </ThemedText>
                     <View style={styles.inputWrap}>
                       <ThemedText style={styles.inputPrefix}>{subCurrency.symbol}</ThemedText>
@@ -1210,20 +1282,31 @@ export default function RecurringScreen() {
                   activeOpacity={0.7}
                   style={[styles.bankSelectorButton, subBank ? styles.bankSelectorButtonActive : null]}
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
+                    Haptics.selectionAsync().catch(() => { });
                     setBankSearchQuery('');
                     setBankModalVisible(true);
                   }}>
                   <View style={styles.bankSelectorLeft}>
-                    <View style={[styles.bankIconCircle, subBank ? styles.bankIconCircleActive : null]}>
-                      <Ionicons
-                        name="card-outline"
-                        size={18}
-                        color={subBank ? Colors.tint : '#8E8E93'}
-                      />
-                    </View>
+                    {subBank ? (
+                      <View style={{ marginRight: 10 }}>
+                        <BankBrandBadge
+                          bankName={subBank}
+                          size={30}
+                          iconSize={15}
+                          language={language}
+                        />
+                      </View>
+                    ) : (
+                      <View style={[styles.bankIconCircle, subBank ? styles.bankIconCircleActive : null]}>
+                        <Ionicons
+                          name="card-outline"
+                          size={18}
+                          color={subBank ? Colors.tint : '#8E8E93'}
+                        />
+                      </View>
+                    )}
                     <ThemedText style={[styles.bankSelectorText, subBank ? styles.bankSelectorTextActive : null]}>
-                      {subBank || (language === 'tr' ? 'Banka veya Kredi Kartı Seçin' : 'Select Bank or Card')}
+                      {subBank ? formatBankLabel(subBank, language) : (language === 'tr' ? 'Banka veya Kredi Kartı Seçin' : 'Select Bank or Card')}
                     </ThemedText>
                   </View>
                   <Ionicons name="chevron-down" size={17} color={subBank ? Colors.tint : '#8E8E93'} />
@@ -1238,12 +1321,20 @@ export default function RecurringScreen() {
                         activeOpacity={0.7}
                         key={b}
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => {});
+                          Haptics.selectionAsync().catch(() => { });
                           setSubBank(isSelected ? '' : b);
                         }}
-                        style={[styles.chip, isSelected && styles.chipActive]}>
+                        style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }, isSelected && styles.chipActive]}>
+                        <View style={{ marginRight: 6 }}>
+                          <BankBrandBadge
+                            bankName={b}
+                            size={20}
+                            iconSize={11}
+                            language={language}
+                          />
+                        </View>
                         <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                          {b}
+                          {formatBankLabel(b, language)}
                         </ThemedText>
                       </TouchableOpacity>
                     );
@@ -1312,24 +1403,72 @@ export default function RecurringScreen() {
             <ThemedText style={styles.inputLabel}>
               {language === 'tr' ? 'PARA BİRİMİ' : 'CURRENCY'}
             </ThemedText>
-            <View style={styles.currencyGroup}>
-              {currencies.map((c) => {
-                const isActive = incomeCurrency.code === c.code;
-                return (
-                  <AnimatedPressable
-                    key={c.code}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setIncomeCurrency(c);
-                    }}
-                    style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
-                    <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
-                      {c.label}
-                    </ThemedText>
-                  </AnimatedPressable>
-                );
-              })}
-            </View>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={[styles.bankSelectorButton, styles.bankSelectorButtonActive]}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => { });
+                setIsIncomeCurrencyDropdownOpen((prev) => !prev);
+              }}>
+              <View style={styles.bankSelectorLeft}>
+                <View style={[styles.bankIconCircle, styles.bankIconCircleActive]}>
+                  <ThemedText style={styles.currencySelectorSymbol}>
+                    {incomeCurrency.symbol}
+                  </ThemedText>
+                </View>
+                <ThemedText style={[styles.bankSelectorText, styles.bankSelectorTextActive]}>
+                  {incomeCurrency.label} ({incomeCurrency.symbol})
+                </ThemedText>
+              </View>
+              <Ionicons
+                name={isIncomeCurrencyDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                size={17}
+                color={colors.tint}
+              />
+            </TouchableOpacity>
+
+            {isIncomeCurrencyDropdownOpen && (
+              <View style={styles.currencyDropdownList}>
+                {currencies.map((c, idx) => {
+                  const isActive = incomeCurrency.code === c.code;
+                  return (
+                    <TouchableOpacity
+                      key={c.code}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => { });
+                        setIncomeCurrency(c);
+                        setIsIncomeCurrencyDropdownOpen(false);
+                      }}
+                      style={[
+                        styles.currencyDropdownItem,
+                        idx > 0 && styles.currencyDropdownItemBorder,
+                        isActive && styles.currencyDropdownItemActive,
+                      ]}>
+                      <View style={styles.bankSelectorLeft}>
+                        <View style={[styles.bankIconCircle, isActive && styles.bankIconCircleActive]}>
+                          <ThemedText
+                            style={[
+                              styles.currencySelectorSymbol,
+                              { color: isActive ? colors.tint : colors.textSecondary },
+                            ]}>
+                            {c.symbol}
+                          </ThemedText>
+                        </View>
+                        <ThemedText
+                          style={[
+                            styles.bankSelectorText,
+                            isActive ? styles.bankSelectorTextActive : { color: colors.textSecondary },
+                          ]}>
+                          {c.label} ({c.symbol})
+                        </ThemedText>
+                      </View>
+                      {isActive && <Ionicons name="checkmark-circle" size={20} color={colors.tint} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
 
             {/* Amount & Day Inputs Row */}
             <View style={styles.inputsRow}>
@@ -1468,8 +1607,9 @@ export default function RecurringScreen() {
   );
 }
 
-const createStyles = (colors: ThemeColors, isDark: boolean) =>
-  StyleSheet.create({
+const createStyles = (colors: ThemeColors, isDark: boolean) => {
+  const softGreenBorder = isDark ? 'rgba(57, 255, 20, 0.35)' : 'rgba(22, 163, 74, 0.35)';
+  return StyleSheet.create({
     root: {
       flex: 1,
       backgroundColor: colors.background,
@@ -1706,7 +1846,7 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       backgroundColor: colors.cardSecondary,
       borderRadius: 13,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: softGreenBorder,
       paddingHorizontal: 12,
       marginBottom: 10,
       height: 46,
@@ -1780,8 +1920,37 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
     currencyPillTextActive: {
       color: colors.tint,
     },
+    currencySelectorSymbol: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: colors.tint,
+    },
+    currencyDropdownList: {
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: softGreenBorder,
+      marginTop: -2,
+      marginBottom: 10,
+      overflow: 'hidden',
+    },
+    currencyDropdownItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    currencyDropdownItemBorder: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+    },
+    currencyDropdownItemActive: {
+      backgroundColor: colors.tintSoft,
+    },
     inputsRow: {
       flexDirection: 'row',
+      alignItems: 'flex-end',
       gap: 10,
     },
     inputGroupCol: {
@@ -2112,14 +2281,13 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       backgroundColor: colors.cardSecondary,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: softGreenBorder,
       paddingVertical: 12,
       paddingHorizontal: 12,
       marginBottom: 10,
     },
     bankSelectorButtonActive: {
-      borderColor: colors.tint,
-      backgroundColor: colors.tintSoft,
+      borderColor: softGreenBorder,
     },
     bankSelectorLeft: {
       flexDirection: 'row',
@@ -2277,9 +2445,10 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       backgroundColor: colors.cardSecondary,
       borderRadius: 13,
       borderWidth: 1,
-      borderColor: colors.borderLight,
+      borderColor: softGreenBorder,
       padding: 3,
       height: 46,
+      marginBottom: 10,
       alignItems: 'center',
     },
     cyclePill: {
@@ -2520,3 +2689,4 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       fontWeight: '700',
     },
   });
+};

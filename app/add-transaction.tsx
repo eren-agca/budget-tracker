@@ -257,7 +257,7 @@ export default function AddTransactionScreen() {
               keyboardType="numeric"
               maxLength={12}
               placeholderTextColor="#444"
-              autoFocus={true}
+              autoFocus={false}
             />
           </View>
 

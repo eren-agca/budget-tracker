@@ -70,7 +70,7 @@ export default function ExploreScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [displayCurrency, setDisplayCurrency] = useState<Currency>(defaultCurrency);
-  const [rates, setRates] = useState<ExchangeRates | null>(null);
+  const [rates, setRates] = useState<ExchangeRates>({ TRY: 1 });
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState<'expense' | 'income'>('expense');
@@ -78,7 +78,7 @@ export default function ExploreScreen() {
   const chartAnimationProgress = useSharedValue(0);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.uid) return;
 
     const unsubscribe = onSnapshot(query(collection(db, 'users', user.uid, 'transactions')), (snapshot) => {
       const transactionsData: Transaction[] = [];
@@ -94,12 +94,14 @@ export default function ExploreScreen() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [user]);
+  }, [user?.uid]);
 
   useEffect(() => {
     const fetchRates = async () => {
       const fetchedRates = await getExchangeRates();
-      setRates(fetchedRates);
+      if (fetchedRates) {
+        setRates(fetchedRates);
+      }
     };
     fetchRates();
   }, []);

@@ -48,7 +48,11 @@ export const Ticker: React.FC<TickerProps> = ({
 
   const handleOnLayout = useCallback((event: LayoutChangeEvent) => {
     const measuredWidth = Math.ceil(event.nativeEvent.layout.width);
-    if (measuredWidth > 20 && Math.abs(textWidth.value - measuredWidth) > 2) {
+    if (measuredWidth <= 20) return;
+
+    // Only start the animation on initial measurement (or major item-count layout change)
+    // so live price updates never reset or teleport the scrolling position.
+    if (textWidth.value === 0 || Math.abs(textWidth.value - measuredWidth) > 24) {
       textWidth.value = measuredWidth;
       cancelAnimation(translateX);
       translateX.value = 0;
@@ -218,6 +222,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#D1D1D6',
     letterSpacing: 0.3,
+    fontVariant: ['tabular-nums'],
     includeFontPadding: false,
     textAlignVertical: 'center',
   },

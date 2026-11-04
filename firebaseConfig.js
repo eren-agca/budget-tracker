@@ -41,7 +41,7 @@ isSupported().then(isAnalyticsSupported => {
 export const db = (() => {
   try {
     return initializeFirestore(app, {
-      experimentalForceLongPolling: true,
+      experimentalAutoDetectLongPolling: true,
     });
   } catch {
     return getFirestore(app);

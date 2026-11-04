@@ -124,7 +124,7 @@ export const translations = {
     cardsSubtitle: 'KREDİ KARTI VE TAKSİT TAKİBİ',
     totalMonthlyInst: 'Aylık Taksit Yükü',
     totalRemainingDebt: 'Kalan Toplam Borç',
-    newInstallment: 'Yeni Taksitli Harcama Ekle',
+    newInstallment: 'Yeni Taksit Ekle',
     instTitle: 'Harcama Başlığı',
     instTitlePlaceholder: 'Örn: iPhone 16, Dyson Süpürge',
     selectBank: 'Banka / Kart Seçiniz',

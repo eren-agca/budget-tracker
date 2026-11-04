@@ -89,7 +89,9 @@ const TransactionListItem = React.memo(
   }) => {
     const { colors, isDark, language } = useSettings();
     const itemCurrency = currencies.find((c) => c.code === item.currency) || { symbol: item.currency };
-    const isIncome = item.amount > 0;
+    const isIncome = item.type === 'income' || item.amount > 0;
+    const incomeAmountColor = isDark ? '#4ADE80' : '#16A34A';
+    const expenseAmountColor = isDark ? '#F87171' : '#DC2626';
     const iconName = getCategoryIcon(item.category, item.type);
     const localizedCategory = getCategoryLabel(item.category, language);
 
@@ -153,8 +155,8 @@ const TransactionListItem = React.memo(
           <ThemedText
             style={
               isIncome
-                ? [styles.incomeAmount, { color: colors.income }]
-                : [styles.expenseAmount, { color: colors.text }]
+                ? [styles.incomeAmount, { color: incomeAmountColor }]
+                : [styles.expenseAmount, { color: expenseAmountColor }]
             }>
             {isIncome ? '+' : '-'}{itemCurrency.symbol}{Math.abs(item.amount).toFixed(2)}
           </ThemedText>
@@ -476,7 +478,7 @@ export default function HomeScreen() {
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [displayCurrency, setDisplayCurrency] = useState<Currency>(defaultCurrency);
-  const [rates, setRates] = useState<ExchangeRates | null>(null);
+  const [rates, setRates] = useState<ExchangeRates>({ TRY: 1 });
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>('all');
   const [fiatMetalTickerData, setFiatMetalTickerData] = useState<(string | TickerItemData)[]>([]);
@@ -703,7 +705,7 @@ export default function HomeScreen() {
     const fiatMetalItems = [
       { code: 'USD', name: 'USD' },
       { code: 'EUR', name: 'EUR' },
-      { code: 'GBP', name: 'POUND' },
+      { code: 'GBP', name: 'GBP' },
       { code: 'XAU_GRAM', name: 'GOLD' },
       { code: 'XAG_GRAM', name: 'SILVER' },
     ];
@@ -758,7 +760,7 @@ export default function HomeScreen() {
           const parsedRates = JSON.parse(rawRates);
           const parsedDirs = rawDirs ? JSON.parse(rawDirs) : {};
           if (parsedRates && Object.keys(parsedRates).length > 1) {
-            setRates((prev) => prev || parsedRates);
+            setRates((prev) => (prev && Object.keys(prev).length > 1 ? prev : parsedRates));
             setRateDirections((prev) => (Object.keys(prev).length > 0 ? prev : parsedDirs));
             buildTickers(parsedRates, parsedDirs);
           }
@@ -771,7 +773,7 @@ export default function HomeScreen() {
       try {
         const fetchedRates = await getExchangeRates(force);
         if (!fetchedRates || Object.keys(fetchedRates).length <= 1) {
-          setRates((prev) => prev || {});
+          setRates((prev) => (prev && Object.keys(prev).length > 1 ? prev : { TRY: 1 }));
           setFiatMetalTickerData((prev) => (prev.length > 0 ? prev : [FALLBACK_MESSAGE]));
           setCryptoTickerData((prev) => (prev.length > 0 ? prev : [FALLBACK_MESSAGE]));
           return;
@@ -966,7 +968,7 @@ export default function HomeScreen() {
             amount: -Math.abs(sub.amount),
             category: 'Subscriptions',
             currency: sub.currency || 'TRY',
-            description: `${sub.name} (Abonelik Ödemesi)`,
+            description: `${sub.name} (${language === 'tr' ? 'Abonelik Ödemesi' : 'Subscription Payment'})`,
             type: 'expense',
             date: Timestamp.fromDate(transactionDate),
           });
@@ -981,38 +983,96 @@ export default function HomeScreen() {
     }
   }, [user]);
 
-  // Run auto checks whenever Home tab gains focus
+  const parseTransactionDocs = useCallback((docs: any[]): Transaction[] => {
+    const transactionsData: Transaction[] = [];
+    docs.forEach((docSnap) => {
+      const data = docSnap.data();
+      let parsedDate = new Date();
+      if (data.date?.toDate) {
+        parsedDate = data.date.toDate();
+      } else if (data.date) {
+        const fallbackDate = new Date(data.date);
+        if (!isNaN(fallbackDate.getTime())) {
+          parsedDate = fallbackDate;
+        }
+      }
+      transactionsData.push({
+        ...data,
+        id: docSnap.id,
+        date: parsedDate,
+        type: data.type || (data.amount >= 0 ? 'income' : 'expense'),
+      } as Transaction);
+    });
+    return transactionsData;
+  }, []);
+
+  const cacheTransactions = useCallback((uid: string, list: Transaction[]) => {
+    const serializable = list.map((tx) => ({
+      ...tx,
+      date: tx.date instanceof Date ? tx.date.toISOString() : tx.date,
+    }));
+    AsyncStorage.setItem(`@budget_tracker_cached_transactions_${uid}`, JSON.stringify(serializable)).catch(() => {});
+  }, []);
+
+  const refreshTransactionsFromServer = useCallback(async () => {
+    if (!user?.uid) return;
+    try {
+      const q = query(collection(db, 'users', user.uid, 'transactions'), orderBy('date', 'desc'));
+      const snap = await getDocs(q);
+      const list = parseTransactionDocs(snap.docs);
+      setTransactions(list);
+      cacheTransactions(user.uid, list);
+    } catch (err) {
+      console.error('Error refreshing transactions:', err);
+    }
+  }, [user?.uid, parseTransactionDocs, cacheTransactions]);
+
+  // Run auto checks and ensure latest transactions whenever Home tab gains focus
   useFocusEffect(
     useCallback(() => {
       runChecks();
-    }, [runChecks])
+      refreshTransactionsFromServer();
+    }, [runChecks, refreshTransactionsFromServer])
   );
 
   useEffect(() => {
-    runChecks();
-  }, [runChecks]);
-
-  useEffect(() => {
-    if (!user) {
+    const uid = user?.uid;
+    if (!uid) {
       setTransactions([]);
       return;
     }
-    const q = query(collection(db, 'users', user.uid, 'transactions'), orderBy('date', 'desc'));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const transactionsData: Transaction[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        transactionsData.push({
-          ...data,
-          id: doc.id,
-          date: data.date.toDate(),
-          type: data.type || (data.amount >= 0 ? 'income' : 'expense'),
-        } as Transaction);
-      });
-      setTransactions(transactionsData);
-    });
+
+    // Instant load from local cache so transactions and balance never flash 0
+    AsyncStorage.getItem(`@budget_tracker_cached_transactions_${uid}`)
+      .then((raw) => {
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const hydrated: Transaction[] = parsed.map((tx: any) => ({
+              ...tx,
+              date: tx.date ? new Date(tx.date) : new Date(),
+            }));
+            setTransactions((prev) => (prev.length > 0 ? prev : hydrated));
+          }
+        }
+      })
+      .catch(() => {});
+
+    const q = query(collection(db, 'users', uid, 'transactions'), orderBy('date', 'desc'));
+    const unsubscribe = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const transactionsData = parseTransactionDocs(querySnapshot.docs);
+        setTransactions(transactionsData);
+        cacheTransactions(uid, transactionsData);
+      },
+      (error) => {
+        console.error('Transactions onSnapshot error:', error);
+        refreshTransactionsFromServer();
+      }
+    );
     return () => unsubscribe();
-  }, [user]);
+  }, [user?.uid, parseTransactionDocs, cacheTransactions, refreshTransactionsFromServer]);
 
   const handleDeleteTransaction = useCallback((item: Transaction) => {
     setTransactionToDelete(item);
@@ -1028,8 +1088,8 @@ export default function HomeScreen() {
       await deleteDoc(doc(db, 'users', user.uid, 'transactions', targetId));
       Toast.show({
         type: 'success',
-        text1: 'İşlem Silindi',
-        text2: 'Kayıt başarıyla kaldırıldı.',
+        text1: language === 'tr' ? 'İşlem Silindi' : 'Transaction Deleted',
+        text2: language === 'tr' ? 'Kayıt başarıyla kaldırıldı.' : 'Record removed successfully.',
         visibilityTime: 2500,
       });
     } catch (error) {
@@ -1037,8 +1097,8 @@ export default function HomeScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
       Toast.show({
         type: 'error',
-        text1: 'Hata',
-        text2: 'İşlem silinirken bir sorun oluştu.',
+        text1: language === 'tr' ? 'Hata' : 'Error',
+        text2: language === 'tr' ? 'İşlem silinirken bir sorun oluştu.' : 'An error occurred while deleting the transaction.',
       });
     }
   };
@@ -1305,14 +1365,14 @@ export default function HomeScreen() {
       <View style={styles.tickerStack}>
         {fiatMetalTickerData.length > 0 && (
           <Ticker
-            key={`fiat-${fiatMetalTickerData.map((d) => (typeof d === 'string' ? d : `${d.text}-${d.direction || ''}`)).join()}`}
+            key={`fiat-${fiatMetalTickerData.length}`}
             data={fiatMetalTickerData}
             badgeLabel={t('marketTicker')}
           />
         )}
         {cryptoTickerData.length > 0 && (
           <Ticker
-            key={`crypto-${cryptoTickerData.map((d) => (typeof d === 'string' ? d : `${d.text}-${d.direction || ''}`)).join()}`}
+            key={`crypto-${cryptoTickerData.length}`}
             data={cryptoTickerData}
             badgeLabel={t('cryptoTicker')}
           />

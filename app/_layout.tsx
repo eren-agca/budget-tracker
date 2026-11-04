@@ -52,7 +52,7 @@ function RootLayoutNav() {
     if (user && !user.isAnonymous && isAuthRoute) {
       router.replace('/(tabs)');
     }
-    else if (!user && !isAuthRoute && segments[0] !== undefined) {
+    else if (!user && !isAuthRoute) {
       router.replace('/login');
     }
     SplashScreen.hideAsync();

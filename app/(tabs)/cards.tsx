@@ -1,36 +1,36 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Alert,
-  TextInput,
-  Platform,
-  KeyboardAvoidingView,
-  TouchableOpacity,
-} from 'react-native';
-import {
-  collection,
-  addDoc,
-  onSnapshot,
-  deleteDoc,
-  doc,
-  updateDoc,
-  Timestamp,
-} from 'firebase/firestore';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import {
+  Timestamp,
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  updateDoc,
+} from 'firebase/firestore';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
-import { db } from '@/firebaseConfig';
-import { ThemedText } from '@/components/ThemedText';
-import { useAuth } from '@/context/AuthContext';
-import { useSettings, ThemeColors } from '@/context/SettingsContext';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
+import { BankBrandBadge } from '@/components/BrandLogo';
 import { SwipeableModal } from '@/components/SwipeableModal';
+import { ThemedText } from '@/components/ThemedText';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
-import { Colors } from '@/constants/Colors';
+import { useAuth } from '@/context/AuthContext';
+import { ThemeColors, useSettings } from '@/context/SettingsContext';
+import { db } from '@/firebaseConfig';
 
 export interface Installment {
   id: string;
@@ -95,6 +95,24 @@ const ALL_BANKS = [
 
 const QUICK_INSTALLMENTS = ['3', '6', '9', '12'];
 
+const formatBankLabel = (bankName: string, lang: 'tr' | 'en') => {
+  if (lang === 'tr') return bankName;
+  if (bankName === 'Diğer') return 'Other';
+  return bankName
+    .replace(/İ/g, 'I')
+    .replace(/ı/g, 'i')
+    .replace(/Ü/g, 'U')
+    .replace(/ü/g, 'u')
+    .replace(/Ö/g, 'O')
+    .replace(/ö/g, 'o')
+    .replace(/Ş/g, 'S')
+    .replace(/ş/g, 's')
+    .replace(/Ç/g, 'C')
+    .replace(/ç/g, 'c')
+    .replace(/Ğ/g, 'G')
+    .replace(/ğ/g, 'g');
+};
+
 export default function CardsScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -114,6 +132,7 @@ export default function CardsScreen() {
   const [instPaidCount, setInstPaidCount] = useState('0');
   const [instDueDay, setInstDueDay] = useState('');
   const [instCurrency, setInstCurrency] = useState<Currency>(defaultCurrency);
+  const [isCurrencyDropdownOpen, setIsCurrencyDropdownOpen] = useState(false);
 
   // Bank Search Modal
   const [isBankModalVisible, setBankModalVisible] = useState(false);
@@ -125,7 +144,7 @@ export default function CardsScreen() {
   const filteredBanks = useMemo(() => {
     if (!bankSearchQuery.trim()) return ALL_BANKS;
     const q = bankSearchQuery.toLowerCase().trim();
-    return ALL_BANKS.filter((b) => b.toLowerCase().includes(q));
+    return ALL_BANKS.filter((b) => b.toLowerCase().includes(q) || formatBankLabel(b, 'en').toLowerCase().includes(q));
   }, [bankSearchQuery]);
 
   // Real-time Firestore sync
@@ -266,7 +285,7 @@ export default function CardsScreen() {
 
     try {
       if (!user) throw new Error('User not authenticated');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
 
       const monthlyAmount = Number((numericTotal / numericCount).toFixed(2));
       const remainingInstallments = numericCount - numericPaid;
@@ -332,7 +351,7 @@ export default function CardsScreen() {
           onPress: async () => {
             try {
               if (!user) return;
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
 
               await addDoc(collection(db, 'users', user.uid, 'transactions'), {
                 amount: -Math.abs(item.monthlyAmount),
@@ -385,7 +404,7 @@ export default function CardsScreen() {
           onPress: async () => {
             try {
               if (!user) return;
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => { });
               await deleteDoc(doc(db, 'users', user.uid, 'installments', id));
               Toast.show({
                 type: 'success',
@@ -454,8 +473,9 @@ export default function CardsScreen() {
         {/* Open New Installment Modal CTA Button */}
         <AnimatedPressable
           onPress={() => {
-            Haptics.selectionAsync().catch(() => {});
+            Haptics.selectionAsync().catch(() => { });
             setBankModalVisible(false);
+            setIsCurrencyDropdownOpen(false);
             setIsAddModalVisible(true);
           }}
           style={styles.openModalCtaBtn}>
@@ -464,12 +484,7 @@ export default function CardsScreen() {
               <Ionicons name="card-outline" size={20} color={colors.tint} />
             </View>
             <View style={styles.openModalTextCol}>
-              <ThemedText style={styles.openModalTitle}>{t('newInstallment')}</ThemedText>
-              <ThemedText style={styles.openModalSubtitle} numberOfLines={1}>
-                {language === 'tr'
-                  ? 'Kredi kartı taksiti ve aylık ödeme planı ekleyin'
-                  : 'Add a credit card installment & monthly plan'}
-              </ThemedText>
+              <ThemedText style={styles.openModalTitle} numberOfLines={1}>{t('newInstallment')}</ThemedText>
             </View>
           </View>
           <View style={[styles.openModalActionBadge, { backgroundColor: colors.tint }]}>
@@ -490,14 +505,14 @@ export default function CardsScreen() {
                 mode === 'all'
                   ? `${t('filterAll')} (${installments.length})`
                   : mode === 'active'
-                  ? `${t('filterActive')} (${activeInstallments.length})`
-                  : `${t('filterCompleted')} (${completedInstallments.length})`;
+                    ? `${t('filterActive')} (${activeInstallments.length})`
+                    : `${t('filterCompleted')} (${completedInstallments.length})`;
               return (
                 <TouchableOpacity
                   key={mode}
                   activeOpacity={0.7}
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
+                    Haptics.selectionAsync().catch(() => { });
                     setFilterMode(mode);
                   }}
                   style={[styles.filterChip, active && styles.filterChipActive]}>
@@ -538,8 +553,15 @@ export default function CardsScreen() {
                 {/* Header row: Bank & Status */}
                 <View style={styles.cardHeaderRow}>
                   <View style={styles.bankPill}>
-                    <Ionicons name="card-outline" size={13} color={colors.tint} style={{ marginRight: 5 }} />
-                    <ThemedText style={styles.bankPillText}>{item.bank || (language === 'tr' ? 'Banka' : 'Bank')}</ThemedText>
+                    <View style={{ marginRight: 6 }}>
+                      <BankBrandBadge
+                        bankName={item.bank}
+                        size={19}
+                        iconSize={11}
+                        language={language}
+                      />
+                    </View>
+                    <ThemedText style={styles.bankPillText}>{item.bank ? formatBankLabel(item.bank, language) : (language === 'tr' ? 'Banka' : 'Bank')}</ThemedText>
                   </View>
 
                   <View style={styles.headerRightBadges}>
@@ -635,6 +657,7 @@ export default function CardsScreen() {
         visible={isAddModalVisible}
         onClose={() => {
           setBankModalVisible(false);
+          setIsCurrencyDropdownOpen(false);
           setIsAddModalVisible(false);
         }}
         sheetStyle={{
@@ -695,24 +718,26 @@ export default function CardsScreen() {
                           key={b}
                           activeOpacity={0.7}
                           onPress={() => {
-                            Haptics.selectionAsync().catch(() => {});
+                            Haptics.selectionAsync().catch(() => { });
                             setInstBank(b);
                             setBankModalVisible(false);
                           }}
                           style={[styles.quickBankTile, instBank === b && styles.quickBankTileActive]}>
-                          <Ionicons
-                            name="card-outline"
-                            size={16}
-                            color={instBank === b ? colors.tint : colors.textSecondary}
-                            style={{ marginRight: 6 }}
-                          />
+                          <View style={{ marginRight: 7 }}>
+                            <BankBrandBadge
+                              bankName={b}
+                              size={22}
+                              iconSize={12}
+                              language={language}
+                            />
+                          </View>
                           <ThemedText
                             style={[
                               styles.quickBankText,
                               instBank === b && { color: colors.tint, fontWeight: '800' },
                             ]}
                             numberOfLines={1}>
-                            {b}
+                            {formatBankLabel(b, language)}
                           </ThemedText>
                         </TouchableOpacity>
                       ))}
@@ -730,7 +755,7 @@ export default function CardsScreen() {
                       key={bankName}
                       activeOpacity={0.7}
                       onPress={() => {
-                        Haptics.selectionAsync().catch(() => {});
+                        Haptics.selectionAsync().catch(() => { });
                         setInstBank(bankName);
                         setBankModalVisible(false);
                       }}
@@ -740,15 +765,16 @@ export default function CardsScreen() {
                         isSelected && styles.bankListItemActive,
                       ]}>
                       <View style={styles.bankListLeft}>
-                        <View style={[styles.bankListIconCircle, isSelected && styles.bankListIconCircleActive]}>
-                          <Ionicons
-                            name="business-outline"
-                            size={18}
-                            color={isSelected ? (isDark ? '#000000' : '#FFFFFF') : colors.textSecondary}
+                        <View style={{ marginRight: 10 }}>
+                          <BankBrandBadge
+                            bankName={bankName}
+                            size={32}
+                            iconSize={16}
+                            language={language}
                           />
                         </View>
                         <ThemedText style={[styles.bankListName, isSelected && styles.bankListNameActive]}>
-                          {bankName}
+                          {formatBankLabel(bankName, language)}
                         </ThemedText>
                       </View>
                       {isSelected && <Ionicons name="checkmark-circle" size={20} color={colors.tint} />}
@@ -799,20 +825,31 @@ export default function CardsScreen() {
                   activeOpacity={0.7}
                   style={[styles.bankSelectorButton, instBank ? styles.bankSelectorButtonActive : null]}
                   onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
+                    Haptics.selectionAsync().catch(() => { });
                     setBankSearchQuery('');
                     setBankModalVisible(true);
                   }}>
                   <View style={styles.bankSelectorLeft}>
-                    <View style={[styles.bankIconCircle, instBank ? styles.bankIconCircleActive : null]}>
-                      <Ionicons
-                        name="card-outline"
-                        size={18}
-                        color={instBank ? colors.tint : colors.textSecondary}
-                      />
-                    </View>
+                    {instBank ? (
+                      <View style={{ marginRight: 10 }}>
+                        <BankBrandBadge
+                          bankName={instBank}
+                          size={30}
+                          iconSize={15}
+                          language={language}
+                        />
+                      </View>
+                    ) : (
+                      <View style={[styles.bankIconCircle, instBank ? styles.bankIconCircleActive : null]}>
+                        <Ionicons
+                          name="card-outline"
+                          size={18}
+                          color={instBank ? colors.tint : colors.textSecondary}
+                        />
+                      </View>
+                    )}
                     <ThemedText style={[styles.bankSelectorText, instBank ? styles.bankSelectorTextActive : null]}>
-                      {instBank || t('selectBank')}
+                      {instBank ? formatBankLabel(instBank, language) : t('selectBank')}
                     </ThemedText>
                   </View>
                   <Ionicons name="chevron-down" size={17} color={instBank ? colors.tint : colors.textSecondary} />
@@ -827,12 +864,20 @@ export default function CardsScreen() {
                         activeOpacity={0.7}
                         key={b}
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => {});
+                          Haptics.selectionAsync().catch(() => { });
                           setInstBank(b);
                         }}
-                        style={[styles.chip, isSelected && styles.chipActive]}>
+                        style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }, isSelected && styles.chipActive]}>
+                        <View style={{ marginRight: 6 }}>
+                          <BankBrandBadge
+                            bankName={b}
+                            size={20}
+                            iconSize={11}
+                            language={language}
+                          />
+                        </View>
                         <ThemedText style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                          {b}
+                          {formatBankLabel(b, language)}
                         </ThemedText>
                       </TouchableOpacity>
                     );
@@ -843,35 +888,83 @@ export default function CardsScreen() {
                 <ThemedText style={styles.inputLabel}>
                   {language === 'tr' ? 'PARA BİRİMİ' : 'CURRENCY'}
                 </ThemedText>
-                <View style={styles.currencyGroup}>
-                  {currencies.map((c) => {
-                    const isActive = instCurrency.code === c.code;
-                    return (
-                      <AnimatedPressable
-                        key={c.code}
-                        onPress={() => {
-                          Haptics.selectionAsync().catch(() => {});
-                          setInstCurrency(c);
-                        }}
-                        style={[styles.currencyPill, isActive && styles.currencyPillActive]}>
-                        <ThemedText style={[styles.currencyPillText, isActive && styles.currencyPillTextActive]}>
-                          {c.label} ({c.symbol})
-                        </ThemedText>
-                      </AnimatedPressable>
-                    );
-                  })}
-                </View>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  style={[styles.bankSelectorButton, styles.bankSelectorButtonActive]}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => { });
+                    setIsCurrencyDropdownOpen((prev) => !prev);
+                  }}>
+                  <View style={styles.bankSelectorLeft}>
+                    <View style={[styles.bankIconCircle, styles.bankIconCircleActive]}>
+                      <ThemedText style={styles.currencySelectorSymbol}>
+                        {instCurrency.symbol}
+                      </ThemedText>
+                    </View>
+                    <ThemedText style={[styles.bankSelectorText, styles.bankSelectorTextActive]}>
+                      {instCurrency.label} ({instCurrency.symbol})
+                    </ThemedText>
+                  </View>
+                  <Ionicons
+                    name={isCurrencyDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                    size={17}
+                    color={colors.tint}
+                  />
+                </TouchableOpacity>
+
+                {isCurrencyDropdownOpen && (
+                  <View style={styles.currencyDropdownList}>
+                    {currencies.map((c, idx) => {
+                      const isActive = instCurrency.code === c.code;
+                      return (
+                        <TouchableOpacity
+                          key={c.code}
+                          activeOpacity={0.7}
+                          onPress={() => {
+                            Haptics.selectionAsync().catch(() => { });
+                            setInstCurrency(c);
+                            setIsCurrencyDropdownOpen(false);
+                          }}
+                          style={[
+                            styles.currencyDropdownItem,
+                            idx > 0 && styles.currencyDropdownItemBorder,
+                            isActive && styles.currencyDropdownItemActive,
+                          ]}>
+                          <View style={styles.bankSelectorLeft}>
+                            <View style={[styles.bankIconCircle, isActive && styles.bankIconCircleActive]}>
+                              <ThemedText
+                                style={[
+                                  styles.currencySelectorSymbol,
+                                  { color: isActive ? colors.tint : colors.textSecondary },
+                                ]}>
+                                {c.symbol}
+                              </ThemedText>
+                            </View>
+                            <ThemedText
+                              style={[
+                                styles.bankSelectorText,
+                                isActive ? styles.bankSelectorTextActive : { color: colors.textSecondary },
+                              ]}>
+                              {c.label} ({c.symbol})
+                            </ThemedText>
+                          </View>
+                          {isActive && <Ionicons name="checkmark-circle" size={20} color={colors.tint} />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
 
                 {/* Total Amount & Total Installments */}
                 <View style={styles.inputsRow}>
                   <View style={[styles.inputGroupCol, { flex: 1.3 }]}>
-                    <ThemedText style={styles.inputLabel}>
+                    <ThemedText style={styles.inputLabel} numberOfLines={1} adjustsFontSizeToFit>
                       {t('totalExpenseAmount').toUpperCase()}
                     </ThemedText>
                     <View style={styles.inputWrap}>
                       <ThemedText style={styles.inputPrefix}>{instCurrency.symbol}</ThemedText>
                       <TextInput
-                        placeholder="Örn: 36000"
+                        placeholder={language === 'tr' ? 'Örn: 36000' : 'e.g. 36000'}
                         value={instTotalAmount}
                         onChangeText={(txt) => formatNumberInput(txt, setInstTotalAmount)}
                         style={styles.textInput}
@@ -883,13 +976,13 @@ export default function CardsScreen() {
                   </View>
 
                   <View style={[styles.inputGroupCol, { flex: 1 }]}>
-                    <ThemedText style={styles.inputLabel}>
+                    <ThemedText style={styles.inputLabel} numberOfLines={1} adjustsFontSizeToFit>
                       {t('totalInstallmentsCount').toUpperCase()}
                     </ThemedText>
                     <View style={styles.inputWrap}>
                       <Ionicons name="repeat-outline" size={17} color={colors.textSecondary} style={styles.inputIcon} />
                       <TextInput
-                        placeholder="Örn: 6"
+                        placeholder={language === 'tr' ? 'Örn: 6' : 'e.g. 6'}
                         value={instTotalCount}
                         onChangeText={handleTotalCountInput}
                         style={styles.textInput}
@@ -909,7 +1002,7 @@ export default function CardsScreen() {
                       <AnimatedPressable
                         key={count}
                         onPress={() => {
-                          Haptics.selectionAsync().catch(() => {});
+                          Haptics.selectionAsync().catch(() => { });
                           setInstTotalCount(count);
                         }}
                         style={[styles.chip, isSelected && styles.chipActive]}>
@@ -923,8 +1016,8 @@ export default function CardsScreen() {
 
                 {/* Paid so far & Due Day */}
                 <View style={styles.inputsRow}>
-                  <View style={[styles.inputGroupCol, { flex: 1 }]}>
-                    <ThemedText style={styles.inputLabel}>
+                  <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
+                    <ThemedText style={styles.inputLabel} numberOfLines={1} adjustsFontSizeToFit>
                       {t('paidInstallmentsCount').toUpperCase()}
                     </ThemedText>
                     <View style={styles.inputWrap}>
@@ -941,8 +1034,8 @@ export default function CardsScreen() {
                     </View>
                   </View>
 
-                  <View style={[styles.inputGroupCol, { flex: 1.2 }]}>
-                    <ThemedText style={styles.inputLabel}>{t('dueDay').toUpperCase()}</ThemedText>
+                  <View style={[styles.inputGroupCol, { flex: 1 }]}>
+                    <ThemedText style={styles.inputLabel} numberOfLines={1} adjustsFontSizeToFit>{t('dueDay').toUpperCase()}</ThemedText>
                     <View style={styles.inputWrap}>
                       <Ionicons name="calendar-outline" size={17} color={colors.textSecondary} style={styles.inputIcon} />
                       <TextInput
@@ -1004,8 +1097,9 @@ export default function CardsScreen() {
   );
 }
 
-const createStyles = (colors: ThemeColors, isDark: boolean) =>
-  StyleSheet.create({
+const createStyles = (colors: ThemeColors, isDark: boolean) => {
+  const softGreenBorder = isDark ? 'rgba(57, 255, 20, 0.35)' : 'rgba(22, 163, 74, 0.35)';
+  return StyleSheet.create({
     keyboardContainer: {
       flex: 1,
       backgroundColor: colors.background,
@@ -1207,7 +1301,7 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       backgroundColor: colors.cardSecondary,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: softGreenBorder,
       paddingHorizontal: 12,
       height: 48,
     },
@@ -1233,17 +1327,18 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       backgroundColor: colors.cardSecondary,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: softGreenBorder,
       paddingHorizontal: 12,
       height: 50,
       marginBottom: 8,
     },
     bankSelectorButtonActive: {
-      borderColor: colors.tint,
+      borderColor: softGreenBorder,
     },
     bankSelectorLeft: {
       flexDirection: 'row',
       alignItems: 'center',
+
       gap: 10,
     },
     bankIconCircle: {
@@ -1317,12 +1412,41 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       fontWeight: '700',
       color: colors.textSecondary,
     },
+    currencySelectorSymbol: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: colors.tint,
+    },
+    currencyDropdownList: {
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: softGreenBorder,
+      marginTop: 2,
+      marginBottom: 8,
+      overflow: 'hidden',
+    },
+    currencyDropdownItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    currencyDropdownItemBorder: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+    },
+    currencyDropdownItemActive: {
+      backgroundColor: colors.tintSoft,
+    },
     currencyPillTextActive: {
       color: colors.tint,
       fontWeight: '800',
     },
-    inputsRow: {
+    inputsRow: { alignItems: 'flex-end',
       flexDirection: 'row',
+
       gap: 10,
     },
     inputGroupCol: {
@@ -1550,8 +1674,8 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       fontWeight: '600',
       color: colors.textSecondary,
     },
-    cardAmountCol: {
-      alignItems: 'flex-end',
+    cardAmountCol: { alignItems: 'flex-end',
+
     },
     installmentMonthlyAmount: {
       fontSize: 17,
@@ -1698,6 +1822,7 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
     bankListLeft: {
       flexDirection: 'row',
       alignItems: 'center',
+
       gap: 10,
     },
     bankListIconCircle: {
@@ -1721,3 +1846,4 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       color: colors.tint,
     },
   });
+};
