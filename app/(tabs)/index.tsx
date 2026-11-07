@@ -2,18 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from 'expo-router';
-import {
-  Timestamp,
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  query,
-  updateDoc,
-} from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AppState,
@@ -44,8 +33,14 @@ import { dateFilters, getDateFilters, getDateFilterLabel } from '@/constants/Dat
 import { INVESTMENT_PRESETS, getLiveAssetRateInTRY, getPresetLabel } from '@/constants/Investments';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
-import { db } from '@/firebaseConfig';
 import { ExchangeRates, getDailyOpenRatesSnapshot, getExchangeRates } from '@/services/currencyService';
+import {
+  addUserDoc,
+  deleteUserDoc,
+  getUserDocs,
+  subscribeUserCollection,
+  updateUserDoc,
+} from '@/services/userDataService';
 
 interface Transaction {
   id: string;
@@ -862,9 +857,8 @@ export default function HomeScreen() {
 
     // 1. Check Recurring Incomes
     try {
-      const recurringQuery = query(collection(db, 'users', user.uid, 'recurringIncomes'));
-      const querySnapshot = await getDocs(recurringQuery);
-      for (const docSnap of querySnapshot.docs) {
+      const recurringSnap = await getUserDocs(user, 'recurringIncomes');
+      for (const docSnap of recurringSnap.docs) {
         const recurring = docSnap.data();
         const lastAdded = recurring.lastAdded ? recurring.lastAdded.toDate() : null;
         const isDayDue = currentDay >= recurring.dayOfMonth;
@@ -873,7 +867,7 @@ export default function HomeScreen() {
 
         if (isDayDue && notAddedThisMonth) {
           const transactionDate = new Date(currentYear, currentMonth, recurring.dayOfMonth);
-          await addDoc(collection(db, 'users', user.uid, 'transactions'), {
+          await addUserDoc(user, 'transactions', {
             amount: recurring.amount,
             category: recurring.category,
             currency: recurring.currency,
@@ -881,7 +875,7 @@ export default function HomeScreen() {
             type: 'income',
             date: Timestamp.fromDate(transactionDate),
           });
-          await updateDoc(doc(db, 'users', user.uid, 'recurringIncomes', docSnap.id), {
+          await updateUserDoc(user, 'recurringIncomes', docSnap.id, {
             lastAdded: Timestamp.now(),
           });
         }
@@ -892,9 +886,8 @@ export default function HomeScreen() {
 
     // 2. Check Installments
     try {
-      const installmentsQuery = query(collection(db, 'users', user.uid, 'installments'));
-      const querySnapshot = await getDocs(installmentsQuery);
-      for (const docSnap of querySnapshot.docs) {
+      const installmentSnap = await getUserDocs(user, 'installments');
+      for (const docSnap of installmentSnap.docs) {
         const inst = docSnap.data();
         if (inst.completed || (inst.remainingInstallments != null && inst.remainingInstallments <= 0)) {
           continue;
@@ -910,7 +903,7 @@ export default function HomeScreen() {
           const nextPaid = (inst.paidInstallments || 0) + 1;
           const nextRemaining = (inst.remainingInstallments ?? inst.totalInstallments) - 1;
 
-          await addDoc(collection(db, 'users', user.uid, 'transactions'), {
+          await addUserDoc(user, 'transactions', {
             amount: -Math.abs(inst.monthlyAmount),
             category: 'Debt',
             currency: inst.currency || 'TRY',
@@ -919,7 +912,7 @@ export default function HomeScreen() {
             date: Timestamp.fromDate(transactionDate),
           });
 
-          await updateDoc(doc(db, 'users', user.uid, 'installments', docSnap.id), {
+          await updateUserDoc(user, 'installments', docSnap.id, {
             paidInstallments: nextPaid,
             remainingInstallments: Math.max(0, nextRemaining),
             completed: nextRemaining <= 0,
@@ -933,9 +926,8 @@ export default function HomeScreen() {
 
     // 3. Check Subscriptions
     try {
-      const subsQuery = query(collection(db, 'users', user.uid, 'subscriptions'));
-      const querySnapshot = await getDocs(subsQuery);
-      for (const docSnap of querySnapshot.docs) {
+      const subSnap = await getUserDocs(user, 'subscriptions');
+      for (const docSnap of subSnap.docs) {
         const sub = docSnap.data();
         if (sub.isActive === false) continue;
 
@@ -964,7 +956,7 @@ export default function HomeScreen() {
         // If today is due date (or past due date) and wasn't added after the due day this month
         if (isDayDue && notChargedYet && !createdThisMonthAfterDue) {
           const transactionDate = new Date(currentYear, currentMonth, dueDay);
-          await addDoc(collection(db, 'users', user.uid, 'transactions'), {
+          await addUserDoc(user, 'transactions', {
             amount: -Math.abs(sub.amount),
             category: 'Subscriptions',
             currency: sub.currency || 'TRY',
@@ -973,7 +965,7 @@ export default function HomeScreen() {
             date: Timestamp.fromDate(transactionDate),
           });
 
-          await updateDoc(doc(db, 'users', user.uid, 'subscriptions', docSnap.id), {
+          await updateUserDoc(user, 'subscriptions', docSnap.id, {
             lastCharged: Timestamp.now(),
           });
         }
@@ -981,7 +973,7 @@ export default function HomeScreen() {
     } catch (err) {
       console.error('Error auto-checking subscriptions:', err);
     }
-  }, [user]);
+  }, [user, language]);
 
   const parseTransactionDocs = useCallback((docs: any[]): Transaction[] => {
     const transactionsData: Transaction[] = [];
@@ -1017,15 +1009,14 @@ export default function HomeScreen() {
   const refreshTransactionsFromServer = useCallback(async () => {
     if (!user?.uid) return;
     try {
-      const q = query(collection(db, 'users', user.uid, 'transactions'), orderBy('date', 'desc'));
-      const snap = await getDocs(q);
+      const snap = await getUserDocs(user, 'transactions', { orderByDateDesc: true });
       const list = parseTransactionDocs(snap.docs);
       setTransactions(list);
       cacheTransactions(user.uid, list);
     } catch (err) {
       console.error('Error refreshing transactions:', err);
     }
-  }, [user?.uid, parseTransactionDocs, cacheTransactions]);
+  }, [user, parseTransactionDocs, cacheTransactions]);
 
   // Run auto checks and ensure latest transactions whenever Home tab gains focus
   useFocusEffect(
@@ -1058,21 +1049,22 @@ export default function HomeScreen() {
       })
       .catch(() => {});
 
-    const q = query(collection(db, 'users', uid, 'transactions'), orderBy('date', 'desc'));
-    const unsubscribe = onSnapshot(
-      q,
+    const unsubscribe = subscribeUserCollection(
+      user,
+      'transactions',
       (querySnapshot) => {
         const transactionsData = parseTransactionDocs(querySnapshot.docs);
         setTransactions(transactionsData);
         cacheTransactions(uid, transactionsData);
       },
+      { orderByDateDesc: true },
       (error) => {
         console.error('Transactions onSnapshot error:', error);
         refreshTransactionsFromServer();
       }
     );
     return () => unsubscribe();
-  }, [user?.uid, parseTransactionDocs, cacheTransactions, refreshTransactionsFromServer]);
+  }, [user, parseTransactionDocs, cacheTransactions, refreshTransactionsFromServer]);
 
   const handleDeleteTransaction = useCallback((item: Transaction) => {
     setTransactionToDelete(item);
@@ -1085,7 +1077,7 @@ export default function HomeScreen() {
 
     try {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      await deleteDoc(doc(db, 'users', user.uid, 'transactions', targetId));
+      await deleteUserDoc(user, 'transactions', targetId);
       Toast.show({
         type: 'success',
         text1: language === 'tr' ? 'İşlem Silindi' : 'Transaction Deleted',
@@ -1174,7 +1166,7 @@ export default function HomeScreen() {
 
     try {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      await updateDoc(doc(db, 'users', user.uid, 'transactions', targetId), {
+      await updateUserDoc(user, 'transactions', targetId, {
         manualCurrentRate: numeric,
       });
       Toast.show({

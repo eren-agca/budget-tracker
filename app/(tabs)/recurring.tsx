@@ -1,14 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import {
-  Timestamp,
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  updateDoc,
-} from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import { ComponentProps, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -32,7 +24,7 @@ import { Colors } from '@/constants/Colors';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeColors, useSettings } from '@/context/SettingsContext';
-import { db } from '@/firebaseConfig';
+import { addUserDoc, deleteUserDoc, subscribeUserCollection, updateUserDoc } from '@/services/userDataService';
 import { hs, ms, useResponsive, vs } from '@/utils/responsive';
 
 export interface RecurringIncome {
@@ -222,9 +214,9 @@ export default function RecurringScreen() {
   // Subscribe to Recurring Incomes
   useEffect(() => {
     if (!user) return;
-    const unsubscribe = onSnapshot(collection(db, 'users', user.uid, 'recurringIncomes'), (snapshot) => {
+    const unsubscribe = subscribeUserCollection(user, 'recurringIncomes', (docs) => {
       const incomes: RecurringIncome[] = [];
-      snapshot.forEach((doc) => {
+      docs.forEach((doc) => {
         incomes.push({ id: doc.id, ...doc.data() } as RecurringIncome);
       });
       setRecurringIncomes(incomes);
@@ -235,9 +227,9 @@ export default function RecurringScreen() {
   // Subscribe to Subscriptions
   useEffect(() => {
     if (!user) return;
-    const unsubscribe = onSnapshot(collection(db, 'users', user.uid, 'subscriptions'), (snapshot) => {
+    const unsubscribe = subscribeUserCollection(user, 'subscriptions', (docs) => {
       const list: Subscription[] = [];
-      snapshot.forEach((d) => {
+      docs.forEach((d) => {
         list.push({ id: d.id, ...d.data() } as Subscription);
       });
       list.sort((a, b) => {
@@ -333,7 +325,7 @@ export default function RecurringScreen() {
       const today = new Date();
       const isDueToday = numericDueDay === today.getDate();
 
-      await addDoc(collection(db, 'users', user.uid, 'subscriptions'), {
+      await addUserDoc(user, 'subscriptions', {
         name: trimmedName,
         amount: numericAmount,
         currency: subCurrency.code,
@@ -349,7 +341,7 @@ export default function RecurringScreen() {
       });
 
       if (isDueToday) {
-        await addDoc(collection(db, 'users', user.uid, 'transactions'), {
+        await addUserDoc(user, 'transactions', {
           amount: -Math.abs(numericAmount),
           category: 'Subscriptions',
           currency: subCurrency.code,
@@ -389,7 +381,7 @@ export default function RecurringScreen() {
       if (!user) return;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => { });
       const nextActive = !item.isActive;
-      await updateDoc(doc(db, 'users', user.uid, 'subscriptions', item.id), {
+      await updateUserDoc(user, 'subscriptions', item.id, {
         isActive: nextActive,
       });
       Toast.show({
@@ -408,7 +400,7 @@ export default function RecurringScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
       const currSymbol = currencies.find((c) => c.code === subToPay.currency)?.symbol || subToPay.currency;
 
-      await addDoc(collection(db, 'users', user.uid, 'transactions'), {
+      await addUserDoc(user, 'transactions', {
         amount: -Math.abs(subToPay.amount),
         category: 'Subscriptions',
         currency: subToPay.currency || 'TRY',
@@ -417,7 +409,7 @@ export default function RecurringScreen() {
         date: Timestamp.now(),
       });
 
-      await updateDoc(doc(db, 'users', user.uid, 'subscriptions', subToPay.id), {
+      await updateUserDoc(user, 'subscriptions', subToPay.id, {
         lastCharged: Timestamp.now(),
       });
 
@@ -445,7 +437,7 @@ export default function RecurringScreen() {
     try {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => { });
       const name = subToDelete.name;
-      await deleteDoc(doc(db, 'users', user.uid, 'subscriptions', subToDelete.id));
+      await deleteUserDoc(user, 'subscriptions', subToDelete.id);
       setSubToDelete(null);
       Toast.show({
         type: 'success',
@@ -498,7 +490,7 @@ export default function RecurringScreen() {
       if (!user) throw new Error('User not authenticated');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
 
-      await addDoc(collection(db, 'users', user.uid, 'recurringIncomes'), {
+      await addUserDoc(user, 'recurringIncomes', {
         amount: numericAmount,
         category: category.trim(),
         currency: incomeCurrency.code,
@@ -537,7 +529,7 @@ export default function RecurringScreen() {
           try {
             if (!user) return;
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => { });
-            await deleteDoc(doc(db, 'users', user.uid, 'recurringIncomes', id));
+            await deleteUserDoc(user, 'recurringIncomes', id);
           } catch (error) {
             console.error('Error deleting recurring income: ', error);
             Toast.show({

@@ -1,4 +1,3 @@
-import { collection, onSnapshot, query } from 'firebase/firestore';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,11 +14,11 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
 import { ExchangeRates, getExchangeRates } from '@/services/currencyService';
+import { subscribeUserCollection } from '@/services/userDataService';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
-import { db } from '@/firebaseConfig';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
 import { analyzeTransactionsWithGemini } from '@/services/geminiService';
@@ -81,9 +80,9 @@ export default function ExploreScreen() {
   useEffect(() => {
     if (!user?.uid) return;
 
-    const unsubscribe = onSnapshot(query(collection(db, 'users', user.uid, 'transactions')), (snapshot) => {
+    const unsubscribe = subscribeUserCollection(user, 'transactions', (docs) => {
       const transactionsData: Transaction[] = [];
-      snapshot.forEach((doc) => {
+      docs.forEach((doc) => {
         const data = doc.data();
         transactionsData.push({
           id: doc.id,
@@ -95,7 +94,7 @@ export default function ExploreScreen() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [user?.uid]);
+  }, [user]);
 
   useEffect(() => {
     const fetchRates = async () => {
@@ -704,7 +703,20 @@ export default function ExploreScreen() {
 
           {analysis && (
             <View style={[styles.analysisBox, { backgroundColor: colors.cardSecondary, borderColor: colors.border }]}>
-              <ThemedText style={[styles.analysisResultText, { color: colors.text }]}>{analysis}</ThemedText>
+              <ThemedText style={[styles.analysisResultText, { color: colors.text }]}>
+                {analysis.split(/(\*\*.*?\*\*)/g).map((part, idx) => {
+                  if (part.startsWith('**') && part.endsWith('**')) {
+                    return (
+                      <ThemedText
+                        key={idx}
+                        style={[styles.analysisResultText, { color: colors.text, fontWeight: '800' }]}>
+                        {part.slice(2, -2)}
+                      </ThemedText>
+                    );
+                  }
+                  return part;
+                })}
+              </ThemedText>
             </View>
           )}
         </View>

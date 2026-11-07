@@ -1,6 +1,8 @@
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { SettingsProvider, useSettings } from '@/context/SettingsContext';
 import { auth } from '@/firebaseConfig'; // getAuth yerine doğrudan auth'u import ediyoruz.
+import { createLocalGuestUser, GUEST_SESSION_KEY } from '@/services/userDataService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
@@ -36,9 +38,24 @@ function RootLayoutNav() {
   });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (authenticatedUser) => {
-      setUser(authenticatedUser);
-      setAuthLoaded(true);
+    const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
+      if (authenticatedUser) {
+        setUser(authenticatedUser);
+        setAuthLoaded(true);
+      } else {
+        try {
+          const isGuest = await AsyncStorage.getItem(GUEST_SESSION_KEY);
+          if (isGuest === 'true') {
+            setUser(createLocalGuestUser());
+          } else {
+            setUser(null);
+          }
+        } catch {
+          setUser(null);
+        } finally {
+          setAuthLoaded(true);
+        }
+      }
     });
 
     return () => unsubscribe(); // Clean up subscription

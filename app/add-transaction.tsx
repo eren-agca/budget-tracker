@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { addDoc, collection, Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,7 +22,7 @@ import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { expenseCategories, incomeCategories, getCategoryLabel, isSavingsCategory } from '@/constants/Categories';
 import { INVESTMENT_PRESETS, getLiveAssetRateInTRY, getPresetLabel } from '@/constants/Investments';
 import { ExchangeRates, getExchangeRates } from '@/services/currencyService';
-import { db } from '@/firebaseConfig';
+import { addUserDoc } from '@/services/userDataService';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings, ThemeColors } from '@/context/SettingsContext';
 import { Colors } from '@/constants/Colors';
@@ -143,7 +143,7 @@ export default function AddTransactionScreen() {
         transactionData.assetCode = selectedAssetCode;
       }
 
-      await addDoc(collection(db, 'users', user.uid, 'transactions'), transactionData);
+      await addUserDoc(user, 'transactions', transactionData);
 
       Toast.show({
         type: 'success',

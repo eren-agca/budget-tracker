@@ -4,23 +4,24 @@ import {
   StyleSheet,
   TouchableOpacity,
   View,
-  ScrollView,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { signOut } from 'firebase/auth';
+import { deleteUser, signOut } from 'firebase/auth';
+import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/ThemedText';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
-import { auth } from '@/firebaseConfig';
-import { currencies } from '@/constants/Currencies';
+import { auth, db } from '@/firebaseConfig';
+import { clearAllGuestData, GUEST_SESSION_KEY, isGuestUser } from '@/services/userDataService';
 import { Colors } from '@/constants/Colors';
 import { SwipeableModal } from '@/components/SwipeableModal';
-import { useResponsive, vs } from '@/utils/responsive';
+import { vs } from '@/utils/responsive';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -30,18 +31,67 @@ interface SettingsModalProps {
 export function SettingsModal({ visible, onClose }: SettingsModalProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { modalScrollMaxHeight } = useResponsive();
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const { theme, setTheme, language, setLanguage, t, isDark, colors } = useSettings();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     if (!visible) {
       setShowLogoutConfirm(false);
+      setShowDeleteAccountConfirm(false);
       setLoggingOut(false);
     }
   }, [visible]);
+
+  const handleDeleteAccount = async () => {
+    if (loggingOut || !user) return;
+    try {
+      setLoggingOut(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      const uid = user.uid;
+      const guest = isGuestUser(user);
+
+      if (guest) {
+        await clearAllGuestData();
+      } else {
+        // Delete all user subcollections in Firestore
+        const subcollections = ['transactions', 'installments', 'subscriptions', 'recurringIncomes'];
+        for (const sub of subcollections) {
+          try {
+            const snap = await getDocs(collection(db, 'users', uid, sub));
+            await Promise.all(snap.docs.map((d) => deleteDoc(doc(db, 'users', uid, sub, d.id))));
+          } catch {}
+        }
+        await AsyncStorage.removeItem(`@budget_tracker_cached_transactions_${uid}`).catch(() => {});
+      }
+
+      onClose();
+      setTimeout(async () => {
+        try {
+          if (guest) {
+            if (auth.currentUser) {
+              await deleteUser(auth.currentUser).catch(() => signOut(auth).catch(() => {}));
+            }
+            setUser(null);
+          } else {
+            await deleteUser(user);
+          }
+        } catch {
+          await signOut(auth).catch(() => {});
+          setUser(null);
+        } finally {
+          router.replace('/login');
+          setLoggingOut(false);
+          setShowDeleteAccountConfirm(false);
+        }
+      }, 260);
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      setLoggingOut(false);
+    }
+  };
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -55,7 +105,11 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
       // 2. Wait for modal animation to complete before signing out to prevent UIKit presentation freezing
       setTimeout(async () => {
         try {
-          await signOut(auth);
+          await AsyncStorage.removeItem(GUEST_SESSION_KEY).catch(() => {});
+          if (auth.currentUser) {
+            await signOut(auth);
+          }
+          setUser(null);
           router.replace('/login');
         } catch (error) {
           console.error('Error signing out:', error);
@@ -70,17 +124,28 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
     }
   };
 
-  const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : 'U';
-  const userDisplayName = user?.email ? user.email.split('@')[0] : (user?.isAnonymous ? t('guestUser') : 'Budget Portfolio');
+  const isGuest = isGuestUser(user);
+  const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : 'M';
+  const userDisplayName = user?.email ? user.email.split('@')[0] : (isGuest ? t('guestUser') : 'Budget Portfolio');
+
+  const handleOpenSignUp = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    onClose();
+    setTimeout(() => {
+      router.push('/signup');
+    }, 220);
+  };
 
   return (
     <SwipeableModal
       visible={visible}
       onClose={onClose}
+      showHandle={false}
       sheetStyle={[
         styles.sheet,
         {
           backgroundColor: colors.card,
+          paddingTop: 18,
           paddingBottom: Math.max(insets.bottom, 20) + 16,
         },
       ]}>
@@ -109,10 +174,7 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        style={{ maxHeight: modalScrollMaxHeight }}
-        contentContainerStyle={{ paddingBottom: vs(16) }}>
+      <View style={{ paddingBottom: vs(4) }}>
         {/* Profile Card */}
         <View
           style={[
@@ -138,7 +200,7 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
               {userDisplayName}
             </ThemedText>
             <ThemedText style={[styles.profileEmail, { color: colors.textSecondary }]}>
-              {user?.email || t('guestUser')}
+              {user?.email || t('localDeviceBadge')}
             </ThemedText>
           </View>
 
@@ -163,6 +225,43 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
             </ThemedText>
           </View>
         </View>
+
+        {/* Guest Data Backup / Sign Up CTA Banner */}
+        {isGuest && (
+          <View
+            style={[
+              styles.guestBackupCard,
+              {
+                backgroundColor: colors.tintSoft,
+                borderColor: isDark ? 'rgba(57, 255, 20, 0.3)' : 'rgba(5, 150, 105, 0.3)',
+              },
+            ]}>
+            <View style={styles.guestBackupTextRow}>
+              <Ionicons name="cloud-upload-outline" size={20} color={colors.tint} style={{ marginTop: 1 }} />
+              <ThemedText style={[styles.guestBackupHintText, { color: colors.textSecondary }]}>
+                {t('guestBackupHint')}
+              </ThemedText>
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={handleOpenSignUp}
+              style={[styles.guestSignUpButton, { backgroundColor: colors.tint }]}>
+              <Ionicons
+                name="person-add"
+                size={16}
+                color={isDark ? '#000000' : '#FFFFFF'}
+                style={{ marginRight: 7 }}
+              />
+              <ThemedText
+                style={[
+                  styles.guestSignUpButtonText,
+                  { color: isDark ? '#000000' : '#FFFFFF' },
+                ]}>
+                {t('guestSaveAccountBtn')}
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Theme Section */}
         <View style={styles.sectionWrap}>
@@ -328,33 +427,6 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
           </View>
         </View>
 
-        {/* Supported Currencies Badge Row */}
-        <View style={styles.sectionWrap}>
-          <ThemedText style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            {t('currenciesTitle').toUpperCase()}
-          </ThemedText>
-          <View style={styles.currenciesRow}>
-            {currencies.map((curr) => (
-              <View
-                key={curr.code}
-                style={[
-                  styles.currencyTag,
-                  {
-                    backgroundColor: colors.cardSecondary,
-                    borderColor: colors.border,
-                  },
-                ]}>
-                <ThemedText style={[styles.currencySymbol, { color: colors.tint }]}>
-                  {curr.symbol}
-                </ThemedText>
-                <ThemedText style={[styles.currencyCode, { color: colors.text }]}>
-                  {curr.label}
-                </ThemedText>
-              </View>
-            ))}
-          </View>
-        </View>
-
         {/* App Info Box */}
         <View
           style={[
@@ -377,9 +449,9 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
           </View>
         </View>
 
-        {/* Logout Section: Clean button that opens the centered confirmation popup */}
+        {/* Logout & Account Deletion Section */}
         {user && (
-          <View style={{ marginTop: 22 }}>
+          <View style={{ marginTop: 16, gap: 10 }}>
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => {
@@ -390,9 +462,31 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
               <Ionicons name="log-out-outline" size={18} color="#FF453A" style={{ marginRight: 8 }} />
               <ThemedText style={styles.logoutButtonText}>{t('logoutBtn')}</ThemedText>
             </TouchableOpacity>
+
+            {!isGuest && (
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setShowDeleteAccountConfirm(true);
+                }}
+                style={[
+                  styles.logoutButton,
+                  {
+                    backgroundColor: 'transparent',
+                    borderColor: isDark ? 'rgba(255, 69, 58, 0.25)' : 'rgba(239, 68, 68, 0.25)',
+                    paddingVertical: 11,
+                  },
+                ]}>
+                <Ionicons name="trash-outline" size={16} color={colors.textSecondary} style={{ marginRight: 7 }} />
+                <ThemedText style={[styles.logoutButtonText, { fontSize: 13, color: colors.textSecondary }]}>
+                  {t('deleteAccountBtn')}
+                </ThemedText>
+              </TouchableOpacity>
+            )}
           </View>
         )}
-      </ScrollView>
+      </View>
 
       {/* Extra Popup Box for Logout Confirmation (Evet / Hayır) */}
       {showLogoutConfirm && (
@@ -459,6 +553,70 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
           </View>
         </View>
       )}
+
+      {/* Delete Account Confirmation Popup */}
+      {showDeleteAccountConfirm && (
+        <View style={styles.popupOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowDeleteAccountConfirm(false)}
+          />
+          <View
+            style={[
+              styles.popupCard,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+              },
+            ]}>
+            <View style={styles.popupIconCircle}>
+              <Ionicons name="trash" size={24} color="#FF453A" />
+            </View>
+
+            <ThemedText style={[styles.popupTitle, { color: colors.text }]}>
+              {t('deleteAccountConfirmTitle')}
+            </ThemedText>
+
+            <ThemedText style={[styles.popupDesc, { color: colors.textSecondary }]}>
+              {t('deleteAccountConfirmDesc')}
+            </ThemedText>
+
+            <View style={styles.popupBtnRow}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                disabled={loggingOut}
+                style={[
+                  styles.popupCancelBtn,
+                  { backgroundColor: colors.cardSecondary },
+                ]}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setShowDeleteAccountConfirm(false);
+                }}>
+                <ThemedText style={[styles.popupCancelBtnText, { color: colors.text }]}>
+                  {t('cancel')}
+                </ThemedText>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                disabled={loggingOut}
+                style={styles.popupConfirmBtn}
+                onPress={handleDeleteAccount}>
+                {loggingOut ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="trash" size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <ThemedText style={styles.popupConfirmBtnText}>{t('deleteAccountAction')}</ThemedText>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </SwipeableModal>
   );
 }
@@ -492,7 +650,36 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
+    marginBottom: 14,
+  },
+  guestBackupCard: {
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
     marginBottom: 18,
+    gap: 12,
+  },
+  guestBackupTextRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  guestBackupHintText: {
+    flex: 1,
+    fontSize: 12.5,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  guestSignUpButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  guestSignUpButtonText: {
+    fontSize: 14,
+    fontWeight: '800',
   },
   avatarCircle: {
     width: 44,

@@ -72,9 +72,9 @@ export const translations = {
     noChartDataExpense: 'Grafiği göstermek için henüz gider verisi bulunmuyor.',
     noChartDataIncome: 'Grafiği göstermek için henüz gelir verisi bulunmuyor.',
     topCategories: 'En Yüksek Kategoriler',
-    aiAdvisorBadge: 'YAPAY ZEKA FİNANS ASİSTANI',
+    aiAdvisorBadge: 'AKILLI FİNANS ASİSTANI',
     aiAnalyzeBtn: 'Analiz Et',
-    aiAdvisorDesc: 'Google Gemini destekli yapay zeka ile harcama analizi, tasarruf tavsiyeleri ve anormallik tespitleri alın.',
+    aiAdvisorDesc: 'Akıllı finans asistanı ile harcama analizi, tasarruf tavsiyeleri ve bütçe tespitleri alın.',
     analyzing: 'Analiz ediliyor...',
 
     // Loop / Recurring Screen
@@ -211,6 +211,13 @@ export const translations = {
     accountUpgradedDesc: 'Verileriniz artık kalıcı olarak hesabınıza bağlandı.',
     welcomeNewUser: 'Hoş Geldiniz',
     welcomeNewUserDesc: 'Hesabınız başarıyla oluşturuldu.',
+    deleteAccountBtn: 'Hesabımı ve Verilerimi Sil',
+    deleteAccountConfirmTitle: 'Hesabı Kalıcı Olarak Sil',
+    deleteAccountConfirmDesc: 'Hesabınız ve tüm finansal kayıtlarınız kalıcı olarak silinecektir. Bu işlem geri alınamaz.',
+    deleteAccountAction: 'Kalıcı Olarak Sil',
+    guestSaveAccountBtn: 'Kayıt Ol ve Verileri Yedekle',
+    guestBackupHint: 'Verileriniz şu an yalnızca telefonunuzda tutuluyor. Kayıt olarak verilerinizi buluta yedekleyebilirsiniz.',
+    localDeviceBadge: 'Cihaz İçi Kayıt',
   },
 
   en: {
@@ -279,9 +286,9 @@ export const translations = {
     noChartDataExpense: 'No expense data available to display chart.',
     noChartDataIncome: 'No income data available to display chart.',
     topCategories: 'Top Categories',
-    aiAdvisorBadge: 'AI FINANCIAL ASSISTANT',
+    aiAdvisorBadge: 'SMART FINANCIAL ASSISTANT',
     aiAnalyzeBtn: 'Analyze',
-    aiAdvisorDesc: 'Get intelligent insights, anomaly detection, and smart budget advice powered by Google Gemini.',
+    aiAdvisorDesc: 'Get intelligent spending insights, anomaly detection, and personalized budget advice.',
     analyzing: 'Analyzing...',
 
     // Loop / Recurring Screen
@@ -418,6 +425,13 @@ export const translations = {
     accountUpgradedDesc: 'Your data is now permanently synced to your account.',
     welcomeNewUser: 'Welcome',
     welcomeNewUserDesc: 'Account created successfully.',
+    deleteAccountBtn: 'Delete Account & Data',
+    deleteAccountConfirmTitle: 'Permanently Delete Account',
+    deleteAccountConfirmDesc: 'Your account and all financial records will be permanently deleted. This action cannot be undone.',
+    deleteAccountAction: 'Delete Permanently',
+    guestSaveAccountBtn: 'Sign Up & Backup Data',
+    guestBackupHint: 'Your data is currently stored only on this phone. Sign up to back up and sync your data to the cloud.',
+    localDeviceBadge: 'On-Device Storage',
   },
 };
 

@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
-import { signInWithEmailAndPassword, signInAnonymously } from 'firebase/auth';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Link, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -22,9 +23,10 @@ import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
+import { createLocalGuestUser, GUEST_SESSION_KEY, migrateGuestDataToCloud } from '@/services/userDataService';
 
 export default function LoginScreen() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isDark, colors, t, language } = useSettings();
@@ -47,7 +49,9 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      const userCred = await signInWithEmailAndPassword(auth, email.trim(), password);
+      await migrateGuestDataToCloud(userCred.user.uid).catch(() => {});
+      await AsyncStorage.removeItem(GUEST_SESSION_KEY).catch(() => {});
     } catch (error: any) {
       let errorMessage = language === 'tr' ? 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.' : 'An unexpected error occurred. Please try again.';
       if (
@@ -73,7 +77,8 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      await signInAnonymously(auth);
+      await AsyncStorage.setItem(GUEST_SESSION_KEY, 'true');
+      setUser(createLocalGuestUser());
       router.replace('/(tabs)');
     } catch (error: any) {
       Toast.show({

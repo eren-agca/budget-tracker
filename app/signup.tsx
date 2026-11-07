@@ -26,10 +26,13 @@ import * as Haptics from 'expo-haptics';
 import { ThemedText } from '@/components/ThemedText';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { Colors } from '@/constants/Colors';
+import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
+import { isGuestUser, migrateGuestDataToCloud } from '@/services/userDataService';
 
 export default function SignUpScreen() {
   const router = useRouter();
+  const { user, setUser } = useAuth();
   const insets = useSafeAreaInsets();
   const { isDark, colors, t, language } = useSettings();
   const styles = createStyles(colors, isDark);
@@ -70,6 +73,7 @@ export default function SignUpScreen() {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       const currentUser = auth.currentUser;
+      const wasLocalGuest = isGuestUser(user);
 
       if (currentUser && currentUser.isAnonymous) {
         const credential = EmailAuthProvider.credential(email.trim(), password);
@@ -83,6 +87,8 @@ export default function SignUpScreen() {
           },
           { merge: true }
         );
+
+        await migrateGuestDataToCloud(currentUser.uid);
 
         Toast.show({
           type: 'success',
@@ -98,10 +104,17 @@ export default function SignUpScreen() {
           createdAt: Timestamp.now(),
         });
 
+        await migrateGuestDataToCloud(newUser.uid);
+        setUser(newUser);
+
         Toast.show({
           type: 'success',
-          text1: language === 'tr' ? 'Hoş Geldiniz' : 'Welcome',
-          text2: language === 'tr' ? 'Hesabınız başarıyla oluşturuldu.' : 'Account created successfully.',
+          text1: wasLocalGuest
+            ? (language === 'tr' ? 'Hesap Yükseltildi' : 'Account Upgraded')
+            : (language === 'tr' ? 'Hoş Geldiniz' : 'Welcome'),
+          text2: wasLocalGuest
+            ? (language === 'tr' ? 'Misafir verileriniz kalıcı hesabınıza aktarıldı.' : 'Your guest data has been migrated to your account.')
+            : (language === 'tr' ? 'Hesabınız başarıyla oluşturuldu.' : 'Account created successfully.'),
         });
       }
 
@@ -158,7 +171,11 @@ export default function SignUpScreen() {
               </View>
               <ThemedText style={styles.headerTitle}>{t('createAccountTitle')}</ThemedText>
               <ThemedText style={styles.headerSubtitle}>
-                {t('createAccountSubtitle')}
+                {isGuestUser(user)
+                  ? (language === 'tr'
+                      ? 'Misafir olarak eklediğiniz tüm veriler yeni hesabınıza otomatik aktarılacaktır.'
+                      : 'All data added in guest mode will be automatically transferred to your new account.')
+                  : t('createAccountSubtitle')}
               </ThemedText>
             </View>
 
@@ -232,7 +249,13 @@ export default function SignUpScreen() {
               <ThemedText style={styles.footerPrompt}>{t('hasAccountPrompt')} </ThemedText>
               <AnimatedPressable
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                onPress={() => router.back()}>
+                onPress={() => {
+                  if (isGuestUser(user)) {
+                    router.replace('/login');
+                  } else {
+                    router.back();
+                  }
+                }}>
                 <ThemedText style={styles.footerLink}>{t('loginBtn')}</ThemedText>
               </AnimatedPressable>
             </View>

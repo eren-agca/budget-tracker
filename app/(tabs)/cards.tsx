@@ -1,14 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import {
-  Timestamp,
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  updateDoc,
-} from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -30,7 +22,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeColors, useSettings } from '@/context/SettingsContext';
-import { db } from '@/firebaseConfig';
+import { addUserDoc, deleteUserDoc, subscribeUserCollection, updateUserDoc } from '@/services/userDataService';
 import { hs, ms, useResponsive, vs } from '@/utils/responsive';
 
 export interface Installment {
@@ -149,12 +141,12 @@ export default function CardsScreen() {
     return ALL_BANKS.filter((b) => b.toLowerCase().includes(q) || formatBankLabel(b, 'en').toLowerCase().includes(q));
   }, [bankSearchQuery]);
 
-  // Real-time Firestore sync
+  // Real-time Firestore / Local Guest sync
   useEffect(() => {
     if (!user) return;
-    const unsubscribe = onSnapshot(collection(db, 'users', user.uid, 'installments'), (snapshot) => {
+    const unsubscribe = subscribeUserCollection(user, 'installments', (docs) => {
       const list: Installment[] = [];
-      snapshot.forEach((d) => {
+      docs.forEach((d) => {
         list.push({ id: d.id, ...d.data() } as Installment);
       });
       list.sort((a, b) => {
@@ -292,7 +284,7 @@ export default function CardsScreen() {
       const monthlyAmount = Number((numericTotal / numericCount).toFixed(2));
       const remainingInstallments = numericCount - numericPaid;
 
-      await addDoc(collection(db, 'users', user.uid, 'installments'), {
+      await addUserDoc(user, 'installments', {
         title: instTitle.trim(),
         bank: instBank.trim(),
         totalAmount: numericTotal,
@@ -355,7 +347,7 @@ export default function CardsScreen() {
               if (!user) return;
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
 
-              await addDoc(collection(db, 'users', user.uid, 'transactions'), {
+              await addUserDoc(user, 'transactions', {
                 amount: -Math.abs(item.monthlyAmount),
                 category: 'Debt',
                 currency: item.currency || 'TRY',
@@ -364,7 +356,7 @@ export default function CardsScreen() {
                 date: Timestamp.now(),
               });
 
-              await updateDoc(doc(db, 'users', user.uid, 'installments', item.id), {
+              await updateUserDoc(user, 'installments', item.id, {
                 paidInstallments: nextPaid,
                 remainingInstallments: nextRemaining,
                 completed: nextRemaining <= 0,
@@ -407,7 +399,7 @@ export default function CardsScreen() {
             try {
               if (!user) return;
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => { });
-              await deleteDoc(doc(db, 'users', user.uid, 'installments', id));
+              await deleteUserDoc(user, 'installments', id);
               Toast.show({
                 type: 'success',
                 text1: language === 'tr' ? 'Taksit Silindi' : 'Installment Deleted',
