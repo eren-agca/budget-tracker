@@ -31,6 +31,7 @@ import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeColors, useSettings } from '@/context/SettingsContext';
 import { db } from '@/firebaseConfig';
+import { hs, ms, useResponsive, vs } from '@/utils/responsive';
 
 export interface Installment {
   id: string;
@@ -116,6 +117,7 @@ const formatBankLabel = (bankName: string, lang: 'tr' | 'en') => {
 export default function CardsScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { modalScrollMaxHeight } = useResponsive();
   const { colors, isDark, t, language } = useSettings();
   const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
@@ -661,11 +663,12 @@ export default function CardsScreen() {
           setIsAddModalVisible(false);
         }}
         sheetStyle={{
-          maxHeight: '88%',
-          paddingHorizontal: 18,
-          paddingBottom: Math.max(insets.bottom, 16) + 12,
+          paddingHorizontal: hs(18),
+          paddingBottom: Math.max(insets.bottom, 16) + 6,
         }}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flexShrink: 1 }}>
           {isBankModalVisible ? (
             <>
               <View style={styles.bankModalHeader}>
@@ -705,8 +708,8 @@ export default function CardsScreen() {
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-                style={{ maxHeight: 420 }}
-                contentContainerStyle={{ paddingBottom: 20 }}>
+                style={{ maxHeight: modalScrollMaxHeight - 50 }}
+                contentContainerStyle={{ paddingBottom: 16 }}>
                 {!bankSearchQuery && (
                   <View style={{ marginBottom: 14 }}>
                     <ThemedText style={[styles.bankSectionTitle, { paddingHorizontal: 0 }]}>
@@ -800,7 +803,8 @@ export default function CardsScreen() {
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ paddingBottom: 12 }}>
+                style={{ maxHeight: modalScrollMaxHeight }}
+                contentContainerStyle={{ paddingBottom: vs(10) }}>
                 {/* Product / Expense Title */}
                 <ThemedText style={[styles.inputLabel, { marginTop: 2 }]}>
                   {t('instTitle').toUpperCase()}
@@ -1288,12 +1292,12 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       }),
     },
     inputLabel: {
-      fontSize: 10,
+      fontSize: ms(10),
       fontWeight: '800',
       color: colors.textSecondary,
       letterSpacing: 0.8,
-      marginBottom: 8,
-      marginTop: 10,
+      marginBottom: vs(5),
+      marginTop: vs(7),
     },
     inputWrap: {
       flexDirection: 'row',
@@ -1302,22 +1306,22 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       borderRadius: 12,
       borderWidth: 1,
       borderColor: softGreenBorder,
-      paddingHorizontal: 12,
-      height: 48,
+      paddingHorizontal: hs(12),
+      height: vs(43),
     },
     inputIcon: {
-      marginRight: 8,
+      marginRight: hs(8),
     },
     inputPrefix: {
-      fontSize: 16,
+      fontSize: ms(15),
       fontWeight: '800',
       color: colors.tint,
-      marginRight: 8,
+      marginRight: hs(8),
     },
     textInput: {
       flex: 1,
       color: colors.text,
-      fontSize: 14,
+      fontSize: ms(13.5),
       fontWeight: '600',
     },
     bankSelectorButton: {
@@ -1328,9 +1332,9 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       borderRadius: 12,
       borderWidth: 1,
       borderColor: softGreenBorder,
-      paddingHorizontal: 12,
-      height: 50,
-      marginBottom: 8,
+      paddingHorizontal: hs(12),
+      height: vs(44),
+      marginBottom: vs(6),
     },
     bankSelectorButtonActive: {
       borderColor: softGreenBorder,
@@ -1338,13 +1342,12 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
     bankSelectorLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-
-      gap: 10,
+      gap: hs(8),
     },
     bankIconCircle: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
+      width: vs(28),
+      height: vs(28),
+      borderRadius: vs(14),
       backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
       justifyContent: 'center',
       alignItems: 'center',
@@ -1353,7 +1356,7 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       backgroundColor: colors.tintSoft,
     },
     bankSelectorText: {
-      fontSize: 14,
+      fontSize: ms(13.5),
       fontWeight: '600',
       color: colors.textMuted,
     },
@@ -1364,15 +1367,15 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
     chipRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 6,
-      marginTop: 6,
-      marginBottom: 6,
+      gap: hs(5),
+      marginTop: vs(4),
+      marginBottom: vs(4),
     },
     chip: {
       backgroundColor: colors.cardSecondary,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 10,
+      paddingHorizontal: hs(8),
+      paddingVertical: vs(5),
+      borderRadius: 9,
       borderWidth: 1,
       borderColor: colors.border,
     },
@@ -1381,7 +1384,7 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       borderColor: colors.tint,
     },
     chipText: {
-      fontSize: 12,
+      fontSize: ms(11),
       color: colors.textSecondary,
       fontWeight: '600',
     },
@@ -1486,13 +1489,13 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      height: 48,
+      height: vs(44),
       borderRadius: 14,
       gap: 8,
-      marginTop: 16,
+      marginTop: vs(12),
     },
     addButtonText: {
-      fontSize: 14,
+      fontSize: ms(14),
       fontWeight: '800',
       color: isDark ? '#000000' : '#FFFFFF',
     },

@@ -33,6 +33,7 @@ import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeColors, useSettings } from '@/context/SettingsContext';
 import { db } from '@/firebaseConfig';
+import { hs, ms, useResponsive, vs } from '@/utils/responsive';
 
 export interface RecurringIncome {
   id: string;
@@ -175,6 +176,7 @@ const formatBankLabel = (bankName: string, lang: 'tr' | 'en') => {
 export default function RecurringScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { modalScrollMaxHeight } = useResponsive();
   const { colors, isDark, t, language } = useSettings();
   const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
@@ -924,9 +926,11 @@ export default function RecurringScreen() {
         }}
         sheetStyle={[
           styles.modalSheet,
-          { maxHeight: '88%', paddingBottom: Math.max(insets.bottom, 16) + 12 },
+          { paddingBottom: Math.max(insets.bottom, 16) + 6 },
         ]}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flexShrink: 1 }}>
           {isBankModalVisible ? (
             <>
               <View style={styles.modalHeaderRow}>
@@ -969,7 +973,8 @@ export default function RecurringScreen() {
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-                style={{ marginTop: 8, maxHeight: 420 }}>
+                style={{ marginTop: 6, maxHeight: modalScrollMaxHeight - 50 }}
+                contentContainerStyle={{ paddingBottom: 16 }}>
                 {filteredBanks.map((bankName) => {
                   const isSelected = subBank === bankName;
                   return (
@@ -1025,7 +1030,8 @@ export default function RecurringScreen() {
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ paddingBottom: 12 }}>
+                style={{ maxHeight: modalScrollMaxHeight }}
+                contentContainerStyle={{ paddingBottom: vs(10) }}>
                 {/* Quick Preset Selector */}
                 <ThemedText style={styles.inputLabel}>
                   {language === 'tr' ? 'HIZLI SERVİS SEÇİN' : 'QUICK SERVICE SELECTION'}
@@ -1034,7 +1040,7 @@ export default function RecurringScreen() {
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.presetScrollContent}
-                  style={{ marginBottom: 14 }}>
+                  style={{ marginBottom: vs(8) }}>
                   {PRESET_SUBSCRIPTIONS.map((preset) => {
                     const isSelected = selectedPreset === preset.name;
                     return (
@@ -1362,9 +1368,11 @@ export default function RecurringScreen() {
         onClose={() => setIsIncomeModalVisible(false)}
         sheetStyle={[
           styles.modalSheet,
-          { maxHeight: '85%', paddingBottom: Math.max(insets.bottom, 16) + 12 },
+          { paddingBottom: Math.max(insets.bottom, 16) + 6 },
         ]}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flexShrink: 1 }}>
           <View style={styles.modalHeaderRow}>
             <View style={styles.formCardTitleRow}>
               <Ionicons name="calendar" size={18} color={colors.income} />
@@ -1380,7 +1388,8 @@ export default function RecurringScreen() {
           <ScrollView
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: 12 }}>
+            style={{ maxHeight: modalScrollMaxHeight }}
+            contentContainerStyle={{ paddingBottom: vs(10) }}>
             {/* Source Input */}
             <ThemedText style={styles.inputLabel}>{t('incomeSource').toUpperCase()}</ThemedText>
             <View style={styles.inputWrap}>
@@ -1833,49 +1842,49 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       letterSpacing: 0.2,
     },
     inputLabel: {
-      fontSize: 10,
+      fontSize: ms(10),
       fontWeight: '800',
       color: colors.textSecondary,
       letterSpacing: 0.6,
-      marginBottom: 6,
-      marginTop: 4,
+      marginBottom: vs(4),
+      marginTop: vs(2),
     },
     inputWrap: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.cardSecondary,
-      borderRadius: 13,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: softGreenBorder,
-      paddingHorizontal: 12,
-      marginBottom: 10,
-      height: 46,
+      paddingHorizontal: hs(12),
+      marginBottom: vs(8),
+      height: vs(42),
     },
     inputIcon: {
-      marginRight: 8,
+      marginRight: hs(8),
     },
     inputPrefix: {
-      fontSize: 16,
+      fontSize: ms(15),
       fontWeight: '700',
       color: colors.tint,
-      marginRight: 6,
+      marginRight: hs(6),
     },
     textInput: {
       flex: 1,
       color: colors.text,
-      fontSize: 14,
+      fontSize: ms(13.5),
       fontWeight: '500',
     },
     chipRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: 6,
-      marginBottom: 12,
+      gap: hs(5),
+      marginBottom: vs(8),
     },
     chip: {
       backgroundColor: colors.cardSecondary,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
+      paddingHorizontal: hs(8),
+      paddingVertical: vs(5),
       borderRadius: 9,
       borderWidth: 1,
       borderColor: colors.border,
@@ -1885,7 +1894,7 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       borderColor: colors.tint,
     },
     chipText: {
-      fontSize: 11,
+      fontSize: ms(11),
       fontWeight: '700',
       color: colors.textSecondary,
     },
@@ -1991,12 +2000,12 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       justifyContent: 'center',
       backgroundColor: colors.tint,
       borderRadius: 14,
-      height: 46,
+      height: vs(44),
       gap: 6,
-      marginTop: 4,
+      marginTop: vs(4),
     },
     addButtonText: {
-      fontSize: 14,
+      fontSize: ms(14),
       fontWeight: '800',
       color: isDark ? '#000000' : '#FFFFFF',
     },
@@ -2282,9 +2291,9 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       borderRadius: 12,
       borderWidth: 1,
       borderColor: softGreenBorder,
-      paddingVertical: 12,
-      paddingHorizontal: 12,
-      marginBottom: 10,
+      paddingVertical: vs(8),
+      paddingHorizontal: hs(12),
+      marginBottom: vs(8),
     },
     bankSelectorButtonActive: {
       borderColor: softGreenBorder,
@@ -2292,13 +2301,13 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
     bankSelectorLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      gap: hs(8),
       flex: 1,
     },
     bankIconCircle: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
+      width: vs(28),
+      height: vs(28),
+      borderRadius: vs(14),
       backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
       alignItems: 'center',
       justifyContent: 'center',
@@ -2307,7 +2316,7 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       backgroundColor: colors.tintSoft,
     },
     bankSelectorText: {
-      fontSize: 14,
+      fontSize: ms(13.5),
       color: colors.textSecondary,
       fontWeight: '500',
     },
@@ -2324,8 +2333,8 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       backgroundColor: colors.card,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
-      paddingTop: 12,
-      paddingHorizontal: 20,
+      paddingTop: vs(6),
+      paddingHorizontal: hs(18),
       borderWidth: 1,
       borderColor: colors.border,
     },
@@ -2335,16 +2344,16 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       borderRadius: 2,
       backgroundColor: isDark ? '#3C3C40' : '#CBD5E1',
       alignSelf: 'center',
-      marginBottom: 16,
+      marginBottom: vs(12),
     },
     modalHeaderRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: 12,
+      marginBottom: vs(8),
     },
     modalSheetTitle: {
-      fontSize: 17,
+      fontSize: ms(16.5),
       fontWeight: '800',
       color: colors.text,
     },
@@ -2423,12 +2432,12 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.cardSecondary,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingHorizontal: hs(11),
+      paddingVertical: vs(6.5),
       borderRadius: 10,
       borderWidth: 1,
       borderColor: colors.border,
-      gap: 7,
+      gap: hs(6),
     },
     presetDot: {
       width: 8,
@@ -2436,19 +2445,19 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       borderRadius: 4,
     },
     presetChipText: {
-      fontSize: 12,
+      fontSize: ms(12),
       fontWeight: '600',
       color: colors.textSecondary,
     },
     cycleToggleRow: {
       flexDirection: 'row',
       backgroundColor: colors.cardSecondary,
-      borderRadius: 13,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: softGreenBorder,
       padding: 3,
-      height: 46,
-      marginBottom: 10,
+      height: vs(42),
+      marginBottom: vs(8),
       alignItems: 'center',
     },
     cyclePill: {

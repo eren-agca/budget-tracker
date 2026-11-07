@@ -2,13 +2,13 @@ import { collection, onSnapshot, query } from 'firebase/firestore';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Dimensions,
   Platform,
   ScrollView,
   StyleSheet,
+  TouchableOpacity,
   View,
 } from 'react-native';
-import { PieChart } from 'react-native-chart-kit';
+import Svg, { G, Path, Text as SvgText } from 'react-native-svg';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -74,6 +74,7 @@ export default function ExploreScreen() {
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState<'expense' | 'income'>('expense');
+  const [selectedSliceIndex, setSelectedSliceIndex] = useState<number | null>(null);
 
   const chartAnimationProgress = useSharedValue(0);
 
@@ -174,6 +175,7 @@ export default function ExploreScreen() {
   }, [transactions, rates, displayCurrency, activeTab, colors.text, language]);
 
   useEffect(() => {
+    setSelectedSliceIndex(null);
     if (!loading) {
       chartAnimationProgress.value = 0;
       chartAnimationProgress.value = withTiming(1, { duration: 500 });
@@ -194,7 +196,77 @@ export default function ExploreScreen() {
     setIsAnalyzing(false);
   };
 
-  const screenWidth = Dimensions.get('window').width;
+  const donutSlices = useMemo(() => {
+    const cx = 115;
+    const cy = 115;
+    const baseOuterR = 96;
+    const innerR = 58;
+    let currentAngle = -Math.PI / 2;
+
+    return breakdownList.map((item, index) => {
+      const isSelected = selectedSliceIndex === index;
+      const sweep = Math.max(0.02, (item.percentage / 100) * Math.PI * 2);
+      const startAngle = currentAngle;
+      const rawEndAngle = currentAngle + sweep;
+      currentAngle = rawEndAngle;
+
+      // Prevent full 360° arc collapse in SVG path
+      const endAngle =
+        rawEndAngle - startAngle >= Math.PI * 2 - 0.002
+          ? startAngle + Math.PI * 2 - 0.002
+          : rawEndAngle;
+      const midAngle = (startAngle + endAngle) / 2;
+      const outerR = isSelected ? baseOuterR + 5 : baseOuterR;
+
+      const offsetDist = isSelected && breakdownList.length > 1 ? 4 : 0;
+      const ox = Math.cos(midAngle) * offsetDist;
+      const oy = Math.sin(midAngle) * offsetDist;
+
+      const x1Out = cx + outerR * Math.cos(startAngle);
+      const y1Out = cy + outerR * Math.sin(startAngle);
+      const x2Out = cx + outerR * Math.cos(endAngle);
+      const y2Out = cy + outerR * Math.sin(endAngle);
+
+      const x1In = cx + innerR * Math.cos(endAngle);
+      const y1In = cy + innerR * Math.sin(endAngle);
+      const x2In = cx + innerR * Math.cos(startAngle);
+      const y2In = cy + innerR * Math.sin(startAngle);
+
+      const largeArcFlag = endAngle - startAngle > Math.PI ? 1 : 0;
+
+      const pathData = [
+        `M ${x1Out} ${y1Out}`,
+        `A ${outerR} ${outerR} 0 ${largeArcFlag} 1 ${x2Out} ${y2Out}`,
+        `L ${x1In} ${y1In}`,
+        `A ${innerR} ${innerR} 0 ${largeArcFlag} 0 ${x2In} ${y2In}`,
+        'Z',
+      ].join(' ');
+
+      const labelR = (outerR + innerR) / 2;
+      const labelX = cx + labelR * Math.cos(midAngle);
+      const labelY = cy + labelR * Math.sin(midAngle) + 4;
+
+      const isBrightSlice =
+        item.color === '#39FF14' || item.color === '#2DD4BF' || item.color === '#F59E0B';
+
+      return {
+        item,
+        index,
+        pathData,
+        ox,
+        oy,
+        labelX,
+        labelY,
+        isSelected,
+        isBrightSlice,
+      };
+    });
+  }, [breakdownList, selectedSliceIndex]);
+
+  const activeSliceItem =
+    selectedSliceIndex !== null && breakdownList[selectedSliceIndex]
+      ? breakdownList[selectedSliceIndex]
+      : null;
 
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: colors.background }]}>
@@ -336,21 +408,195 @@ export default function ExploreScreen() {
             </View>
           ) : chartData.length > 0 ? (
             <Animated.View style={[styles.chartContainer, animatedChartStyle]}>
-              <PieChart
-                data={chartData}
-                width={screenWidth - 64}
-                height={200}
-                chartConfig={{
-                  backgroundGradientFrom: 'transparent',
-                  backgroundGradientTo: 'transparent',
-                  color: (opacity = 1) => isDark ? `rgba(255, 255, 255, ${opacity})` : `rgba(0, 0, 0, ${opacity})`,
-                }}
-                accessor="population"
-                backgroundColor="transparent"
-                paddingLeft="15"
-                center={[screenWidth / 4 - 30, 0]}
-                hasLegend={false}
-              />
+              {/* Interactive Donut Ring + Center Summary */}
+              <View style={styles.donutWrapper}>
+                <Svg width={230} height={230} viewBox="0 0 230 230">
+                  <G>
+                    {donutSlices.map((slice) => {
+                      const dimmed = selectedSliceIndex !== null && !slice.isSelected;
+                      const handleSliceSelect = () => {
+                        Haptics.selectionAsync().catch(() => {});
+                        setSelectedSliceIndex((prev) =>
+                          prev === slice.index ? null : slice.index
+                        );
+                      };
+                      const interactionProps =
+                        Platform.OS === 'web'
+                          ? ({ onClick: handleSliceSelect, style: { cursor: 'pointer' } } as any)
+                          : { onPress: handleSliceSelect };
+                      return (
+                        <G
+                          key={slice.item.category}
+                          transform={`translate(${slice.ox}, ${slice.oy})`}
+                          {...interactionProps}>
+                          <Path
+                            d={slice.pathData}
+                            fill={slice.item.color}
+                            opacity={dimmed ? 0.38 : 1}
+                            stroke={colors.card}
+                            strokeWidth={breakdownList.length > 1 ? 2.5 : 0}
+                          />
+                          {slice.item.percentage >= 8 && (
+                            <SvgText
+                              x={slice.labelX}
+                              y={slice.labelY}
+                              fill={slice.isBrightSlice ? '#090D16' : '#FFFFFF'}
+                              fontSize="11"
+                              fontWeight="bold"
+                              textAnchor="middle"
+                              opacity={dimmed ? 0.45 : 1}>
+                              {`${Math.round(slice.item.percentage)}%`}
+                            </SvgText>
+                          )}
+                        </G>
+                      );
+                    })}
+                  </G>
+                </Svg>
+
+                {/* Center Hole Interactive Summary */}
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={() => {
+                    if (selectedSliceIndex !== null) {
+                      Haptics.selectionAsync().catch(() => {});
+                      setSelectedSliceIndex(null);
+                    }
+                  }}
+                  style={styles.donutCenterOverlay}>
+                  {activeSliceItem ? (
+                    <>
+                      <View
+                        style={[
+                          styles.donutCenterIconBadge,
+                          { backgroundColor: `${activeSliceItem.color}24` },
+                        ]}>
+                        <Ionicons
+                          name={activeSliceItem.icon}
+                          size={16}
+                          color={activeSliceItem.color}
+                        />
+                      </View>
+                      <ThemedText
+                        style={[styles.donutCenterCategory, { color: colors.text }]}
+                        numberOfLines={1}>
+                        {activeSliceItem.category}
+                      </ThemedText>
+                      <ThemedText
+                        style={[
+                          styles.donutCenterAmount,
+                          { color: activeSliceItem.color },
+                        ]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit>
+                        {displayCurrency.symbol}
+                        {activeSliceItem.amount.toLocaleString('en-US', {
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: 0,
+                        })}
+                      </ThemedText>
+                      <View
+                        style={[
+                          styles.donutCenterPctPill,
+                          { backgroundColor: `${activeSliceItem.color}22` },
+                        ]}>
+                        <ThemedText
+                          style={[
+                            styles.donutCenterPctText,
+                            { color: activeSliceItem.color },
+                          ]}>
+                          {`${activeSliceItem.percentage.toFixed(1)}%`}
+                        </ThemedText>
+                      </View>
+                    </>
+                  ) : (
+                    <>
+                      <Ionicons
+                        name={activeTab === 'expense' ? 'pie-chart-outline' : 'trending-up-outline'}
+                        size={17}
+                        color={colors.textSecondary}
+                        style={{ marginBottom: 2 }}
+                      />
+                      <ThemedText
+                        style={[styles.donutCenterSubLabel, { color: colors.textSecondary }]}
+                        numberOfLines={1}>
+                        {language === 'tr' ? 'TOPLAM' : 'TOTAL'}
+                      </ThemedText>
+                      <ThemedText
+                        style={[styles.donutCenterAmount, { color: colors.text }]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit>
+                        {displayCurrency.symbol}
+                        {totalSum.toLocaleString('en-US', {
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: 0,
+                        })}
+                      </ThemedText>
+                      <ThemedText
+                        style={[styles.donutCenterHint, { color: colors.textMuted }]}
+                        numberOfLines={1}>
+                        {language === 'tr' ? 'Dilime dokun' : 'Tap a slice'}
+                      </ThemedText>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* Card-Internal Interactive Color & Category Legend */}
+              <View style={[styles.chartLegendDivider, { backgroundColor: colors.borderLight }]} />
+              <View style={styles.chartLegendGrid}>
+                {breakdownList.map((item, index) => {
+                  const isSelected = selectedSliceIndex === index;
+                  const dimmed = selectedSliceIndex !== null && !isSelected;
+                  return (
+                    <TouchableOpacity
+                      key={item.category}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => {});
+                        setSelectedSliceIndex((prev) => (prev === index ? null : index));
+                      }}
+                      style={[
+                        styles.legendChip,
+                        {
+                          backgroundColor: isSelected
+                            ? `${item.color}1F`
+                            : isDark
+                            ? 'rgba(255, 255, 255, 0.03)'
+                            : 'rgba(0, 0, 0, 0.025)',
+                          borderColor: isSelected ? item.color : colors.borderLight,
+                          opacity: dimmed ? 0.55 : 1,
+                        },
+                      ]}>
+                      <View style={styles.legendChipLeft}>
+                        <View style={[styles.legendColorDot, { backgroundColor: item.color }]} />
+                        <Ionicons
+                          name={item.icon}
+                          size={13}
+                          color={item.color}
+                          style={{ marginRight: 5 }}
+                        />
+                        <ThemedText
+                          style={[
+                            styles.legendChipName,
+                            { color: colors.text },
+                            isSelected && { fontWeight: '800' },
+                          ]}
+                          numberOfLines={1}>
+                          {item.category}
+                        </ThemedText>
+                      </View>
+                      <ThemedText
+                        style={[
+                          styles.legendChipPct,
+                          { color: isSelected ? item.color : colors.textSecondary },
+                        ]}>
+                        {`${item.percentage.toFixed(1)}%`}
+                      </ThemedText>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </Animated.View>
           ) : (
             <View style={styles.chartPlaceholder}>
@@ -366,41 +612,55 @@ export default function ExploreScreen() {
         {breakdownList.length > 0 && (
           <View style={styles.breakdownSection}>
             <ThemedText style={[styles.breakdownHeading, { color: colors.text }]}>{t('topCategories')}</ThemedText>
-            {breakdownList.map((item) => (
-              <View
-                key={item.category}
-                style={[styles.breakdownRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <View style={[styles.categoryIconWrap, { backgroundColor: `${item.color}20` }]}>
-                  <Ionicons name={item.icon} size={18} color={item.color} />
-                </View>
-
-                <View style={styles.breakdownCenter}>
-                  <View style={styles.breakdownTitleRow}>
-                    <ThemedText style={[styles.breakdownCategoryName, { color: colors.text }]}>
-                      {item.category}
-                    </ThemedText>
-                    <ThemedText style={[styles.breakdownAmount, { color: colors.text }]}>
-                      {displayCurrency.symbol}
-                      {item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </ThemedText>
+            {breakdownList.map((item, index) => {
+              const isSelected = selectedSliceIndex === index;
+              return (
+                <TouchableOpacity
+                  key={item.category}
+                  activeOpacity={0.75}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    setSelectedSliceIndex((prev) => (prev === index ? null : index));
+                  }}
+                  style={[
+                    styles.breakdownRow,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: isSelected ? item.color : colors.border,
+                    },
+                  ]}>
+                  <View style={[styles.categoryIconWrap, { backgroundColor: `${item.color}20` }]}>
+                    <Ionicons name={item.icon} size={18} color={item.color} />
                   </View>
 
-                  {/* Progress Bar */}
-                  <View style={[styles.progressTrack, { backgroundColor: colors.borderLight }]}>
-                    <View
-                      style={[
-                        styles.progressFill,
-                        { width: `${Math.min(item.percentage, 100)}%`, backgroundColor: item.color },
-                      ]}
-                    />
-                  </View>
+                  <View style={styles.breakdownCenter}>
+                    <View style={styles.breakdownTitleRow}>
+                      <ThemedText style={[styles.breakdownCategoryName, { color: colors.text }]}>
+                        {item.category}
+                      </ThemedText>
+                      <ThemedText style={[styles.breakdownAmount, { color: colors.text }]}>
+                        {displayCurrency.symbol}
+                        {item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </ThemedText>
+                    </View>
 
-                  <ThemedText style={[styles.breakdownPercentText, { color: colors.textSecondary }]}>
-                    {item.percentage.toFixed(1)}%
-                  </ThemedText>
-                </View>
-              </View>
-            ))}
+                    {/* Progress Bar */}
+                    <View style={[styles.progressTrack, { backgroundColor: colors.borderLight }]}>
+                      <View
+                        style={[
+                          styles.progressFill,
+                          { width: `${Math.min(item.percentage, 100)}%`, backgroundColor: item.color },
+                        ]}
+                      />
+                    </View>
+
+                    <ThemedText style={[styles.breakdownPercentText, { color: colors.textSecondary }]}>
+                      {item.percentage.toFixed(1)}%
+                    </ThemedText>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
@@ -587,6 +847,105 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 4,
+  },
+  donutWrapper: {
+    width: 230,
+    height: 230,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  donutCenterOverlay: {
+    position: 'absolute',
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  donutCenterIconBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  donutCenterCategory: {
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  donutCenterSubLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  donutCenterAmount: {
+    fontSize: 14,
+    fontWeight: '900',
+    marginTop: 1,
+    textAlign: 'center',
+  },
+  donutCenterPctPill: {
+    marginTop: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
+    borderRadius: 8,
+  },
+  donutCenterPctText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  donutCenterHint: {
+    fontSize: 9.5,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  chartLegendDivider: {
+    width: '100%',
+    height: 1,
+    marginTop: 10,
+    marginBottom: 12,
+  },
+  chartLegendGrid: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  legendChip: {
+    width: '48.5%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 11,
+    borderWidth: 1,
+  },
+  legendChipLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 6,
+  },
+  legendColorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  legendChipName: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
+  },
+  legendChipPct: {
+    fontSize: 11.5,
+    fontWeight: '800',
   },
   chartPlaceholder: {
     height: 180,

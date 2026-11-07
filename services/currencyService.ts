@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 export interface ExchangeRates {
   [key: string]: number;
 }
@@ -51,10 +53,11 @@ const getFiatRatesRaw = async (): Promise<RawFiatResult> => {
 
   try {
     const prevDateStr = getPreviousBusinessDateString();
-    const [latestRes, prevRes] = await Promise.allSettled([
-      fetch('https://open.er-api.com/v6/latest/USD'),
-      fetch(`https://api.frankfurter.app/${prevDateStr}?from=USD&to=TRY,EUR,GBP`),
-    ]);
+    const requests: Promise<Response>[] = [fetch('https://open.er-api.com/v6/latest/USD')];
+    if (Platform.OS !== 'web') {
+      requests.push(fetch(`https://api.frankfurter.dev/v1/${prevDateStr}?base=USD&symbols=TRY,EUR,GBP`));
+    }
+    const [latestRes, prevRes] = await Promise.allSettled(requests);
 
     if (latestRes.status === 'fulfilled' && latestRes.value.ok) {
       const data = await latestRes.value.json();
@@ -69,13 +72,15 @@ const getFiatRatesRaw = async (): Promise<RawFiatResult> => {
     }
 
     if (!rates.USD) {
-      const frankfurterLatest = await fetch('https://api.frankfurter.app/latest?from=USD&to=TRY,EUR,GBP');
-      if (frankfurterLatest.ok) {
-        const data = await frankfurterLatest.json();
-        if (data?.rates?.TRY) {
-          const usdToTry = data.rates.TRY;
-          const usdToEur = data.rates.EUR;
-          const usdToGbp = data.rates.GBP;
+      const cdnFallback = await fetch(
+        'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json'
+      );
+      if (cdnFallback.ok) {
+        const data = await cdnFallback.json();
+        if (data?.usd?.try) {
+          const usdToTry = data.usd.try;
+          const usdToEur = data.usd.eur;
+          const usdToGbp = data.usd.gbp;
           rates.USD = usdToTry;
           if (usdToEur) rates.EUR = usdToTry / usdToEur;
           if (usdToGbp) rates.GBP = usdToTry / usdToGbp;
@@ -83,7 +88,7 @@ const getFiatRatesRaw = async (): Promise<RawFiatResult> => {
       }
     }
 
-    if (prevRes.status === 'fulfilled' && prevRes.value.ok) {
+    if (prevRes && prevRes.status === 'fulfilled' && prevRes.value.ok) {
       const prevData = await prevRes.value.json();
       if (prevData?.rates?.TRY) {
         const prevUsdToTry = prevData.rates.TRY;
@@ -105,12 +110,15 @@ const getMetalRatesRaw = async (): Promise<RawMetalResult> => {
   const result: RawMetalResult = {};
 
   try {
-    // Fetch real-time spot prices and daily open/close metadata in parallel
-    const [goldRes, silverRes, gpRes] = await Promise.allSettled([
+    // Fetch real-time spot prices (skip goldprice.org on web due to browser CORS policy)
+    const requests: Promise<Response>[] = [
       fetch('https://api.gold-api.com/price/XAU'),
       fetch('https://api.gold-api.com/price/XAG'),
-      fetch('https://data-asg.goldprice.org/dbXRates/USD'),
-    ]);
+    ];
+    if (Platform.OS !== 'web') {
+      requests.push(fetch('https://data-asg.goldprice.org/dbXRates/USD'));
+    }
+    const [goldRes, silverRes, gpRes] = await Promise.allSettled(requests);
 
     if (goldRes.status === 'fulfilled' && goldRes.value.ok) {
       const goldData = await goldRes.value.json();
@@ -126,7 +134,7 @@ const getMetalRatesRaw = async (): Promise<RawMetalResult> => {
       }
     }
 
-    if (gpRes.status === 'fulfilled' && gpRes.value.ok) {
+    if (gpRes && gpRes.status === 'fulfilled' && gpRes.value.ok) {
       const gpData = await gpRes.value.json();
       const item = gpData?.items?.[0];
       if (item) {

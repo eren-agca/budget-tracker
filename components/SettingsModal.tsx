@@ -20,6 +20,7 @@ import { auth } from '@/firebaseConfig';
 import { currencies } from '@/constants/Currencies';
 import { Colors } from '@/constants/Colors';
 import { SwipeableModal } from '@/components/SwipeableModal';
+import { useResponsive, vs } from '@/utils/responsive';
 
 interface SettingsModalProps {
   visible: boolean;
@@ -29,6 +30,7 @@ interface SettingsModalProps {
 export function SettingsModal({ visible, onClose }: SettingsModalProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { modalScrollMaxHeight } = useResponsive();
   const { user } = useAuth();
   const { theme, setTheme, language, setLanguage, t, isDark, colors } = useSettings();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -109,7 +111,8 @@ export function SettingsModal({ visible, onClose }: SettingsModalProps) {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 24 }}>
+        style={{ maxHeight: modalScrollMaxHeight }}
+        contentContainerStyle={{ paddingBottom: vs(16) }}>
         {/* Profile Card */}
         <View
           style={[

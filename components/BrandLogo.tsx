@@ -124,7 +124,12 @@ export interface BankBrandInfo {
 }
 
 export function getBankBrandInfo(bankName?: string, lang: 'tr' | 'en' = 'tr'): BankBrandInfo {
-  const lower = (bankName || '').toLowerCase().trim();
+  const lower = (bankName || '')
+    .replace(/İ/g, 'i')
+    .replace(/I/g, 'ı')
+    .toLowerCase()
+    .replace(/\u0307/g, '')
+    .trim();
 
   if (lower.includes('garanti')) {
     return { color: '#00A650', family: 'mci', iconName: 'clover' };

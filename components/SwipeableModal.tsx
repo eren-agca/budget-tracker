@@ -1,16 +1,22 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Modal,
   StyleSheet,
   View,
-  TouchableOpacity,
+  TouchableWithoutFeedback,
   Animated,
   PanResponder,
   StyleProp,
   ViewStyle,
+  Dimensions,
+  Easing,
+  useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useSettings } from '@/context/SettingsContext';
+
+const INITIAL_HEIGHT = Dimensions.get('window').height;
 
 export interface SwipeableModalProps {
   visible: boolean;
@@ -33,25 +39,69 @@ export function SwipeableModal({
   showHandle = true,
   handleStyle,
 }: SwipeableModalProps) {
-  const { isDark, colors } = useSettings();
-  const translateY = useRef(new Animated.Value(0)).current;
+  const { isDark } = useSettings();
+  const { height: screenHeight } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const [rendered, setRendered] = useState(visible);
+  const translateY = useRef(new Animated.Value(INITIAL_HEIGHT)).current;
+  const isClosingRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // Backdrop opacity is 100% synchronized with sheet translateY position
+  const backdropOpacity = translateY.interpolate({
+    inputRange: [0, screenHeight * 0.55],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
 
   useEffect(() => {
     if (visible) {
-      translateY.setValue(0);
+      isClosingRef.current = false;
+      setRendered(true);
+      translateY.setValue(screenHeight * 0.65);
+      Animated.spring(translateY, {
+        toValue: 0,
+        damping: 26,
+        stiffness: 260,
+        mass: 0.85,
+        useNativeDriver: true,
+      }).start();
+    } else if (rendered && !isClosingRef.current) {
+      // Closed externally (e.g. via X button or form submit)
+      isClosingRef.current = true;
+      Animated.timing(translateY, {
+        toValue: screenHeight * 0.7,
+        duration: 210,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => {
+        setRendered(false);
+        isClosingRef.current = false;
+      });
     }
-  }, [visible]);
+  }, [visible, screenHeight]);
 
-  const handleDismiss = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    Animated.timing(translateY, {
-      toValue: 500,
-      duration: 180,
-      useNativeDriver: true,
-    }).start(() => {
-      onClose();
-    });
-  };
+  const animateDismiss = useCallback(
+    (withHaptic = true) => {
+      if (isClosingRef.current) return;
+      isClosingRef.current = true;
+      if (withHaptic) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      }
+      Animated.timing(translateY, {
+        toValue: screenHeight * 0.7,
+        duration: 210,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => {
+        setRendered(false);
+        isClosingRef.current = false;
+        onCloseRef.current();
+      });
+    },
+    [screenHeight, translateY]
+  );
 
   const panResponder = useRef(
     PanResponder.create({
@@ -63,16 +113,16 @@ export function SwipeableModal({
         if (gestureState.dy > 0) {
           translateY.setValue(gestureState.dy);
         } else {
-          translateY.setValue(gestureState.dy * 0.15);
+          translateY.setValue(gestureState.dy * 0.12);
         }
       },
       onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 75 || gestureState.vy > 0.6) {
-          handleDismiss();
+        if (gestureState.dy > 80 || gestureState.vy > 0.65) {
+          animateDismiss(true);
         } else {
           Animated.spring(translateY, {
             toValue: 0,
-            damping: 22,
+            damping: 24,
             stiffness: 280,
             useNativeDriver: true,
           }).start();
@@ -81,25 +131,38 @@ export function SwipeableModal({
     })
   ).current;
 
+  if (!rendered) {
+    return null;
+  }
+
+  const safeMaxHeight = Math.round(screenHeight - Math.max(insets.top, 24) - 10);
+
   return (
     <Modal
       transparent={true}
-      visible={visible}
-      animationType="slide"
-      onRequestClose={onClose}>
-      <View style={[styles.backdrop, backdropStyle]}>
-        {/* Tapping anywhere outside the sheet closes the menu */}
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          activeOpacity={1}
-          onPress={onClose}
-        />
+      visible={rendered}
+      animationType="none"
+      statusBarTranslucent={true}
+      onRequestClose={() => animateDismiss(false)}>
+      <View style={styles.container}>
+        {/* Synchronized Fading Backdrop (never slides!) */}
+        <TouchableWithoutFeedback onPress={() => animateDismiss(false)}>
+          <Animated.View
+            style={[
+              styles.backdrop,
+              backdropStyle,
+              { opacity: backdropOpacity },
+            ]}
+          />
+        </TouchableWithoutFeedback>
 
         <Animated.View
           {...(enableFullSheetDrag ? panResponder.panHandlers : {})}
           style={[
             styles.sheet,
             {
+              maxHeight: safeMaxHeight,
+              paddingBottom: Math.max(insets.bottom, 16),
               backgroundColor: isDark ? '#18181C' : '#FFFFFF',
               borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)',
             },
@@ -119,7 +182,7 @@ export function SwipeableModal({
               />
             </View>
           )}
-          {children}
+          <View style={styles.sheetBody}>{children}</View>
         </Animated.View>
       </View>
     </Modal>
@@ -127,10 +190,17 @@ export function SwipeableModal({
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  container: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.72)',
     justifyContent: 'flex-end',
+  },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
   },
   sheet: {
     width: '100%',
@@ -141,11 +211,14 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.08)',
     overflow: 'hidden',
   },
+  sheetBody: {
+    flexShrink: 1,
+  },
   handleContainer: {
     width: '100%',
     alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingTop: 8,
+    paddingBottom: 6,
   },
   handle: {
     width: 38,
