@@ -625,7 +625,11 @@ export default function HomeScreen() {
           const usdVal = rateInTRY / usdRate;
           const parts = usdVal.toFixed(2).split('.');
           formattedPrice = `$${Number(parts[0]).toLocaleString('tr-TR')},${parts[1]}`;
-        } else if (code.startsWith('FUND:') || rateInTRY < 10) {
+        } else if (code.startsWith('FUND:')) {
+          const decimals = rateInTRY >= 100 ? 2 : 4;
+          const parts = rateInTRY.toFixed(decimals).split('.');
+          formattedPrice = `₺${Number(parts[0]).toLocaleString('tr-TR')},${parts[1]}`;
+        } else if (rateInTRY < 10) {
           const parts = rateInTRY.toFixed(4).split('.');
           formattedPrice = `₺${Number(parts[0]).toLocaleString('tr-TR')},${parts[1]}`;
         } else {

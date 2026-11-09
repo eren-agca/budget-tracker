@@ -12,7 +12,7 @@ export interface MarketStatusInfo {
   badgeLabelEn: string;
 }
 
-const STORAGE_KEY_CLOSING_RATES = '@budget_tracker_market_closing_cache_v2';
+const STORAGE_KEY_CLOSING_RATES = '@budget_tracker_market_closing_cache_v3';
 
 /**
  * Returns current Turkey Time (TSİ = UTC+3, fixed year-round)
