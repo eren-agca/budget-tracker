@@ -1,20 +1,14 @@
-import React, { useEffect, useCallback } from 'react';
-import { View, StyleSheet, LayoutChangeEvent, Platform } from 'react-native';
+import React, { useEffect, useCallback, useState, useRef, useId } from 'react';
+import { View, StyleSheet, LayoutChangeEvent, Platform, Animated, Easing, AppState } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  Easing,
-  cancelAnimation,
-} from 'react-native-reanimated';
 import { ThemedText } from './ThemedText';
+import { StockBrandBadge } from './BrandLogo';
 import { Colors } from '@/constants/Colors';
 import { useSettings } from '@/context/SettingsContext';
 
 export interface TickerItemData {
   text: string;
+  logoSymbol?: string;
   direction?: 'up' | 'down' | 'flat';
 }
 
@@ -24,6 +18,7 @@ interface TickerProps {
   speed?: number;
   badgeLabel?: string;
   isError?: boolean;
+  isMarketClosed?: boolean;
 }
 
 export const Ticker: React.FC<TickerProps> = ({
@@ -32,48 +27,83 @@ export const Ticker: React.FC<TickerProps> = ({
   speed = 36,
   badgeLabel,
   isError,
+  isMarketClosed = false,
 }) => {
   const { colors, isDark } = useSettings();
-  const textWidth = useSharedValue(0);
-  const translateX = useSharedValue(0);
+  const rawId = useId();
+  const uniqueAnimId = useRef(`tk_${rawId.replace(/[^a-zA-Z0-9_-]/g, '_')}`).current;
+
+  const [measuredWidth, setMeasuredWidth] = useState(0);
+  const animatedTranslateX = useRef(new Animated.Value(0)).current;
+  const loopRef = useRef<Animated.CompositeAnimation | null>(null);
 
   const firstItemText = typeof data[0] === 'string' ? data[0] : data[0]?.text || '';
   const isUnavailable = isError || (data.length === 1 && firstItemText.includes('devre dışı'));
-
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateX: translateX.value }],
-    };
-  });
+  const isClosed = Boolean(isMarketClosed && !isUnavailable);
 
   const handleOnLayout = useCallback((event: LayoutChangeEvent) => {
-    const measuredWidth = Math.ceil(event.nativeEvent.layout.width);
-    if (measuredWidth <= 20) return;
+    const width = Math.ceil(event.nativeEvent.layout.width);
+    if (width <= 20) return;
 
-    // Only start the animation on initial measurement (or major item-count layout change)
-    // so live price updates never reset or teleport the scrolling position.
-    if (textWidth.value === 0 || Math.abs(textWidth.value - measuredWidth) > 24) {
-      textWidth.value = measuredWidth;
-      cancelAnimation(translateX);
-      translateX.value = 0;
-      const duration = (measuredWidth / speed) * 1000;
-      translateX.value = withRepeat(
-        withTiming(-measuredWidth, { duration, easing: Easing.linear }),
-        -1,
-        false
-      );
-    }
-  }, [speed]);
-
-  useEffect(() => {
-    return () => {
-      cancelAnimation(translateX);
-    };
+    setMeasuredWidth((prev) => {
+      // Only update if not measured yet, or if width changed significantly (> 30px, e.g. items added/removed)
+      // so routine live price updates never restart or hitch the scrolling position.
+      if (prev === 0 || Math.abs(prev - width) > 30) {
+        return width;
+      }
+      return prev;
+    });
   }, []);
+
+  // Native (iOS & Android) animation loop using native driver with resetBeforeIteration
+  useEffect(() => {
+    if (Platform.OS === 'web' || measuredWidth <= 20) return;
+
+    if (loopRef.current) {
+      loopRef.current.stop();
+    }
+
+    animatedTranslateX.setValue(0);
+    const duration = (measuredWidth / speed) * 1000;
+    const loop = Animated.loop(
+      Animated.timing(animatedTranslateX, {
+        toValue: -measuredWidth,
+        duration,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+      { iterations: -1, resetBeforeIteration: true }
+    );
+
+    loopRef.current = loop;
+    loop.start();
+
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        animatedTranslateX.setValue(0);
+        loop.start();
+      }
+    });
+
+    return () => {
+      loop.stop();
+      appStateSub.remove();
+    };
+  }, [measuredWidth, speed]);
 
   const containerStyle = [
     styles.container,
-    { height, backgroundColor: colors.card, borderColor: colors.border },
+    {
+      height,
+      backgroundColor: colors.card,
+      borderColor: isUnavailable
+        ? colors.warning
+        : isClosed
+        ? isDark
+          ? 'rgba(148, 163, 184, 0.2)'
+          : 'rgba(100, 116, 139, 0.2)'
+        : colors.border,
+    },
   ];
 
   if (!data || data.length === 0) {
@@ -86,19 +116,51 @@ export const Ticker: React.FC<TickerProps> = ({
     );
   }
 
-  const badgeBg = isUnavailable ? colors.warningSoft : colors.tintSoft;
-  const badgeBorder = isUnavailable ? 'rgba(217, 119, 6, 0.25)' : colors.tintSoft;
-  const badgeColor = isUnavailable ? colors.warning : colors.tint;
-  const itemTextColor = isUnavailable ? (isDark ? '#FFB340' : '#D97706') : colors.text;
+  const badgeBg = isUnavailable
+    ? colors.warningSoft
+    : isClosed
+    ? isDark
+      ? 'rgba(148, 163, 184, 0.12)'
+      : 'rgba(100, 116, 139, 0.12)'
+    : colors.tintSoft;
+
+  const badgeBorder = isUnavailable
+    ? 'rgba(217, 119, 6, 0.25)'
+    : isClosed
+    ? isDark
+      ? 'rgba(148, 163, 184, 0.22)'
+      : 'rgba(100, 116, 139, 0.22)'
+    : colors.tintSoft;
+
+  const badgeColor = isUnavailable
+    ? colors.warning
+    : isClosed
+    ? isDark
+      ? '#94A3B8'
+      : '#64748B'
+    : colors.tint;
+
+  const itemTextColor = isUnavailable
+    ? isDark
+      ? '#FFB340'
+      : '#D97706'
+    : colors.text;
+
   const separatorColor = isDark ? 'rgba(255, 255, 255, 0.35)' : 'rgba(0, 0, 0, 0.2)';
 
   const renderGroup = (prefix: string, onLayout?: (e: LayoutChangeEvent) => void) => (
     <View onLayout={onLayout} style={styles.tickerGroup}>
       {data.map((item, idx) => {
         const text = typeof item === 'string' ? item : item.text;
+        const logoSymbol = typeof item === 'string' ? undefined : item.logoSymbol;
         const direction = typeof item === 'string' ? undefined : item.direction;
         return (
           <View key={`${prefix}-${idx}`} style={styles.tickerItem}>
+            {logoSymbol ? (
+              <View style={{ marginRight: 5 }}>
+                <StockBrandBadge symbol={logoSymbol} size={18} iconSize={11} />
+              </View>
+            ) : null}
             <ThemedText style={[styles.text, { color: itemTextColor }]}>{text}</ThemedText>
             {direction === 'up' && (
               <Ionicons
@@ -131,20 +193,67 @@ export const Ticker: React.FC<TickerProps> = ({
     </View>
   );
 
+  const durationSec = measuredWidth > 0 ? (measuredWidth / speed).toFixed(2) : '30';
+
+  // Web CSS hardware-accelerated animation style
+  const webScrollStyle =
+    Platform.OS === 'web' && measuredWidth > 0
+      ? ({
+          animationName: `anim_${uniqueAnimId}`,
+          animationDuration: `${durationSec}s`,
+          animationTimingFunction: 'linear',
+          animationIterationCount: 'infinite',
+          willChange: 'transform',
+        } as any)
+      : null;
+
+  // Native transform style
+  const nativeScrollStyle =
+    Platform.OS !== 'web'
+      ? {
+          transform: [{ translateX: animatedTranslateX }],
+        }
+      : null;
+
   return (
     <View style={containerStyle}>
+      {Platform.OS === 'web' && measuredWidth > 0 && (
+        <style>{`
+          @keyframes anim_${uniqueAnimId} {
+            0% {
+              transform: translate3d(0px, 0px, 0px);
+            }
+            100% {
+              transform: translate3d(-${measuredWidth}px, 0px, 0px);
+            }
+          }
+        `}</style>
+      )}
+
       {badgeLabel ? (
         <View style={[styles.badge, { backgroundColor: badgeBg, borderRightColor: badgeBorder }]}>
-          <View style={[styles.liveDot, { backgroundColor: badgeColor }]} />
+          {isClosed ? (
+            <Ionicons name="moon" size={9} color={badgeColor} style={{ marginRight: 1 }} />
+          ) : (
+            <View style={[styles.liveDot, { backgroundColor: badgeColor }]} />
+          )}
           <ThemedText style={[styles.badgeText, { color: badgeColor }]}>{badgeLabel}</ThemedText>
         </View>
       ) : null}
       <View style={styles.marqueeMask}>
-        <Animated.View style={[styles.row, animatedStyle]}>
-          {renderGroup('g1', handleOnLayout)}
-          {renderGroup('g2')}
-          {renderGroup('g3')}
-        </Animated.View>
+        {Platform.OS === 'web' ? (
+          <View style={[styles.row, webScrollStyle]}>
+            {renderGroup('g1', handleOnLayout)}
+            {renderGroup('g2')}
+            {renderGroup('g3')}
+          </View>
+        ) : (
+          <Animated.View style={[styles.row, nativeScrollStyle]}>
+            {renderGroup('g1', handleOnLayout)}
+            {renderGroup('g2')}
+            {renderGroup('g3')}
+          </Animated.View>
+        )}
       </View>
     </View>
   );
@@ -227,36 +336,14 @@ const styles = StyleSheet.create({
     textAlignVertical: 'center',
   },
   directionArrow: {
-    marginLeft: 4,
+    marginHorizontal: 3,
   },
   separator: {
-    fontSize: 8,
-    color: 'rgba(255, 255, 255, 0.35)',
-    marginHorizontal: 14,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
+    fontSize: 6,
+    marginHorizontal: 12,
   },
   textLoading: {
-    fontSize: 11.5,
-    color: '#636366',
-    paddingHorizontal: 12,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-  },
-  badgeUnavailable: {
-    backgroundColor: 'rgba(255, 159, 10, 0.12)',
-    borderRightColor: 'rgba(255, 159, 10, 0.22)',
-  },
-  liveDotUnavailable: {
-    backgroundColor: '#FF9F0A',
-  },
-  badgeTextUnavailable: {
-    color: '#FF9F0A',
-  },
-  textUnavailable: {
-    color: '#FFB340',
-  },
-  separatorUnavailable: {
-    color: 'rgba(255, 159, 10, 0.4)',
+    fontSize: 12,
+    marginLeft: 12,
   },
 });

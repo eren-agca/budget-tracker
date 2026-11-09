@@ -1,6 +1,6 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getCategoryLabel, isSavingsCategory } from '@/constants/Categories';
-import { getExchangeRates, ExchangeRates } from '@/services/currencyService';
+import { ExchangeRates, getExchangeRates } from '@/services/currencyService';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const createPrompt = (transactions: any[], lang: 'tr' | 'en' = 'tr'): string => {
   const transactionsString = JSON.stringify(
@@ -68,7 +68,7 @@ const generateOnDeviceAnalysis = async (
     if (liveRates && Object.keys(liveRates).length > 1) {
       rates = { ...rates, ...liveRates };
     }
-  } catch {}
+  } catch { }
 
   let totalIncomeTRY = 0;
   let totalExpenseTRY = 0;
@@ -153,18 +153,16 @@ const generateOnDeviceAnalysis = async (
       const rateStr = savingsRatePct !== null ? `%${savingsRatePct.toFixed(1)}` : '';
       if (lang === 'tr') {
         bullets.push(
-          `📊 **Nakit Akışı & Tasarruf:** Toplam ${formatMoneyTRY(totalIncomeTRY, 'tr')} gelirinize karşılık ${formatMoneyTRY(totalExpenseTRY, 'tr')} harcama yaptınız. Gelirinizin **${rateStr}** kadarını (${formatMoneyTRY(netCashFlowTRY, 'tr')}) korumayı başardınız.${
-            savingsRatePct! >= 20
-              ? ' İdeal %20 tasarruf hedefinin üzerindesiniz, harika bir finansal disiplin!'
-              : ' Tasarruf oranınızı ideal %20 bandına taşımak için esnek giderleri biraz kısabilirsiniz.'
+          `📊 **Nakit Akışı & Tasarruf:** Toplam ${formatMoneyTRY(totalIncomeTRY, 'tr')} gelirinize karşılık ${formatMoneyTRY(totalExpenseTRY, 'tr')} harcama yaptınız. Gelirinizin **${rateStr}** kadarını (${formatMoneyTRY(netCashFlowTRY, 'tr')}) korumayı başardınız.${savingsRatePct! >= 20
+            ? ' İdeal %20 tasarruf hedefinin üzerindesiniz, harika bir finansal disiplin!'
+            : ' Tasarruf oranınızı ideal %20 bandına taşımak için esnek giderleri biraz kısabilirsiniz.'
           }`
         );
       } else {
         bullets.push(
-          `📊 **Cash Flow & Savings:** Against a total income of ${formatMoneyTRY(totalIncomeTRY, 'en')}, you spent ${formatMoneyTRY(totalExpenseTRY, 'en')}, retaining **${rateStr}** (${formatMoneyTRY(netCashFlowTRY, 'en')}) of your income.${
-            savingsRatePct! >= 20
-              ? ' You are above the ideal 20% savings benchmark—great discipline!'
-              : ' Trimming discretionary expenses slightly can help you reach the ideal 20% savings target.'
+          `📊 **Cash Flow & Savings:** Against a total income of ${formatMoneyTRY(totalIncomeTRY, 'en')}, you spent ${formatMoneyTRY(totalExpenseTRY, 'en')}, retaining **${rateStr}** (${formatMoneyTRY(netCashFlowTRY, 'en')}) of your income.${savingsRatePct! >= 20
+            ? ' You are above the ideal 20% savings benchmark—great discipline!'
+            : ' Trimming discretionary expenses slightly can help you reach the ideal 20% savings target.'
           }`
         );
       }

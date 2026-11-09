@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, Image } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { ThemedText } from './ThemedText';
 
@@ -118,6 +118,7 @@ export const SubscriptionBrandIcon: React.FC<{
 
 export interface BankBrandInfo {
   color: string;
+  domain?: string;
   family: 'mci' | 'ionicons' | 'monogram';
   iconName?: string;
   monogram?: string;
@@ -132,85 +133,85 @@ export function getBankBrandInfo(bankName?: string, lang: 'tr' | 'en' = 'tr'): B
     .trim();
 
   if (lower.includes('garanti')) {
-    return { color: '#00A650', family: 'mci', iconName: 'clover' };
+    return { color: '#00A650', domain: 'garantibbva.com.tr', family: 'mci', iconName: 'clover' };
   }
   if (lower.includes('ziraat')) {
-    return { color: '#E11D48', family: 'mci', iconName: 'barley' };
+    return { color: '#E11D48', domain: 'ziraatbank.com.tr', family: 'mci', iconName: 'barley' };
   }
   if (lower.includes('iş bank') || lower.includes('is bank')) {
-    return { color: '#2563EB', family: 'monogram', monogram: lang === 'tr' ? 'İŞ' : 'IS' };
+    return { color: '#2563EB', domain: 'isbank.com.tr', family: 'monogram', monogram: lang === 'tr' ? 'İŞ' : 'IS' };
   }
   if (lower.includes('yapı kredi') || lower.includes('yapi kredi')) {
-    return { color: '#3B82F6', family: 'monogram', monogram: 'YK' };
+    return { color: '#3B82F6', domain: 'yapikredi.com.tr', family: 'monogram', monogram: 'YK' };
   }
   if (lower.includes('akbank')) {
-    return { color: '#EF4444', family: 'monogram', monogram: 'AK' };
+    return { color: '#EF4444', domain: 'akbank.com', family: 'monogram', monogram: 'AK' };
   }
   if (lower.includes('enpara')) {
-    return { color: '#A855F7', family: 'monogram', monogram: 'EN' };
+    return { color: '#A855F7', domain: 'enpara.com', family: 'monogram', monogram: 'EN' };
   }
   if (lower.includes('qnb')) {
-    return { color: '#6366F1', family: 'monogram', monogram: 'QNB' };
+    return { color: '#6366F1', domain: 'qnb.com.tr', family: 'monogram', monogram: 'QNB' };
   }
   if (lower.includes('vakıf') || lower.includes('vakif')) {
-    return { color: '#F59E0B', family: 'monogram', monogram: 'VB' };
+    return { color: '#F59E0B', domain: 'vakifbank.com.tr', family: 'monogram', monogram: 'VB' };
   }
   if (lower.includes('halkbank')) {
-    return { color: '#0EA5E9', family: 'monogram', monogram: 'HB' };
+    return { color: '#0EA5E9', domain: 'halkbank.com.tr', family: 'monogram', monogram: 'HB' };
   }
   if (lower.includes('denizbank')) {
-    return { color: '#0284C7', family: 'mci', iconName: 'waves' };
+    return { color: '#0284C7', domain: 'denizbank.com', family: 'mci', iconName: 'waves' };
   }
   if (lower.includes('teb')) {
-    return { color: '#10B981', family: 'monogram', monogram: 'TEB' };
+    return { color: '#10B981', domain: 'teb.com.tr', family: 'monogram', monogram: 'TEB' };
   }
   if (lower.includes('kuveyt')) {
-    return { color: '#14B8A6', family: 'monogram', monogram: 'KT' };
+    return { color: '#14B8A6', domain: 'kuveytturk.com.tr', family: 'monogram', monogram: 'KT' };
   }
   if (lower.includes('ing')) {
-    return { color: '#FF6200', family: 'monogram', monogram: 'ING' };
+    return { color: '#FF6200', domain: 'ing.com.tr', family: 'monogram', monogram: 'ING' };
   }
   if (lower.includes('hsbc')) {
-    return { color: '#EF4444', family: 'monogram', monogram: 'HS' };
+    return { color: '#EF4444', domain: 'hsbc.com.tr', family: 'monogram', monogram: 'HS' };
   }
   if (lower.includes('papara')) {
-    return { color: '#C084FC', family: 'monogram', monogram: 'P' };
+    return { color: '#C084FC', domain: 'papara.com', family: 'monogram', monogram: 'P' };
   }
   if (lower.includes('paycell')) {
-    return { color: '#38BDF8', family: 'monogram', monogram: 'PC' };
+    return { color: '#38BDF8', domain: 'paycell.com.tr', family: 'monogram', monogram: 'PC' };
   }
   if (lower.includes('fibabanka')) {
-    return { color: '#22C55E', family: 'monogram', monogram: 'FB' };
+    return { color: '#22C55E', domain: 'fibabanka.com.tr', family: 'monogram', monogram: 'FB' };
   }
   if (lower.includes('odeabank')) {
-    return { color: '#F97316', family: 'monogram', monogram: 'OD' };
+    return { color: '#F97316', domain: 'odeabank.com.tr', family: 'monogram', monogram: 'OD' };
   }
   if (lower.includes('şekerbank') || lower.includes('sekerbank')) {
-    return { color: '#16A34A', family: 'monogram', monogram: lang === 'tr' ? 'ŞB' : 'SB' };
+    return { color: '#16A34A', domain: 'sekerbank.com.tr', family: 'monogram', monogram: lang === 'tr' ? 'ŞB' : 'SB' };
   }
   if (lower.includes('türkiye finans') || lower.includes('turkiye finans')) {
-    return { color: '#0D9488', family: 'monogram', monogram: 'TF' };
+    return { color: '#0D9488', domain: 'turkiyefinans.com.tr', family: 'monogram', monogram: 'TF' };
   }
   if (lower.includes('albaraka')) {
-    return { color: '#EA580C', family: 'monogram', monogram: 'AT' };
+    return { color: '#EA580C', domain: 'albaraka.com.tr', family: 'monogram', monogram: 'AT' };
   }
   if (lower.includes('anadolubank')) {
-    return { color: '#3B82F6', family: 'monogram', monogram: 'AB' };
+    return { color: '#3B82F6', domain: 'anadolubank.com.tr', family: 'monogram', monogram: 'AB' };
   }
   if (lower.includes('alternatif')) {
-    return { color: '#E11D48', family: 'monogram', monogram: 'AL' };
+    return { color: '#E11D48', domain: 'alternatifbank.com.tr', family: 'monogram', monogram: 'AL' };
   }
   if (lower.includes('burgan')) {
-    return { color: '#0284C7', family: 'monogram', monogram: 'BB' };
+    return { color: '#0284C7', domain: 'burgan.com.tr', family: 'monogram', monogram: 'BB' };
   }
   if (lower.includes('hayat')) {
-    return { color: '#10B981', family: 'monogram', monogram: 'HF' };
+    return { color: '#10B981', domain: 'hayatfinans.com.tr', family: 'monogram', monogram: 'HF' };
   }
   if (lower.includes('icbc')) {
-    return { color: '#EF4444', family: 'monogram', monogram: 'IC' };
+    return { color: '#EF4444', domain: 'icbc.com.tr', family: 'monogram', monogram: 'IC' };
   }
   if (lower.includes('tom') || lower.includes('hadi')) {
-    return { color: '#8B5CF6', family: 'monogram', monogram: 'TOM' };
+    return { color: '#8B5CF6', domain: 'tombank.com.tr', family: 'monogram', monogram: 'TOM' };
   }
   if (lower.includes('nakit') || lower.includes('havale') || lower.includes('cash')) {
     return { color: '#10B981', family: 'ionicons', iconName: 'cash-outline' };
@@ -229,6 +230,10 @@ export const BankBrandBadge: React.FC<{
   language?: 'tr' | 'en';
 }> = ({ bankName, size = 28, iconSize = 15, language = 'tr' }) => {
   const info = getBankBrandInfo(bankName, language);
+  const [imgError, setImgError] = useState(false);
+  const logoUri = info.domain
+    ? `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://www.${info.domain}&size=128`
+    : null;
 
   return (
     <View
@@ -238,11 +243,25 @@ export const BankBrandBadge: React.FC<{
           width: size,
           height: size,
           borderRadius: Math.round(size * 0.34),
-          backgroundColor: `${info.color}20`,
+          backgroundColor: logoUri && !imgError ? '#FFFFFF' : `${info.color}20`,
           borderColor: `${info.color}48`,
+          overflow: 'hidden',
         },
       ]}>
-      {info.family === 'mci' ? (
+      {logoUri && !imgError ? (
+        <Image
+          source={{ uri: logoUri }}
+          style={{ width: Math.round(size * 0.72), height: Math.round(size * 0.72), borderRadius: 3 }}
+          resizeMode="contain"
+          onLoad={(e) => {
+            const w = e.nativeEvent?.source?.width;
+            if (typeof w === 'number' && w > 0 && w <= 16) {
+              setImgError(true);
+            }
+          }}
+          onError={() => setImgError(true)}
+        />
+      ) : info.family === 'mci' ? (
         <MaterialCommunityIcons name={info.iconName as any} size={iconSize} color={info.color} />
       ) : info.family === 'ionicons' ? (
         <Ionicons name={(info.iconName as any) || 'card-outline'} size={iconSize} color={info.color} />
@@ -253,6 +272,136 @@ export const BankBrandBadge: React.FC<{
             {
               color: info.color,
               fontSize: (info.monogram?.length || 0) >= 3 ? Math.max(8.5, iconSize * 0.56) : Math.max(10, iconSize * 0.68),
+              lineHeight: iconSize,
+            },
+          ]}>
+          {info.monogram}
+        </ThemedText>
+      )}
+    </View>
+  );
+};
+
+export interface StockBrandInfo {
+  symbol: string;
+  color: string;
+  domain?: string;
+  family: 'ionicons' | 'mci' | 'monogram';
+  iconName?: string;
+  monogram?: string;
+}
+
+const STOCK_BRAND_MAP: Record<string, Omit<StockBrandInfo, 'symbol'>> = {
+  // BIST Stocks
+  THYAO: { color: '#E30A17', domain: 'turkishairlines.com', family: 'ionicons', iconName: 'airplane' },
+  ASELS: { color: '#2563EB', domain: 'aselsan.com.tr', family: 'ionicons', iconName: 'shield-checkmark' },
+  TUPRS: { color: '#EA580C', domain: 'tupras.com.tr', family: 'ionicons', iconName: 'flame' },
+  GARAN: { color: '#00A650', domain: 'garantibbva.com.tr', family: 'mci', iconName: 'clover' },
+  KCHOL: { color: '#E11D48', domain: 'koctas.com.tr', family: 'monogram', monogram: 'KOÇ' },
+  EREGL: { color: '#F97316', domain: 'erdemir.com.tr', family: 'monogram', monogram: 'ER' },
+  FROTO: { color: '#0284C7', domain: 'ford.com', family: 'ionicons', iconName: 'car-sport' },
+  BIMAS: { color: '#E11D48', domain: 'bim.com.tr', family: 'monogram', monogram: 'BİM' },
+  SISE: { color: '#0EA5E9', domain: 'sisecam.com.tr', family: 'monogram', monogram: 'ŞİŞ' },
+  AKBNK: { color: '#EF4444', domain: 'akbank.com', family: 'monogram', monogram: 'AK' },
+  ASTOR: { color: '#3B82F6', domain: 'astoras.com.tr', family: 'ionicons', iconName: 'flash' },
+  SASA: { color: '#0284C7', domain: 'sasa.com.tr', family: 'monogram', monogram: 'SA' },
+  // US Stocks & ETFs
+  NVDA: { color: '#76B900', domain: 'nvidia.com', family: 'ionicons', iconName: 'hardware-chip' },
+  AAPL: { color: '#A1A1AA', domain: 'apple.com', family: 'ionicons', iconName: 'logo-apple' },
+  TSLA: { color: '#E82127', domain: 'tesla.com', family: 'monogram', monogram: 'T' },
+  MSFT: { color: '#00A4EF', domain: 'microsoft.com', family: 'ionicons', iconName: 'logo-microsoft' },
+  AMZN: { color: '#FF9900', domain: 'amazon.com', family: 'ionicons', iconName: 'logo-amazon' },
+  GOOGL: { color: '#4285F4', domain: 'google.com', family: 'ionicons', iconName: 'logo-google' },
+  META: { color: '#0668E1', domain: 'meta.com', family: 'mci', iconName: 'infinity' },
+  VOO: { color: '#DC2626', domain: 'vanguard.com', family: 'monogram', monogram: 'VOO' },
+  QQQ: { color: '#3B82F6', domain: 'invesco.com', family: 'monogram', monogram: 'QQQ' },
+  // TEFAS Funds
+  TI1: { color: '#2563EB', domain: 'isbank.com.tr', family: 'monogram', monogram: 'İŞ' },
+  TTE: { color: '#2563EB', domain: 'isbank.com.tr', family: 'monogram', monogram: 'İŞ' },
+  ALE: { color: '#EF4444', domain: 'akbank.com', family: 'monogram', monogram: 'AK' },
+  AFA: { color: '#EF4444', domain: 'akbank.com', family: 'monogram', monogram: 'AK' },
+  AFT: { color: '#EF4444', domain: 'akbank.com', family: 'monogram', monogram: 'AK' },
+  GBL: { color: '#00A650', domain: 'garantibbva.com.tr', family: 'mci', iconName: 'clover' },
+  YOT: { color: '#3B82F6', domain: 'yapikredi.com.tr', family: 'monogram', monogram: 'YK' },
+  YAY: { color: '#3B82F6', domain: 'yapikredi.com.tr', family: 'monogram', monogram: 'YK' },
+  ZBJ: { color: '#E11D48', domain: 'ziraatbank.com.tr', family: 'mci', iconName: 'barley' },
+  VK6: { color: '#F59E0B', domain: 'vakifbank.com.tr', family: 'monogram', monogram: 'VB' },
+  IIH: { color: '#10B981', family: 'monogram', monogram: 'IIH' },
+  IPB: { color: '#10B981', family: 'monogram', monogram: 'IPB' },
+  MAC: { color: '#8B5CF6', family: 'monogram', monogram: 'MAC' },
+};
+
+export function getStockBrandInfo(rawSymbol?: string): StockBrandInfo {
+  const clean = (rawSymbol || '')
+    .toUpperCase()
+    .replace(/^(FUND:|BIST:|US:)/, '')
+    .replace(/\.IS$/, '')
+    .trim();
+
+  const match = STOCK_BRAND_MAP[clean];
+  if (match) {
+    return { symbol: clean, ...match };
+  }
+
+  return {
+    symbol: clean || '?',
+    color: '#39FF14',
+    family: 'monogram',
+    monogram: (clean || '?').slice(0, 3),
+  };
+}
+
+export const StockBrandBadge: React.FC<{
+  symbol?: string;
+  size?: number;
+  iconSize?: number;
+}> = ({ symbol, size = 24, iconSize = 14 }) => {
+  const info = getStockBrandInfo(symbol);
+  const [imgError, setImgError] = useState(false);
+  const logoUri = info.domain
+    ? `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://www.${info.domain}&size=128`
+    : null;
+
+  return (
+    <View
+      style={[
+        styles.bankBadgeCircle,
+        {
+          width: size,
+          height: size,
+          borderRadius: Math.round(size * 0.34),
+          backgroundColor: logoUri && !imgError ? '#FFFFFF' : `${info.color}22`,
+          borderColor: `${info.color}55`,
+          overflow: 'hidden',
+        },
+      ]}>
+      {logoUri && !imgError ? (
+        <Image
+          source={{ uri: logoUri }}
+          style={{ width: Math.round(size * 0.72), height: Math.round(size * 0.72), borderRadius: 3 }}
+          resizeMode="contain"
+          onLoad={(e) => {
+            const w = e.nativeEvent?.source?.width;
+            if (typeof w === 'number' && w > 0 && w <= 16) {
+              setImgError(true);
+            }
+          }}
+          onError={() => setImgError(true)}
+        />
+      ) : info.family === 'mci' ? (
+        <MaterialCommunityIcons name={info.iconName as any} size={iconSize} color={info.color} />
+      ) : info.family === 'ionicons' ? (
+        <Ionicons name={(info.iconName as any) || 'Trending-up'} size={iconSize} color={info.color} />
+      ) : (
+        <ThemedText
+          style={[
+            styles.bankMonogramText,
+            {
+              color: info.color,
+              fontSize:
+                (info.monogram?.length || 0) >= 3
+                  ? Math.max(8, iconSize * 0.54)
+                  : Math.max(9.5, iconSize * 0.66),
               lineHeight: iconSize,
             },
           ]}>

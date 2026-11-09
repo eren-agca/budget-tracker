@@ -1,6 +1,11 @@
 import { ComponentProps } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { ExchangeRates } from '@/services/currencyService';
+import {
+  POPULAR_BIST_STOCKS,
+  POPULAR_TEFAS_FUNDS,
+  POPULAR_US_STOCKS,
+} from '@/services/stockFundService';
 import { AppLanguage } from '@/context/SettingsContext';
 
 export type IoniconName = ComponentProps<typeof Ionicons>['name'];
@@ -19,6 +24,9 @@ export const INVESTMENT_PRESETS: InvestmentPreset[] = [
   { code: 'XAU_HALF', labelTr: 'Yarım Altın', labelEn: 'Half Gold', icon: 'sunny-outline', isLive: true },
   { code: 'XAU_FULL', labelTr: 'Tam Altın', labelEn: 'Full Gold', icon: 'sunny-outline', isLive: true },
   { code: 'XAG_GRAM', labelTr: 'Gram Gümüş', labelEn: 'Silver (Gram)', icon: 'sparkles-outline', isLive: true },
+  { code: 'TEFAS_FUND', labelTr: 'Yatırım Fonu (TEFAS)', labelEn: 'Mutual Fund (TEFAS)', icon: 'pie-chart-outline', isLive: true },
+  { code: 'STOCK_BIST', labelTr: 'BIST Hisse', labelEn: 'BIST Stock', icon: 'stats-chart-outline', isLive: true },
+  { code: 'STOCK_US', labelTr: 'ABD Hisse / ETF', labelEn: 'US Stock / ETF', icon: 'globe-outline', isLive: true },
   { code: 'USD', labelTr: 'Dolar (USD)', labelEn: 'US Dollar (USD)', icon: 'cash-outline', isLive: true },
   { code: 'EUR', labelTr: 'Euro (EUR)', labelEn: 'Euro (EUR)', icon: 'cash-outline', isLive: true },
   { code: 'GBP', labelTr: 'Sterlin (GBP)', labelEn: 'Pound (GBP)', icon: 'cash-outline', isLive: true },
@@ -30,19 +38,63 @@ export const INVESTMENT_PRESETS: InvestmentPreset[] = [
 
 export function getPresetLabel(code: string, lang: AppLanguage = 'tr'): string {
   const found = INVESTMENT_PRESETS.find((p) => p.code === code);
-  if (!found) return code;
-  return lang === 'tr' ? found.labelTr : found.labelEn;
+  if (found) {
+    return lang === 'tr' ? found.labelTr : found.labelEn;
+  }
+
+  const allQuick = [...POPULAR_TEFAS_FUNDS, ...POPULAR_BIST_STOCKS, ...POPULAR_US_STOCKS];
+  const quickMatch = allQuick.find((q) => q.assetCode === code.toUpperCase());
+  if (quickMatch) {
+    return lang === 'tr' ? quickMatch.nameTr : quickMatch.nameEn;
+  }
+
+  if (code.startsWith('FUND:')) {
+    const sym = code.replace('FUND:', '');
+    return lang === 'tr' ? `${sym} Yatırım Fonu` : `${sym} Mutual Fund`;
+  }
+  if (code.startsWith('BIST:')) {
+    const sym = code.replace('BIST:', '');
+    return lang === 'tr' ? `${sym} Hisse (BIST)` : `${sym} Stock (BIST)`;
+  }
+  if (code.startsWith('US:')) {
+    const sym = code.replace('US:', '');
+    return lang === 'tr' ? `${sym} ABD Hisse` : `${sym} US Stock`;
+  }
+
+  return code;
 }
 
 /**
  * Attempts to infer a live preset code from assetCode or free-text description.
  */
 export function inferAssetCode(assetCode?: string, description?: string): string | null {
-  if (assetCode && assetCode !== 'CUSTOM') {
-    return assetCode;
+  if (
+    assetCode &&
+    assetCode !== 'CUSTOM' &&
+    assetCode !== 'TEFAS_FUND' &&
+    assetCode !== 'STOCK_BIST' &&
+    assetCode !== 'STOCK_US'
+  ) {
+    return assetCode.toUpperCase();
   }
   if (!description) return null;
   const lower = description.toLowerCase();
+  const upper = description.toUpperCase().trim();
+
+  // Check popular TEFAS funds, BIST stocks, and US stocks
+  for (const item of [...POPULAR_TEFAS_FUNDS, ...POPULAR_BIST_STOCKS, ...POPULAR_US_STOCKS]) {
+    if (
+      upper === item.symbol ||
+      upper.startsWith(`${item.symbol} `) ||
+      upper.startsWith(`${item.symbol}-`) ||
+      lower.includes(`(${item.symbol.toLowerCase()})`)
+    ) {
+      return item.assetCode;
+    }
+  }
+  if (lower.includes('para piyasası fonu') || lower.includes('para piyasasi fonu') || lower === 'ppf') {
+    return 'FUND:PPF';
+  }
 
   if (lower.includes('çeyrek') || lower.includes('ceyrek') || lower.includes('quarter gold')) {
     return 'XAU_QUARTER';
@@ -92,6 +144,17 @@ export function getLiveAssetRateInTRY(
   if (!rates) return { unitRateInTRY: null, resolvedCode: null };
   const resolvedCode = inferAssetCode(assetCode, description);
   if (!resolvedCode) return { unitRateInTRY: null, resolvedCode: null };
+
+  if (
+    resolvedCode.startsWith('FUND:') ||
+    resolvedCode.startsWith('BIST:') ||
+    resolvedCode.startsWith('US:')
+  ) {
+    return {
+      unitRateInTRY: rates[resolvedCode] || null,
+      resolvedCode,
+    };
+  }
 
   switch (resolvedCode) {
     case 'XAU_GRAM':

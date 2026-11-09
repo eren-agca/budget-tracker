@@ -18,10 +18,19 @@ import * as Haptics from 'expo-haptics';
 
 import { ThemedText } from '@/components/ThemedText';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
+import { StockBrandBadge } from '@/components/BrandLogo';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { expenseCategories, incomeCategories, getCategoryLabel, isSavingsCategory } from '@/constants/Categories';
 import { INVESTMENT_PRESETS, getLiveAssetRateInTRY, getPresetLabel } from '@/constants/Investments';
 import { ExchangeRates, getExchangeRates } from '@/services/currencyService';
+import {
+  fetchSingleAssetQuote,
+  POPULAR_BIST_STOCKS,
+  POPULAR_TEFAS_FUNDS,
+  POPULAR_US_STOCKS,
+  QuickAssetPreset,
+  registerTrackedAssetCodes,
+} from '@/services/stockFundService';
 import { addUserDoc } from '@/services/userDataService';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings, ThemeColors } from '@/context/SettingsContext';
@@ -39,18 +48,30 @@ export default function AddTransactionScreen() {
   const [category, setCategory] = useState('');
   const [purchaseRate, setPurchaseRate] = useState('');
   const [selectedAssetCode, setSelectedAssetCode] = useState<string>('XAU_GRAM');
+  const [investmentTab, setInvestmentTab] = useState<'market' | 'fund' | 'stock' | 'crypto'>('market');
+  const [stockMarket, setStockMarket] = useState<'BIST' | 'US'>('BIST');
+  const [activeMarketGroup, setActiveMarketGroup] = useState<'TEFAS_FUND' | 'STOCK_BIST' | 'STOCK_US' | null>(null);
+  const [customTickerInput, setCustomTickerInput] = useState('');
+  const [fetchingQuote, setFetchingQuote] = useState(false);
   const [liveRates, setLiveRates] = useState<ExchangeRates | null>(null);
   const [transactionCurrency, setTransactionCurrency] = useState<Currency>(defaultCurrency);
   const [type, setType] = useState<'expense' | 'income' | 'investment'>('expense');
   const [loading, setLoading] = useState(false);
 
   React.useEffect(() => {
-    getExchangeRates()
+    getExchangeRates(true)
       .then((r) => {
         if (r) setLiveRates(r);
       })
       .catch(() => {});
   }, []);
+
+  const formatRateString = (val: number, assetCode: string) => {
+    if (assetCode.startsWith('FUND:') || val < 10) {
+      return Number(val.toFixed(4)).toString();
+    }
+    return val.toFixed(2);
+  };
 
   const applyPresetRate = (assetCode: string, curr: Currency, ratesObj: ExchangeRates | null) => {
     if (!ratesObj || assetCode === 'CUSTOM') return;
@@ -58,7 +79,34 @@ export default function AddTransactionScreen() {
     if (unitRateInTRY && unitRateInTRY > 0) {
       const currRate = ratesObj[curr.code] || 1;
       const converted = unitRateInTRY / currRate;
-      setPurchaseRate(converted.toFixed(2));
+      setPurchaseRate(formatRateString(converted, assetCode));
+    }
+  };
+
+  const selectStockOrFundAsset = async (
+    fullAssetCode: string,
+    displayTitle: string,
+    targetCurr: Currency = transactionCurrency
+  ) => {
+    setSelectedAssetCode(fullAssetCode);
+    setDescription(displayTitle);
+    const cachedTry = liveRates?.[fullAssetCode];
+    if (cachedTry && cachedTry > 0) {
+      const currRate = liveRates?.[targetCurr.code] || 1;
+      setPurchaseRate(formatRateString(cachedTry / currRate, fullAssetCode));
+    }
+    setFetchingQuote(true);
+    try {
+      const usdTry = liveRates?.USD || 34.5;
+      const quote = await fetchSingleAssetQuote(fullAssetCode, usdTry);
+      if (quote && quote.priceInTRY > 0) {
+        setLiveRates((prev) => ({ ...(prev || { TRY: 1 }), [fullAssetCode]: quote.priceInTRY }));
+        const currRate = liveRates?.[targetCurr.code] || (targetCurr.code === 'USD' ? usdTry : 1);
+        const converted = quote.priceInTRY / currRate;
+        setPurchaseRate(formatRateString(converted, fullAssetCode));
+      }
+    } finally {
+      setFetchingQuote(false);
     }
   };
 
@@ -67,6 +115,8 @@ export default function AddTransactionScreen() {
     setType(newType);
     if (newType === 'investment') {
       setCategory('Savings');
+      setInvestmentTab('market');
+      setActiveMarketGroup(null);
       setSelectedAssetCode('XAU_GRAM');
       setDescription(getPresetLabel('XAU_GRAM', language));
       applyPresetRate('XAU_GRAM', transactionCurrency, liveRates);
@@ -74,13 +124,82 @@ export default function AddTransactionScreen() {
       setCategory('');
       setPurchaseRate('');
       setDescription('');
+      setActiveMarketGroup(null);
     }
   };
 
   const isSavings = type === 'investment' || (type === 'expense' && isSavingsCategory(category));
 
+  const MARKET_TAB_CODES = ['XAU_GRAM', 'XAU_QUARTER', 'XAU_HALF', 'XAU_FULL', 'XAG_GRAM', 'USD', 'EUR', 'GBP'];
+  const CRYPTO_TAB_CODES = ['BTC', 'ETH', 'XRP', 'CUSTOM'];
+
+  const handleSelectInvestmentTab = (tab: 'market' | 'fund' | 'stock' | 'crypto') => {
+    Haptics.selectionAsync().catch(() => {});
+    setInvestmentTab(tab);
+    setCustomTickerInput('');
+    if (tab === 'market') {
+      setActiveMarketGroup(null);
+      if (!MARKET_TAB_CODES.includes(selectedAssetCode)) {
+        const tryCurr = currencies.find((c) => c.code === 'TRY') || defaultCurrency;
+        setTransactionCurrency(tryCurr);
+        setSelectedAssetCode('XAU_GRAM');
+        setDescription(getPresetLabel('XAU_GRAM', language));
+        applyPresetRate('XAU_GRAM', tryCurr, liveRates);
+      }
+    } else if (tab === 'fund') {
+      setActiveMarketGroup('TEFAS_FUND');
+      if (!selectedAssetCode.startsWith('FUND:')) {
+        const first = POPULAR_TEFAS_FUNDS[0];
+        const tryCurr = currencies.find((c) => c.code === 'TRY') || defaultCurrency;
+        setTransactionCurrency(tryCurr);
+        selectStockOrFundAsset(first.assetCode, language === 'tr' ? first.nameTr : first.nameEn, tryCurr);
+      }
+    } else if (tab === 'stock') {
+      const targetGroup = stockMarket === 'BIST' ? 'STOCK_BIST' : 'STOCK_US';
+      setActiveMarketGroup(targetGroup);
+      if (stockMarket === 'BIST' && !selectedAssetCode.startsWith('BIST:')) {
+        const first = POPULAR_BIST_STOCKS[0];
+        const tryCurr = currencies.find((c) => c.code === 'TRY') || defaultCurrency;
+        setTransactionCurrency(tryCurr);
+        selectStockOrFundAsset(first.assetCode, language === 'tr' ? first.nameTr : first.nameEn, tryCurr);
+      } else if (stockMarket === 'US' && !selectedAssetCode.startsWith('US:')) {
+        const first = POPULAR_US_STOCKS[0];
+        const usdCurr = currencies.find((c) => c.code === 'USD') || transactionCurrency;
+        setTransactionCurrency(usdCurr);
+        selectStockOrFundAsset(first.assetCode, language === 'tr' ? first.nameTr : first.nameEn, usdCurr);
+      }
+    } else if (tab === 'crypto') {
+      setActiveMarketGroup(null);
+      if (!CRYPTO_TAB_CODES.includes(selectedAssetCode)) {
+        setSelectedAssetCode('BTC');
+        setDescription(getPresetLabel('BTC', language));
+        applyPresetRate('BTC', transactionCurrency, liveRates);
+      }
+    }
+  };
+
+  const handleToggleStockMarket = (mkt: 'BIST' | 'US') => {
+    Haptics.selectionAsync().catch(() => {});
+    setStockMarket(mkt);
+    setCustomTickerInput('');
+    if (mkt === 'BIST') {
+      setActiveMarketGroup('STOCK_BIST');
+      const first = POPULAR_BIST_STOCKS[0];
+      const tryCurr = currencies.find((c) => c.code === 'TRY') || defaultCurrency;
+      setTransactionCurrency(tryCurr);
+      selectStockOrFundAsset(first.assetCode, language === 'tr' ? first.nameTr : first.nameEn, tryCurr);
+    } else {
+      setActiveMarketGroup('STOCK_US');
+      const first = POPULAR_US_STOCKS[0];
+      const usdCurr = currencies.find((c) => c.code === 'USD') || transactionCurrency;
+      setTransactionCurrency(usdCurr);
+      selectStockOrFundAsset(first.assetCode, language === 'tr' ? first.nameTr : first.nameEn, usdCurr);
+    }
+  };
+
   const handleSelectAssetPreset = (presetCode: string) => {
     Haptics.selectionAsync().catch(() => {});
+    setActiveMarketGroup(null);
     setSelectedAssetCode(presetCode);
     if (presetCode === 'CUSTOM') {
       setDescription('');
@@ -89,6 +208,21 @@ export default function AddTransactionScreen() {
       setDescription(getPresetLabel(presetCode, language));
       applyPresetRate(presetCode, transactionCurrency, liveRates);
     }
+  };
+
+  const handleSearchCustomSymbol = async () => {
+    const clean = customTickerInput.trim().toUpperCase().replace(/[^A-Z0-9.]/g, '');
+    if (!clean) return;
+    Haptics.selectionAsync().catch(() => {});
+    const prefix =
+      investmentTab === 'fund'
+        ? 'FUND:'
+        : stockMarket === 'BIST'
+        ? 'BIST:'
+        : 'US:';
+    const fullCode = `${prefix}${clean.replace(/\.IS$/i, '')}`;
+    const label = getPresetLabel(fullCode, language);
+    await selectStockOrFundAsset(fullCode, label, transactionCurrency);
   };
 
   const handleSaveTransaction = async () => {
@@ -141,6 +275,7 @@ export default function AddTransactionScreen() {
         transactionData.purchaseRate = numericPurchaseRate;
         transactionData.assetQuantity = numericAmount;
         transactionData.assetCode = selectedAssetCode;
+        registerTrackedAssetCodes([selectedAssetCode]);
       }
 
       await addUserDoc(user, 'transactions', transactionData);
@@ -161,16 +296,16 @@ export default function AddTransactionScreen() {
   };
 
   const handleAmountChange = (text: string) => {
-    if (text.length > 12) return;
-    const numericRegex = /^\d*([.,]\d{0,2})?$/;
+    if (text.length > 14) return;
+    const numericRegex = /^\d*([.,]\d{0,4})?$/;
     if (numericRegex.test(text) || text === '') {
       setAmount(text);
     }
   };
 
   const handleRateChange = (text: string) => {
-    if (text.length > 12) return;
-    const numericRegex = /^\d*([.,]\d{0,2})?$/;
+    if (text.length > 14) return;
+    const numericRegex = /^\d*([.,]\d{0,6})?$/;
     if (numericRegex.test(text) || text === '') {
       setPurchaseRate(text);
     }
@@ -304,17 +439,32 @@ export default function AddTransactionScreen() {
 
         {/* Savings / Investment Purchase Rate Field */}
         {isSavings && (
-          <View style={styles.inputCard}>
-            <View style={styles.inputRow}>
-              <Ionicons name="pricetag-outline" size={18} color="#8E8E93" style={styles.fieldIcon} />
-              <TextInput
-                placeholder={`${t('purchaseRatePlaceholder')} ${transactionCurrency.symbol})`}
-                value={purchaseRate}
-                onChangeText={handleRateChange}
-                style={styles.fieldInput}
-                keyboardType="numeric"
-                placeholderTextColor="#636366"
-              />
+          <View style={{ marginBottom: 16 }}>
+            <ThemedText
+              style={{
+                fontSize: 11,
+                fontWeight: '800',
+                color: colors.textSecondary,
+                letterSpacing: 0.4,
+                marginBottom: 6,
+                marginLeft: 4,
+              }}>
+              {language === 'tr'
+                ? 'BİRİM ALIŞ FİYATINIZ / MALİYET (Kâr/Zarar hesabı için)'
+                : 'YOUR UNIT BUY PRICE / COST (For Profit/Loss tracking)'}
+            </ThemedText>
+            <View style={[styles.inputCard, { marginBottom: 0 }]}>
+              <View style={styles.inputRow}>
+                <Ionicons name="pricetag-outline" size={18} color="#8E8E93" style={styles.fieldIcon} />
+                <TextInput
+                  placeholder={`${t('purchaseRatePlaceholder')} ${transactionCurrency.symbol})`}
+                  value={purchaseRate}
+                  onChangeText={handleRateChange}
+                  style={styles.fieldInput}
+                  keyboardType="numeric"
+                  placeholderTextColor="#636366"
+                />
+              </View>
             </View>
           </View>
         )}
@@ -330,26 +480,297 @@ export default function AddTransactionScreen() {
           </ThemedText>
 
           {isSavings ? (
-            <View style={styles.incomeShortcuts}>
-              {INVESTMENT_PRESETS.map((preset) => {
-                const isSelected = selectedAssetCode === preset.code;
-                const label = language === 'tr' ? preset.labelTr : preset.labelEn;
-                return (
-                  <AnimatedPressable
-                    key={preset.code}
-                    onPress={() => handleSelectAssetPreset(preset.code)}
-                    style={[styles.shortcutChip, isSelected && styles.shortcutChipActive]}>
-                    <Ionicons
-                      name={preset.icon}
-                      size={15}
-                      color={isSelected ? colors.tint : colors.textSecondary}
+            <View style={styles.investmentSelectorCard}>
+              {/* 1. Compact 4-Category Filter Tabs */}
+              <View style={styles.investmentTabBar}>
+                {(
+                  [
+                    {
+                      key: 'market',
+                      icon: 'diamond-outline' as const,
+                      labelTr: 'Altın & Döviz',
+                      labelEn: 'Gold & FX',
+                    },
+                    {
+                      key: 'fund',
+                      icon: 'pie-chart-outline' as const,
+                      labelTr: 'Fon (TEFAS)',
+                      labelEn: 'Funds',
+                    },
+                    {
+                      key: 'stock',
+                      icon: 'stats-chart-outline' as const,
+                      labelTr: 'Hisse',
+                      labelEn: 'Stocks',
+                    },
+                    {
+                      key: 'crypto',
+                      icon: 'logo-bitcoin' as const,
+                      labelTr: 'Kripto',
+                      labelEn: 'Crypto',
+                    },
+                  ] as const
+                ).map((tabItem) => {
+                  const isTabActive = investmentTab === tabItem.key;
+                  return (
+                    <AnimatedPressable
+                      key={tabItem.key}
+                      onPress={() => handleSelectInvestmentTab(tabItem.key)}
+                      style={[
+                        styles.investmentTabBtn,
+                        isTabActive && styles.investmentTabBtnActive,
+                      ]}>
+                      <Ionicons
+                        name={tabItem.icon}
+                        size={13}
+                        color={isTabActive ? (isDark ? '#000' : '#FFF') : colors.textSecondary}
+                      />
+                      <ThemedText
+                        style={[
+                          styles.investmentTabText,
+                          isTabActive && styles.investmentTabTextActive,
+                        ]}
+                        numberOfLines={1}>
+                        {language === 'tr' ? tabItem.labelTr : tabItem.labelEn}
+                      </ThemedText>
+                    </AnimatedPressable>
+                  );
+                })}
+              </View>
+
+              {/* 2. Optional Compact Sub-Toolbar for Funds & Stocks (BIST/US Toggle + Custom Code Input) */}
+              {(investmentTab === 'fund' || investmentTab === 'stock') && (
+                <View style={styles.compactSearchToolbar}>
+                  {investmentTab === 'stock' && (
+                    <View style={styles.marketMiniSwitch}>
+                      <AnimatedPressable
+                        onPress={() => handleToggleStockMarket('BIST')}
+                        style={[
+                          styles.marketMiniSwitchBtn,
+                          stockMarket === 'BIST' && styles.marketMiniSwitchBtnActive,
+                        ]}>
+                        <ThemedText
+                          style={[
+                            styles.marketMiniSwitchText,
+                            stockMarket === 'BIST' && styles.marketMiniSwitchTextActive,
+                          ]}>
+                          BIST
+                        </ThemedText>
+                      </AnimatedPressable>
+                      <AnimatedPressable
+                        onPress={() => handleToggleStockMarket('US')}
+                        style={[
+                          styles.marketMiniSwitchBtn,
+                          stockMarket === 'US' && styles.marketMiniSwitchBtnActive,
+                        ]}>
+                        <ThemedText
+                          style={[
+                            styles.marketMiniSwitchText,
+                            stockMarket === 'US' && styles.marketMiniSwitchTextActive,
+                          ]}>
+                          ABD
+                        </ThemedText>
+                      </AnimatedPressable>
+                    </View>
+                  )}
+
+                  <View style={styles.compactSearchInputWrap}>
+                    <Ionicons name="search" size={14} color={colors.textMuted} />
+                    <TextInput
+                      placeholder={
+                        investmentTab === 'fund'
+                          ? language === 'tr'
+                            ? 'Fon kodu (AFA, TI1, YAY...)'
+                            : 'Fund code (AFA, TI1...)'
+                          : stockMarket === 'BIST'
+                          ? language === 'tr'
+                            ? 'Hisse kodu (THYAO, FROTO...)'
+                            : 'BIST ticker (THYAO...)'
+                          : language === 'tr'
+                          ? 'ABD kodu (NVDA, AAPL...)'
+                          : 'US ticker (NVDA...)'
+                      }
+                      value={customTickerInput}
+                      onChangeText={(txt) => setCustomTickerInput(txt.toUpperCase())}
+                      onSubmitEditing={handleSearchCustomSymbol}
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                      maxLength={10}
+                      placeholderTextColor={colors.textMuted}
+                      style={styles.compactSearchInput}
                     />
-                    <ThemedText style={[styles.shortcutText, isSelected && styles.shortcutTextActive]}>
-                      {label}
-                    </ThemedText>
-                  </AnimatedPressable>
-                );
-              })}
+                    {fetchingQuote ? (
+                      <ActivityIndicator size="small" color={colors.tint} />
+                    ) : (
+                      <AnimatedPressable
+                        onPress={handleSearchCustomSymbol}
+                        style={styles.compactFetchBtn}>
+                        <Ionicons name="flash" size={12} color={isDark ? '#000' : '#FFF'} />
+                        <ThemedText style={styles.compactFetchBtnText}>
+                          {language === 'tr' ? 'Bul' : 'Fetch'}
+                        </ThemedText>
+                      </AnimatedPressable>
+                    )}
+                  </View>
+                </View>
+              )}
+
+              {/* 3. Single-Row Horizontal Scroll of Filtered Assets */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalAssetRow}>
+                {investmentTab === 'market' &&
+                  INVESTMENT_PRESETS.filter((p) => MARKET_TAB_CODES.includes(p.code)).map(
+                    (preset) => {
+                      const isSelected = selectedAssetCode === preset.code;
+                      const label = language === 'tr' ? preset.labelTr : preset.labelEn;
+                      return (
+                        <AnimatedPressable
+                          key={preset.code}
+                          onPress={() => handleSelectAssetPreset(preset.code)}
+                          style={[
+                            styles.horizontalAssetChip,
+                            isSelected && styles.shortcutChipActive,
+                          ]}>
+                          <View
+                            style={[
+                              styles.assetIconCircle,
+                              isSelected && { backgroundColor: 'rgba(57, 255, 20, 0.2)' },
+                            ]}>
+                            <Ionicons
+                              name={preset.icon}
+                              size={16}
+                              color={isSelected ? colors.tint : colors.textSecondary}
+                            />
+                          </View>
+                          <ThemedText
+                            style={[
+                              styles.shortcutText,
+                              isSelected && styles.shortcutTextActive,
+                            ]}>
+                            {label}
+                          </ThemedText>
+                        </AnimatedPressable>
+                      );
+                    }
+                  )}
+
+                {investmentTab === 'fund' &&
+                  POPULAR_TEFAS_FUNDS.map((item: QuickAssetPreset) => {
+                    const isChipSelected = selectedAssetCode === item.assetCode;
+                    const chipText =
+                      language === 'tr'
+                        ? item.chipLabelTr || item.symbol
+                        : item.chipLabelEn || item.symbol;
+                    return (
+                      <AnimatedPressable
+                        key={item.assetCode}
+                        onPress={() => {
+                          Haptics.selectionAsync().catch(() => {});
+                          setCustomTickerInput(item.symbol);
+                          selectStockOrFundAsset(
+                            item.assetCode,
+                            language === 'tr' ? item.nameTr : item.nameEn,
+                            transactionCurrency
+                          );
+                        }}
+                        style={[
+                          styles.horizontalAssetChip,
+                          isChipSelected && styles.shortcutChipActive,
+                        ]}>
+                        <StockBrandBadge symbol={item.symbol} size={24} iconSize={13} />
+                        <ThemedText
+                          style={[
+                            styles.shortcutText,
+                            isChipSelected && styles.shortcutTextActive,
+                          ]}>
+                          {chipText}
+                        </ThemedText>
+                      </AnimatedPressable>
+                    );
+                  })}
+
+                {investmentTab === 'stock' &&
+                  (stockMarket === 'BIST' ? POPULAR_BIST_STOCKS : POPULAR_US_STOCKS).map(
+                    (item: QuickAssetPreset) => {
+                      const isChipSelected = selectedAssetCode === item.assetCode;
+                      return (
+                        <AnimatedPressable
+                          key={item.assetCode}
+                          onPress={() => {
+                            Haptics.selectionAsync().catch(() => {});
+                            setCustomTickerInput(item.symbol);
+                            selectStockOrFundAsset(
+                              item.assetCode,
+                              language === 'tr' ? item.nameTr : item.nameEn,
+                              transactionCurrency
+                            );
+                          }}
+                          style={[
+                            styles.stockLogoTile,
+                            isChipSelected && styles.shortcutChipActive,
+                          ]}>
+                          <StockBrandBadge symbol={item.symbol} size={30} iconSize={16} />
+                          <ThemedText
+                            style={[
+                              styles.stockLogoTileCode,
+                              isChipSelected && styles.shortcutTextActive,
+                            ]}>
+                            {item.symbol}
+                          </ThemedText>
+                        </AnimatedPressable>
+                      );
+                    }
+                  )}
+
+                {investmentTab === 'crypto' &&
+                  INVESTMENT_PRESETS.filter((p) => CRYPTO_TAB_CODES.includes(p.code)).map(
+                    (preset) => {
+                      const isSelected = selectedAssetCode === preset.code;
+                      const label = language === 'tr' ? preset.labelTr : preset.labelEn;
+                      return (
+                        <AnimatedPressable
+                          key={preset.code}
+                          onPress={() => handleSelectAssetPreset(preset.code)}
+                          style={[
+                            styles.horizontalAssetChip,
+                            isSelected && styles.shortcutChipActive,
+                          ]}>
+                          <View
+                            style={[
+                              styles.assetIconCircle,
+                              isSelected && { backgroundColor: 'rgba(57, 255, 20, 0.2)' },
+                            ]}>
+                            <Ionicons
+                              name={preset.icon}
+                              size={16}
+                              color={isSelected ? colors.tint : colors.textSecondary}
+                            />
+                          </View>
+                          <ThemedText
+                            style={[
+                              styles.shortcutText,
+                              isSelected && styles.shortcutTextActive,
+                            ]}>
+                            {label}
+                          </ThemedText>
+                        </AnimatedPressable>
+                      );
+                    }
+                  )}
+              </ScrollView>
+
+              {/* 4. Compact Selected Asset Summary Strip */}
+              {description && selectedAssetCode !== 'CUSTOM' ? (
+                <View style={styles.selectedAssetBanner}>
+                  <Ionicons name="checkmark-circle" size={15} color={colors.tint} />
+                  <ThemedText style={styles.selectedAssetBannerText} numberOfLines={1}>
+                    {description}
+                    {purchaseRate ? ` • ${transactionCurrency.symbol}${purchaseRate}` : ''}
+                  </ThemedText>
+                </View>
+              ) : null}
             </View>
           ) : type === 'expense' ? (
             <View style={styles.categoryGrid}>
@@ -698,6 +1119,170 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
     shortcutTextActive: {
       color: colors.tint,
       fontWeight: '700',
+    },
+    investmentSelectorCard: {
+      backgroundColor: colors.card,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 12,
+      gap: 10,
+    },
+    investmentTabBar: {
+      flexDirection: 'row',
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 12,
+      padding: 3,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      gap: 2,
+    },
+    investmentTabBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 8,
+      paddingHorizontal: 4,
+      borderRadius: 9,
+      gap: 4,
+    },
+    investmentTabBtnActive: {
+      backgroundColor: colors.tint,
+    },
+    investmentTabText: {
+      fontSize: 11.5,
+      fontWeight: '700',
+      color: colors.textSecondary,
+    },
+    investmentTabTextActive: {
+      color: isDark ? '#000000' : '#FFFFFF',
+      fontWeight: '800',
+    },
+    compactSearchToolbar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    marketMiniSwitch: {
+      flexDirection: 'row',
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 10,
+      padding: 2,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+    },
+    marketMiniSwitchBtn: {
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: 8,
+    },
+    marketMiniSwitchBtnActive: {
+      backgroundColor: isDark ? '#26282E' : '#FFFFFF',
+      borderWidth: 1,
+      borderColor: colors.tint,
+    },
+    marketMiniSwitchText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.textSecondary,
+    },
+    marketMiniSwitchTextActive: {
+      color: colors.tint,
+      fontWeight: '800',
+    },
+    compactSearchInputWrap: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: 38,
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      paddingLeft: 10,
+      paddingRight: 4,
+      gap: 6,
+    },
+    compactSearchInput: {
+      flex: 1,
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: '700',
+      paddingVertical: 0,
+    },
+    compactFetchBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.tint,
+      height: 28,
+      paddingHorizontal: 10,
+      borderRadius: 7,
+      gap: 3,
+    },
+    compactFetchBtnText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: isDark ? '#000000' : '#FFFFFF',
+    },
+    horizontalAssetRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 2,
+    },
+    horizontalAssetChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 12,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      gap: 7,
+    },
+    assetIconCircle: {
+      width: 26,
+      height: 26,
+      borderRadius: 8,
+      backgroundColor: isDark ? '#1A1C22' : '#E2E8F0',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stockLogoTile: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.cardSecondary,
+      borderRadius: 14,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      minWidth: 64,
+      gap: 4,
+    },
+    stockLogoTileCode: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.textSecondary,
+      letterSpacing: 0.2,
+    },
+    selectedAssetBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: colors.tintSoft,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 10,
+    },
+    selectedAssetBannerText: {
+      flex: 1,
+      fontSize: 12.5,
+      fontWeight: '700',
+      color: colors.tint,
     },
     saveButton: {
       flexDirection: 'row',

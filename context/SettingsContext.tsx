@@ -62,7 +62,10 @@ export const translations = {
     cancel: 'Vazgeç',
     marketTicker: 'PİYASALAR',
     cryptoTicker: 'KRİPTO',
-    marketDataFallback: 'Canlı piyasa verileri geçici olarak devre dışı',
+    fundsStocksTicker: 'FON & HİSSE',
+    fundsTicker: 'FONLAR',
+    stocksTicker: 'HİSSELER',
+    marketDataFallback: 'Çevrimdışı • Güncel fiyatlar için lütfen internete bağlanın',
 
     // Analytics / Charts Screen
     analyticsSubtitle: 'FİNANSAL ANALİTİK',
@@ -276,7 +279,10 @@ export const translations = {
     cancel: 'Cancel',
     marketTicker: 'MARKETS',
     cryptoTicker: 'CRYPTO',
-    marketDataFallback: 'Live market data temporarily unavailable',
+    fundsStocksTicker: 'FUNDS & STOCKS',
+    fundsTicker: 'FUNDS',
+    stocksTicker: 'STOCKS',
+    marketDataFallback: 'Offline • Please connect to the internet for live prices',
 
     // Analytics / Charts Screen
     analyticsSubtitle: 'FINANCIAL ANALYTICS',

@@ -22,6 +22,7 @@ import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg'
 import Toast from 'react-native-toast-message';
 
 import { AnimatedPressable } from '@/components/AnimatedPressable';
+import { getStockBrandInfo, StockBrandBadge } from '@/components/BrandLogo';
 import { SettingsModal } from '@/components/SettingsModal';
 import { SwipeableModal } from '@/components/SwipeableModal';
 import { ThemedText } from '@/components/ThemedText';
@@ -30,10 +31,21 @@ import { expenseCategories, getCategoryLabel, isSavingsCategory } from '@/consta
 import { Colors } from '@/constants/Colors';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { dateFilters, getDateFilters, getDateFilterLabel } from '@/constants/DateFilters';
-import { INVESTMENT_PRESETS, getLiveAssetRateInTRY, getPresetLabel } from '@/constants/Investments';
+import { INVESTMENT_PRESETS, getLiveAssetRateInTRY, getPresetLabel, inferAssetCode } from '@/constants/Investments';
 import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
 import { ExchangeRates, getDailyOpenRatesSnapshot, getExchangeRates } from '@/services/currencyService';
+import {
+  DEFAULT_FUNDS_TICKER_CODES,
+  DEFAULT_STOCKS_TICKER_CODES,
+  registerTrackedAssetCodes,
+} from '@/services/stockFundService';
+import {
+  isBistMarketOpen,
+  isUsMarketOpen,
+  isForexMetalMarketOpen,
+  isFundTradingSession,
+} from '@/services/marketHoursService';
 import {
   addUserDoc,
   deleteUserDoc,
@@ -227,14 +239,27 @@ const InvestmentListItem = React.memo(
     const isProfit = pnlInTRY >= -0.005;
 
     const presetMatch = INVESTMENT_PRESETS.find((p) => p.code === (resolvedCode || item.assetCode));
-    const iconName = presetMatch?.icon || 'trending-up-outline';
+    let iconName = presetMatch?.icon || 'trending-up-outline';
+    if (!presetMatch && resolvedCode) {
+      if (resolvedCode.startsWith('FUND:')) iconName = 'pie-chart-outline';
+      else if (resolvedCode.startsWith('BIST:')) iconName = 'stats-chart-outline';
+      else if (resolvedCode.startsWith('US:')) iconName = 'globe-outline';
+    }
     const title =
       presetMatch && presetMatch.code !== 'CUSTOM'
         ? getPresetLabel(presetMatch.code, language)
-        : item.description || getCategoryLabel(item.category, language);
+        : item.description || (resolvedCode ? getPresetLabel(resolvedCode, language) : getCategoryLabel(item.category, language));
 
     const currentUnitInItemCurr = currentUnitInTRY / txCurrRate;
+    const isHighPrecision =
+      Boolean(resolvedCode?.startsWith('FUND:')) || buyUnitInItemCurr < 10 || currentUnitInItemCurr < 10;
+    const formatUnitRate = (val: number) =>
+      isHighPrecision ? Number(val.toFixed(4)).toString() : val.toFixed(2);
     const currentValueDisplay = (currentValueInTRY / displayRate).toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    const costValueDisplay = (costInTRY / displayRate).toLocaleString('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
@@ -242,18 +267,43 @@ const InvestmentListItem = React.memo(
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
+    const pnlPrefixLabel =
+      pnlInTRY > 0.005
+        ? language === 'tr'
+          ? 'Kâr: '
+          : 'Profit: '
+        : pnlInTRY < -0.005
+        ? language === 'tr'
+          ? 'Zarar: '
+          : 'Loss: '
+        : language === 'tr'
+        ? 'Kâr/Zarar: '
+        : 'P/L: ';
+
+    const isStockOrFund = Boolean(
+      resolvedCode &&
+        (resolvedCode.startsWith('FUND:') ||
+          resolvedCode.startsWith('BIST:') ||
+          resolvedCode.startsWith('US:'))
+    );
 
     return (
       <View style={[styles.transactionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View
-          style={[
-            styles.categoryIconCircle,
-            {
-              backgroundColor: isProfit ? colors.tintSoft : colors.expenseSoft,
-            },
-          ]}>
-          <Ionicons name={iconName as any} size={20} color={isProfit ? colors.tint : colors.expense} />
-        </View>
+        {isStockOrFund && resolvedCode ? (
+          <View style={{ marginRight: 12 }}>
+            <StockBrandBadge symbol={resolvedCode} size={42} iconSize={20} />
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.categoryIconCircle,
+              {
+                backgroundColor: isProfit ? colors.tintSoft : colors.expenseSoft,
+              },
+            ]}>
+            <Ionicons name={iconName as any} size={20} color={isProfit ? colors.tint : colors.expense} />
+          </View>
+        )}
 
         <View style={styles.transactionMainInfo}>
           <View style={styles.investmentTitleRow}>
@@ -279,7 +329,7 @@ const InvestmentListItem = React.memo(
 
           <View style={styles.investmentRateMetaRow}>
             <ThemedText style={[styles.transactionCategoryTag, { color: colors.textSecondary }]}>
-              {`${quantity} Adet • ${t('buyRateLabel')}: ${itemCurrency.symbol}${buyUnitInItemCurr.toFixed(2)} → ${t('currentRateLabel')}: ${itemCurrency.symbol}${currentUnitInItemCurr.toFixed(2)}`}
+              {`${quantity} Adet • ${t('buyRateLabel')}: ${itemCurrency.symbol}${formatUnitRate(buyUnitInItemCurr)} → ${t('currentRateLabel')}: ${itemCurrency.symbol}${formatUnitRate(currentUnitInItemCurr)}`}
             </ThemedText>
             {liveDirection === 'up' && (
               <Ionicons name="arrow-up" size={13} color={colors.tint} />
@@ -311,8 +361,8 @@ const InvestmentListItem = React.memo(
                   { color: isProfit ? colors.income : colors.expense },
                 ]}>
                 {isBalanceHidden
-                  ? `${isProfit ? '+' : '-'}${displayCurrency.symbol}••••`
-                  : `${isProfit ? '+' : '-'}${displayCurrency.symbol}${pnlDisplay} (${isProfit ? '+' : ''}${pnlPct.toFixed(2)}%)`}
+                  ? `${pnlPrefixLabel}${isProfit ? '+' : '-'}${displayCurrency.symbol}••••`
+                  : `${pnlPrefixLabel}${isProfit ? '+' : '-'}${displayCurrency.symbol}${pnlDisplay} (${isProfit ? '+' : ''}${pnlPct.toFixed(2)}%)`}
               </ThemedText>
             </View>
 
@@ -342,6 +392,11 @@ const InvestmentListItem = React.memo(
         <View style={styles.transactionRightBlock}>
           <ThemedText style={[styles.incomeAmount, { color: colors.text }]}>
             {isBalanceHidden ? `${displayCurrency.symbol}•••••` : `${displayCurrency.symbol}${currentValueDisplay}`}
+          </ThemedText>
+          <ThemedText style={{ fontSize: 10.5, fontWeight: '600', color: colors.textMuted, marginTop: -2 }}>
+            {isBalanceHidden
+              ? `${t('costLabel')}: ••••`
+              : `${t('costLabel')}: ${displayCurrency.symbol}${costValueDisplay}`}
           </ThemedText>
           <TouchableOpacity
             activeOpacity={0.6}
@@ -522,6 +577,105 @@ export default function HomeScreen() {
     }
     return { walletTransactions: wallet, investmentTransactions: investments };
   }, [transactions]);
+
+  // Register any user-owned fund/stock codes and build the 2 live tickers (Funds & Stocks) for Investments view
+  const { fundsTickerData, stocksTickerData } = useMemo((): {
+    fundsTickerData: TickerItemData[];
+    stocksTickerData: TickerItemData[];
+  } => {
+    const ownedFundCodes: string[] = [];
+    const ownedStockCodes: string[] = [];
+
+    for (const tx of investmentTransactions) {
+      const code = inferAssetCode(tx.assetCode, tx.description);
+      if (!code) continue;
+      if (code.startsWith('FUND:') && !ownedFundCodes.includes(code)) {
+        ownedFundCodes.push(code);
+      } else if ((code.startsWith('BIST:') || code.startsWith('US:')) && !ownedStockCodes.includes(code)) {
+        ownedStockCodes.push(code);
+      }
+    }
+
+    const allOwned = [...ownedFundCodes, ...ownedStockCodes];
+    if (allOwned.length > 0) {
+      registerTrackedAssetCodes(allOwned);
+    }
+
+    const fundCodes = [
+      ...ownedFundCodes,
+      ...DEFAULT_FUNDS_TICKER_CODES.filter((c) => !ownedFundCodes.includes(c)),
+    ];
+    const stockCodes = [
+      ...ownedStockCodes,
+      ...DEFAULT_STOCKS_TICKER_CODES.filter((c) => !ownedStockCodes.includes(c)),
+    ];
+
+    const usdRate = rates?.USD || 34.5;
+
+    const formatTickerItems = (codes: string[], useLogoOnlyForStocks = false): TickerItemData[] => {
+      const items: TickerItemData[] = [];
+      for (const code of codes) {
+        const rateInTRY = rates?.[code];
+        if (!rateInTRY || rateInTRY <= 0) continue;
+
+        const shortSymbol = code.replace(/^(FUND:|BIST:|US:)/, '');
+        let formattedPrice = '';
+
+        if (code.startsWith('US:')) {
+          const usdVal = rateInTRY / usdRate;
+          const parts = usdVal.toFixed(2).split('.');
+          formattedPrice = `$${Number(parts[0]).toLocaleString('tr-TR')},${parts[1]}`;
+        } else if (code.startsWith('FUND:') || rateInTRY < 10) {
+          const parts = rateInTRY.toFixed(4).split('.');
+          formattedPrice = `₺${Number(parts[0]).toLocaleString('tr-TR')},${parts[1]}`;
+        } else {
+          const parts = rateInTRY.toFixed(2).split('.');
+          formattedPrice = `₺${Number(parts[0]).toLocaleString('tr-TR')},${parts[1]}`;
+        }
+
+        const brandInfo = getStockBrandInfo(shortSymbol);
+        const hasKnownLogo = Boolean(brandInfo.domain);
+
+        if (useLogoOnlyForStocks && hasKnownLogo) {
+          items.push({
+            logoSymbol: shortSymbol,
+            text: formattedPrice,
+            direction: rateDirections[code] || 'flat',
+          });
+        } else {
+          items.push({
+            logoSymbol: useLogoOnlyForStocks ? shortSymbol : undefined,
+            text: `${shortSymbol} ${formattedPrice}`,
+            direction: rateDirections[code] || 'flat',
+          });
+        }
+      }
+      return items;
+    };
+
+    return {
+      fundsTickerData: formatTickerItems(fundCodes, false),
+      stocksTickerData: formatTickerItems(stockCodes, true),
+    };
+  }, [investmentTransactions, rates, rateDirections]);
+
+  useEffect(() => {
+    const missingOwnedCode = investmentTransactions.some((tx) => {
+      const code = inferAssetCode(tx.assetCode, tx.description);
+      return (
+        code &&
+        (code.startsWith('FUND:') || code.startsWith('BIST:') || code.startsWith('US:')) &&
+        !rates?.[code]
+      );
+    });
+    if (missingOwnedCode) {
+      getExchangeRates(true)
+        .then((updated) => {
+          if (updated) setRates(updated);
+        })
+        .catch(() => {});
+    }
+  }, [investmentTransactions, rates]);
 
   const dateFilteredTransactions = useMemo(() => {
     const now = new Date();
@@ -746,31 +900,15 @@ export default function HomeScreen() {
       );
     };
 
-    // 1. Stale-While-Revalidate: Instant 0ms load from local cache before network finishes
-    AsyncStorage.multiGet(['@budget_tracker_cached_rates', '@budget_tracker_rate_directions'])
-      .then((entries) => {
-        const rawRates = entries[0]?.[1];
-        const rawDirs = entries[1]?.[1];
-        if (rawRates) {
-          const parsedRates = JSON.parse(rawRates);
-          const parsedDirs = rawDirs ? JSON.parse(rawDirs) : {};
-          if (parsedRates && Object.keys(parsedRates).length > 1) {
-            setRates((prev) => (prev && Object.keys(prev).length > 1 ? prev : parsedRates));
-            setRateDirections((prev) => (Object.keys(prev).length > 0 ? prev : parsedDirs));
-            buildTickers(parsedRates, parsedDirs);
-          }
-        }
-      })
-      .catch(() => {});
-
     const fetchRates = async (force = false) => {
       if (AppState.currentState && AppState.currentState !== 'active') return;
       try {
         const fetchedRates = await getExchangeRates(force);
         if (!fetchedRates || Object.keys(fetchedRates).length <= 1) {
-          setRates((prev) => (prev && Object.keys(prev).length > 1 ? prev : { TRY: 1 }));
-          setFiatMetalTickerData((prev) => (prev.length > 0 ? prev : [FALLBACK_MESSAGE]));
-          setCryptoTickerData((prev) => (prev.length > 0 ? prev : [FALLBACK_MESSAGE]));
+          setRates({ TRY: 1 });
+          setRateDirections({});
+          setFiatMetalTickerData([FALLBACK_MESSAGE]);
+          setCryptoTickerData([FALLBACK_MESSAGE]);
           return;
         }
 
@@ -782,7 +920,7 @@ export default function HomeScreen() {
 
         let dailyOpenRates: Record<string, number> = {};
         try {
-          const rawDaily = await AsyncStorage.getItem('@budget_tracker_daily_open_rates');
+          const rawDaily = await AsyncStorage.getItem('@budget_tracker_daily_open_rates_v4');
           if (rawDaily) {
             const parsed = JSON.parse(rawDaily);
             if (parsed?.date === todayKey && parsed?.openRates && typeof parsed.openRates === 'object') {
@@ -824,13 +962,16 @@ export default function HomeScreen() {
         setRateDirections(nextDirections);
         buildTickers(fetchedRates, nextDirections);
 
-        AsyncStorage.multiSet([
-          ['@budget_tracker_cached_rates', JSON.stringify(fetchedRates)],
-          ['@budget_tracker_rate_directions', JSON.stringify(nextDirections)],
-          ['@budget_tracker_daily_open_rates', JSON.stringify({ date: todayKey, openRates: dailyOpenRates })],
-        ]).catch(() => {});
+        AsyncStorage.setItem(
+          '@budget_tracker_daily_open_rates_v4',
+          JSON.stringify({ date: todayKey, openRates: dailyOpenRates })
+        ).catch(() => {});
       } catch (error) {
         console.error('Error fetching rates:', error);
+        setRates({ TRY: 1 });
+        setRateDirections({});
+        setFiatMetalTickerData([FALLBACK_MESSAGE]);
+        setCryptoTickerData([FALLBACK_MESSAGE]);
       }
     };
 
@@ -1353,21 +1494,38 @@ export default function HomeScreen() {
         />
       )}
 
-      {/* Live Market Tickers */}
+      {/* Live Market Tickers (Wallet: Markets & Crypto | Investments: Funds & Stocks) */}
       <View style={styles.tickerStack}>
-        {fiatMetalTickerData.length > 0 && (
-          <Ticker
-            key={`fiat-${fiatMetalTickerData.length}`}
-            data={fiatMetalTickerData}
-            badgeLabel={t('marketTicker')}
-          />
-        )}
-        {cryptoTickerData.length > 0 && (
-          <Ticker
-            key={`crypto-${cryptoTickerData.length}`}
-            data={cryptoTickerData}
-            badgeLabel={t('cryptoTicker')}
-          />
+        {activeView === 'investments' ? (
+          <>
+            <Ticker
+              key="investments-funds-ticker"
+              data={fundsTickerData.length > 0 ? fundsTickerData : [t('marketDataFallback')]}
+              badgeLabel={t('fundsTicker')}
+              isMarketClosed={!isFundTradingSession()}
+            />
+            <Ticker
+              key="investments-stocks-ticker"
+              data={stocksTickerData.length > 0 ? stocksTickerData : [t('marketDataFallback')]}
+              badgeLabel={t('stocksTicker')}
+              isMarketClosed={!isBistMarketOpen() && !isUsMarketOpen()}
+            />
+          </>
+        ) : (
+          <>
+            <Ticker
+              key="wallet-fiat-ticker"
+              data={fiatMetalTickerData.length > 0 ? fiatMetalTickerData : [t('marketDataFallback')]}
+              badgeLabel={t('marketTicker')}
+              isMarketClosed={!isForexMetalMarketOpen()}
+            />
+            <Ticker
+              key="wallet-crypto-ticker"
+              data={cryptoTickerData.length > 0 ? cryptoTickerData : [t('marketDataFallback')]}
+              badgeLabel={t('cryptoTicker')}
+              isMarketClosed={false}
+            />
+          </>
         )}
       </View>
 

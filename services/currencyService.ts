@@ -1,4 +1,10 @@
 import { Platform } from 'react-native';
+import { getStockAndFundRates } from './stockFundService';
+import {
+  isForexMetalMarketOpen,
+  loadClosingRatesFromStorage,
+  saveClosingRatesToStorage,
+} from './marketHoursService';
 
 export interface ExchangeRates {
   [key: string]: number;
@@ -180,33 +186,35 @@ const getCryptoRatesRaw = async (): Promise<RawCryptoResult> => {
   const usdRates: ExchangeRates = {};
   const usdOpenRates: ExchangeRates = {};
 
-  // 1. Primary: BtcTurk Public Ticker API (Fast local TR response ~25ms, no BTK/SPK TLS block, direct TRY & daily open price)
-  try {
-    const response = await fetch('https://api.btcturk.com/api/v2/ticker');
-    if (response.ok) {
-      const json = await response.json();
-      const list = Array.isArray(json?.data) ? json.data : [];
-      for (const ticker of list) {
-        const pair = ticker.pairNormalized || ticker.pair;
-        const lastPrice = Number(ticker.last);
-        const openPrice = Number(ticker.open);
-        if ((pair === 'BTC_TRY' || pair === 'BTCTRY') && lastPrice > 0) {
-          tryRates.BTC = lastPrice;
-          if (openPrice > 0) tryOpenRates.BTC = openPrice;
-        } else if ((pair === 'ETH_TRY' || pair === 'ETHTRY') && lastPrice > 0) {
-          tryRates.ETH = lastPrice;
-          if (openPrice > 0) tryOpenRates.ETH = openPrice;
-        } else if ((pair === 'XRP_TRY' || pair === 'XRPTRY') && lastPrice > 0) {
-          tryRates.XRP = lastPrice;
-          if (openPrice > 0) tryOpenRates.XRP = openPrice;
+  // 1. Primary (Mobile Only - skip on Web to avoid browser CORS error): BtcTurk Public Ticker API
+  if (Platform.OS !== 'web') {
+    try {
+      const response = await fetch('https://api.btcturk.com/api/v2/ticker');
+      if (response.ok) {
+        const json = await response.json();
+        const list = Array.isArray(json?.data) ? json.data : [];
+        for (const ticker of list) {
+          const pair = ticker.pairNormalized || ticker.pair;
+          const lastPrice = Number(ticker.last);
+          const openPrice = Number(ticker.open);
+          if ((pair === 'BTC_TRY' || pair === 'BTCTRY') && lastPrice > 0) {
+            tryRates.BTC = lastPrice;
+            if (openPrice > 0) tryOpenRates.BTC = openPrice;
+          } else if ((pair === 'ETH_TRY' || pair === 'ETHTRY') && lastPrice > 0) {
+            tryRates.ETH = lastPrice;
+            if (openPrice > 0) tryOpenRates.ETH = openPrice;
+          } else if ((pair === 'XRP_TRY' || pair === 'XRPTRY') && lastPrice > 0) {
+            tryRates.XRP = lastPrice;
+            if (openPrice > 0) tryOpenRates.XRP = openPrice;
+          }
+        }
+        if (tryRates.BTC && tryRates.ETH && tryRates.XRP) {
+          return { tryRates, tryOpenRates, usdRates, usdOpenRates };
         }
       }
-      if (tryRates.BTC && tryRates.ETH && tryRates.XRP) {
-        return { tryRates, tryOpenRates, usdRates, usdOpenRates };
-      }
+    } catch {
+      // Silent fallback to CoinGecko if BtcTurk is unreachable
     }
-  } catch {
-    // Silent fallback to CoinGecko if BtcTurk is unreachable
   }
 
   // 2. Secondary: CoinGecko with 24hr change
@@ -283,17 +291,28 @@ export const getExchangeRates = async (forceRefresh = false): Promise<ExchangeRa
     return cachedRates;
   }
 
-  const combinedRates: ExchangeRates = { TRY: 1 };
-  const combinedOpenRates: ExchangeRates = { TRY: 1 };
+  // Load closing rates from storage if memory cache is empty (e.g. app restart while markets closed)
+  if (!cachedRates) {
+    const stored = await loadClosingRatesFromStorage();
+    if (stored && Object.keys(stored.rates).length > 0) {
+      cachedRates = { ...stored.rates };
+      cachedOpenRates = { ...stored.openRates };
+    }
+  }
 
-  // Fetch Fiat, Metal, and Crypto 100% in parallel to minimize latency
+  const combinedRates: ExchangeRates = { TRY: 1, ...(cachedRates || {}) };
+  const combinedOpenRates: ExchangeRates = { TRY: 1, ...(cachedOpenRates || {}) };
+
+  const forexMetalOpen = isForexMetalMarketOpen();
+
+  // If Forex & Metals markets are OPEN, fetch live; if CLOSED (weekend), preserve closing rates
   const [fiatSettled, metalSettled, cryptoSettled] = await Promise.allSettled([
-    getFiatRatesRaw(),
-    getMetalRatesRaw(),
-    getCryptoRatesRaw(),
+    forexMetalOpen || !combinedRates.USD ? getFiatRatesRaw() : Promise.resolve<RawFiatResult | null>(null),
+    forexMetalOpen || !combinedRates.XAU_GRAM ? getMetalRatesRaw() : Promise.resolve<RawMetalResult | null>(null),
+    getCryptoRatesRaw(), // Crypto is always 24/7
   ]);
 
-  if (fiatSettled.status === 'fulfilled') {
+  if (fiatSettled.status === 'fulfilled' && fiatSettled.value) {
     Object.assign(combinedRates, fiatSettled.value.rates);
     Object.assign(combinedOpenRates, fiatSettled.value.openRates);
   }
@@ -301,7 +320,7 @@ export const getExchangeRates = async (forceRefresh = false): Promise<ExchangeRa
   const usdToTry = combinedRates.USD;
   const openUsdToTry = combinedOpenRates.USD || usdToTry;
 
-  if (metalSettled.status === 'fulfilled' && usdToTry) {
+  if (metalSettled.status === 'fulfilled' && metalSettled.value && usdToTry) {
     const { xauUsd, xagUsd, xauOpenUsd, xagOpenUsd } = metalSettled.value;
     if (xauUsd) {
       combinedRates.XAU_GRAM = Number(((xauUsd / OUNCE_TO_GRAM) * usdToTry).toFixed(2));
@@ -332,14 +351,29 @@ export const getExchangeRates = async (forceRefresh = false): Promise<ExchangeRa
     }
   }
 
+  const isOnline = Object.keys(combinedRates).length > 1;
+
+  // Fetch Stock & TEFAS Fund rates using the resolved USD/TRY rate
+  try {
+    const stockFund = await getStockAndFundRates(usdToTry || 34.5, isOnline);
+    Object.assign(combinedRates, stockFund.rates);
+    Object.assign(combinedOpenRates, stockFund.openRates);
+  } catch (err) {
+    console.warn('Error fetching stock/fund rates:', err);
+  }
+
   if (Object.keys(combinedRates).length <= 1) {
-    console.error('Error fetching exchange rates: All API calls failed.');
-    return cachedRates;
+    cachedRates = null;
+    cachedOpenRates = null;
+    return null;
   }
 
   cachedRates = combinedRates;
   cachedOpenRates = combinedOpenRates;
   lastCacheTime = now;
+
+  // Save current rates so on next app open / market closure we have exact closing prices
+  saveClosingRatesToStorage(combinedRates, combinedOpenRates).catch(() => {});
 
   return combinedRates;
 };
