@@ -106,6 +106,43 @@ const formatBankLabel = (bankName: string, lang: 'tr' | 'en') => {
     .replace(/ğ/g, 'g');
 };
 
+const getNextInstallmentDateLabel = (item: Installment): string => {
+  const dueDay = Math.min(31, Math.max(1, Number(item.dueDay) || 1));
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+  const currentDay = now.getDate();
+
+  let lastChargedDate: Date | null = null;
+  if (item.lastCharged) {
+    if (typeof item.lastCharged.toDate === 'function') {
+      lastChargedDate = item.lastCharged.toDate();
+    } else if (item.lastCharged instanceof Date) {
+      lastChargedDate = item.lastCharged;
+    } else if (typeof item.lastCharged === 'string' || typeof item.lastCharged === 'number') {
+      const parsed = new Date(item.lastCharged);
+      if (!isNaN(parsed.getTime())) lastChargedDate = parsed;
+    }
+  }
+
+  const chargedThisMonth =
+    lastChargedDate != null &&
+    lastChargedDate.getFullYear() === currentYear &&
+    lastChargedDate.getMonth() === currentMonth;
+
+  const isNextMonth = chargedThisMonth || currentDay > dueDay;
+  const targetMonthDate = new Date(currentYear, currentMonth + (isNextMonth ? 1 : 0), 1);
+  const targetYear = targetMonthDate.getFullYear();
+  const targetMonth = targetMonthDate.getMonth();
+  const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const actualDay = Math.min(dueDay, daysInTargetMonth);
+
+  const dd = String(actualDay).padStart(2, '0');
+  const mm = String(targetMonth + 1).padStart(2, '0');
+
+  return `${dd}/${mm}`;
+};
+
 export default function CardsScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -544,37 +581,41 @@ export default function CardsScreen() {
 
             return (
               <View key={item.id} style={[styles.installmentCard, item.completed && styles.installmentCardCompleted]}>
-                {/* Header row: Bank & Status */}
+                {/* Header row: Bank & Due Day / Completed Status */}
                 <View style={styles.cardHeaderRow}>
                   <View style={styles.bankPill}>
-                    <View style={{ marginRight: 6 }}>
+                    <View style={styles.pillIconBoxLeft}>
                       <BankBrandBadge
                         bankName={item.bank}
-                        size={19}
+                        size={18}
                         iconSize={11}
                         language={language}
                       />
                     </View>
-                    <ThemedText style={styles.bankPillText}>{item.bank ? formatBankLabel(item.bank, language) : (language === 'tr' ? 'Banka' : 'Bank')}</ThemedText>
+                    <ThemedText style={styles.bankPillText} numberOfLines={1}>
+                      {item.bank ? formatBankLabel(item.bank, language) : (language === 'tr' ? 'Banka' : 'Bank')}
+                    </ThemedText>
                   </View>
 
-                  <View style={styles.headerRightBadges}>
-                    <View style={styles.dueDayPill}>
-                      <Ionicons name="calendar-outline" size={12} color={colors.textSecondary} style={{ marginRight: 4 }} />
-                      <ThemedText style={styles.dueDayPillText}>{t('dueDayPrefix')} {item.dueDay}{t('dueDaySuffix')}</ThemedText>
+                  {item.completed ? (
+                    <View style={styles.completedBadge}>
+                      <Ionicons name="checkmark-done" size={14} color="#10B981" style={{ marginRight: 5 }} />
+                      <ThemedText style={styles.completedBadgeText}>{t('completedBadge')}</ThemedText>
                     </View>
-
-                    {item.completed ? (
-                      <View style={styles.completedBadge}>
-                        <Ionicons name="checkmark-done" size={12} color="#10B981" style={{ marginRight: 4 }} />
-                        <ThemedText style={styles.completedBadgeText}>{t('completedBadge')}</ThemedText>
+                  ) : (
+                    <View style={styles.dueDayPill}>
+                      <ThemedText style={styles.dueDayPillText} numberOfLines={1}>
+                        {getNextInstallmentDateLabel(item)}
+                      </ThemedText>
+                      <View style={styles.pillIconBoxRight}>
+                        <Ionicons
+                          name="calendar-outline"
+                          size={14}
+                          color={colors.textSecondary}
+                        />
                       </View>
-                    ) : (
-                      <View style={styles.activeBadge}>
-                        <ThemedText style={styles.activeBadgeText}>{remaining} {t('remainingInstallmentLabel')}</ThemedText>
-                      </View>
-                    )}
-                  </View>
+                    </View>
+                  )}
                 </View>
 
                 {/* Title & Monthly Amount Row */}
@@ -613,7 +654,9 @@ export default function CardsScreen() {
                   </View>
                   <View style={styles.progressTextRow}>
                     <ThemedText style={styles.progressText}>
-                      {paid} / {total} {t('installmentOf')} ({progressPercent}%)
+                      {item.completed
+                        ? `${paid} / ${total} ${t('installmentOf')} (${progressPercent}%)`
+                        : `${paid} / ${total} ${t('installmentOf')} (${remaining} ${language === 'tr' ? 'kaldı' : 'left'} • %${progressPercent})`}
                     </ThemedText>
                     <ThemedText style={styles.remainingDebtText}>
                       {language === 'tr' ? 'Kalan:' : 'Remaining:'} {itemCurrency.symbol}
@@ -1593,15 +1636,37 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
     bankPill: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
       backgroundColor: colors.tintSoft,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 8,
+      paddingHorizontal: 10,
+      height: 30,
+      borderRadius: 9,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(57, 255, 20, 0.25)' : 'rgba(5, 150, 105, 0.22)',
+      flexShrink: 1,
+      marginRight: 8,
+    },
+    pillIconBoxLeft: {
+      width: 18,
+      height: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 6,
+    },
+    pillIconBoxRight: {
+      width: 18,
+      height: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 6,
     },
     bankPillText: {
-      fontSize: 11,
+      fontSize: 12,
+      lineHeight: 16,
       fontWeight: '800',
       color: colors.tint,
+      includeFontPadding: false,
+      flexShrink: 1,
     },
     headerRightBadges: {
       flexDirection: 'row',
@@ -1611,30 +1676,40 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
     dueDayPill: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
       backgroundColor: colors.cardSecondary,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 8,
+      paddingHorizontal: 10,
+      height: 30,
+      borderRadius: 9,
       borderWidth: 1,
       borderColor: colors.border,
+      flexShrink: 0,
     },
     dueDayPillText: {
-      fontSize: 11,
-      fontWeight: '600',
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '800',
       color: colors.textSecondary,
+      includeFontPadding: false,
     },
     completedBadge: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
       backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : '#E6F7F0',
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 8,
+      paddingHorizontal: 10,
+      height: 30,
+      borderRadius: 9,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : 'rgba(16, 185, 129, 0.25)',
+      flexShrink: 0,
     },
     completedBadgeText: {
-      fontSize: 11,
+      fontSize: 12,
+      lineHeight: 16,
       fontWeight: '800',
       color: '#10B981',
+      includeFontPadding: false,
     },
     activeBadge: {
       backgroundColor: colors.cardSecondary,

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Timestamp } from 'firebase/firestore';
-import { ComponentProps, useEffect, useMemo, useState } from 'react';
+import { ComponentProps, ComponentRef, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -192,6 +192,14 @@ export default function RecurringScreen() {
   const [selectedPreset, setSelectedPreset] = useState<string | null>('Netflix');
   const [subToDelete, setSubToDelete] = useState<Subscription | null>(null);
   const [subToPay, setSubToPay] = useState<Subscription | null>(null);
+  const presetScrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const [presetScrollX, setPresetScrollX] = useState(0);
+  const [presetContainerW, setPresetContainerW] = useState(0);
+  const [presetContentW, setPresetContentW] = useState(0);
+
+  const canScrollPresetLeft = presetScrollX > 8;
+  const canScrollPresetRight =
+    presetContentW === 0 || presetScrollX + presetContainerW < presetContentW - 8;
 
   // --- Recurring Incomes State ---
   const [recurringIncomes, setRecurringIncomes] = useState<RecurringIncome[]>([]);
@@ -675,6 +683,7 @@ export default function RecurringScreen() {
               onPress={() => {
                 Haptics.selectionAsync().catch(() => { });
                 setBankModalVisible(false);
+                setPresetScrollX(0);
                 setIsSubModalVisible(true);
               }}
               style={styles.openModalCtaBtn}>
@@ -1028,44 +1037,89 @@ export default function RecurringScreen() {
                 <ThemedText style={styles.inputLabel}>
                   {language === 'tr' ? 'HIZLI SERVİS SEÇİN' : 'QUICK SERVICE SELECTION'}
                 </ThemedText>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.presetScrollContent}
-                  style={{ marginBottom: vs(8) }}>
-                  {PRESET_SUBSCRIPTIONS.map((preset) => {
-                    const isSelected = selectedPreset === preset.name;
-                    return (
-                      <TouchableOpacity
-                        key={preset.name}
-                        activeOpacity={0.7}
-                        onPress={() => handleSelectPreset(preset)}
-                        style={[
-                          styles.presetChip,
-                          isSelected && {
-                            borderColor: preset.color,
-                            backgroundColor: `${preset.color}22`,
-                          },
-                        ]}>
-                        <View style={{ marginRight: 6 }}>
-                          <SubscriptionBrandIcon
-                            name={preset.name}
-                            fallbackIcon={preset.icon}
-                            fallbackColor={preset.color}
-                            size={16}
-                          />
-                        </View>
-                        <ThemedText
+                <View
+                  style={styles.presetCarouselWrap}
+                  onLayout={(e) => setPresetContainerW(e.nativeEvent.layout.width)}>
+                  <ScrollView
+                    ref={presetScrollRef}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    scrollEventThrottle={16}
+                    onContentSizeChange={(w) => setPresetContentW(w)}
+                    onScroll={(e) => setPresetScrollX(e.nativeEvent.contentOffset.x)}
+                    contentContainerStyle={styles.presetScrollContent}>
+                    {PRESET_SUBSCRIPTIONS.map((preset) => {
+                      const isSelected = selectedPreset === preset.name;
+                      return (
+                        <TouchableOpacity
+                          key={preset.name}
+                          activeOpacity={0.7}
+                          onPress={() => handleSelectPreset(preset)}
                           style={[
-                            styles.presetChipText,
-                            isSelected && { color: colors.text, fontWeight: '700' },
+                            styles.presetChip,
+                            isSelected && {
+                              borderColor: preset.color,
+                              backgroundColor: `${preset.color}22`,
+                            },
                           ]}>
-                          {language === 'tr' ? preset.name : (preset.nameEn || preset.name)}
-                        </ThemedText>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
+                          <View style={{ marginRight: 6 }}>
+                            <SubscriptionBrandIcon
+                              name={preset.name}
+                              fallbackIcon={preset.icon}
+                              fallbackColor={preset.color}
+                              size={16}
+                            />
+                          </View>
+                          <ThemedText
+                            style={[
+                              styles.presetChipText,
+                              isSelected && { color: colors.text, fontWeight: '700' },
+                            ]}>
+                            {language === 'tr' ? preset.name : (preset.nameEn || preset.name)}
+                          </ThemedText>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+
+                  {canScrollPresetLeft && (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => {});
+                        presetScrollRef.current?.scrollTo({
+                          x: Math.max(0, presetScrollX - 180),
+                          animated: true,
+                        });
+                      }}
+                      style={[styles.presetEdgeArrow, styles.presetEdgeArrowLeft]}>
+                      <Ionicons
+                        name="chevron-back"
+                        size={15}
+                        color={isDark ? 'rgba(255, 255, 255, 0.72)' : 'rgba(15, 23, 42, 0.65)'}
+                      />
+                    </TouchableOpacity>
+                  )}
+
+                  {canScrollPresetRight && (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => {});
+                        presetScrollRef.current?.scrollTo({
+                          x: presetScrollX + 180,
+                          animated: true,
+                        });
+                      }}
+                      style={[styles.presetEdgeArrow, styles.presetEdgeArrowRight]}>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={15}
+                        color={isDark ? 'rgba(255, 255, 255, 0.72)' : 'rgba(15, 23, 42, 0.65)'}
+                      />
+                    </TouchableOpacity>
+                  )}
+                </View>
 
                 {/* Service Name Input */}
                 <ThemedText style={styles.inputLabel}>{t('subName').toUpperCase()}</ThemedText>
@@ -2416,9 +2470,44 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
     },
 
     // Subscriptions & Action Modals Styles
+    presetCarouselWrap: {
+      position: 'relative',
+      justifyContent: 'center',
+      marginBottom: vs(8),
+    },
     presetScrollContent: {
       gap: 8,
       paddingVertical: 2,
+      paddingRight: hs(28),
+    },
+    presetEdgeArrow: {
+      position: 'absolute',
+      top: 2,
+      bottom: 2,
+      width: hs(26),
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(20, 21, 26, 0.86)' : 'rgba(255, 255, 255, 0.88)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+      borderRadius: 10,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: isDark ? 0.45 : 0.1,
+          shadowRadius: 4,
+        },
+        android: {
+          elevation: 3,
+        },
+      }),
+    },
+    presetEdgeArrowLeft: {
+      left: 0,
+    },
+    presetEdgeArrowRight: {
+      right: 0,
     },
     presetChip: {
       flexDirection: 'row',

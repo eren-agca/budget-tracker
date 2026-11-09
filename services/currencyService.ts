@@ -180,35 +180,33 @@ const getCryptoRatesRaw = async (): Promise<RawCryptoResult> => {
   const usdRates: ExchangeRates = {};
   const usdOpenRates: ExchangeRates = {};
 
-  // 1. Primary: Binance 24hr Ticker API (Ultra-fast ~60ms, high rate limit, direct TRY & openPrice)
+  // 1. Primary: BtcTurk Public Ticker API (Fast local TR response ~25ms, no BTK/SPK TLS block, direct TRY & daily open price)
   try {
-    const binanceUrl =
-      'https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22BTCTRY%22,%22ETHTRY%22,%22XRPTRY%22%5D';
-    const response = await fetch(binanceUrl);
+    const response = await fetch('https://api.btcturk.com/api/v2/ticker');
     if (response.ok) {
-      const data = await response.json();
-      if (Array.isArray(data)) {
-        for (const ticker of data) {
-          const lastPrice = parseFloat(ticker.lastPrice);
-          const openPrice = parseFloat(ticker.openPrice);
-          if (ticker.symbol === 'BTCTRY' && lastPrice > 0) {
-            tryRates.BTC = lastPrice;
-            if (openPrice > 0) tryOpenRates.BTC = openPrice;
-          } else if (ticker.symbol === 'ETHTRY' && lastPrice > 0) {
-            tryRates.ETH = lastPrice;
-            if (openPrice > 0) tryOpenRates.ETH = openPrice;
-          } else if (ticker.symbol === 'XRPTRY' && lastPrice > 0) {
-            tryRates.XRP = lastPrice;
-            if (openPrice > 0) tryOpenRates.XRP = openPrice;
-          }
+      const json = await response.json();
+      const list = Array.isArray(json?.data) ? json.data : [];
+      for (const ticker of list) {
+        const pair = ticker.pairNormalized || ticker.pair;
+        const lastPrice = Number(ticker.last);
+        const openPrice = Number(ticker.open);
+        if ((pair === 'BTC_TRY' || pair === 'BTCTRY') && lastPrice > 0) {
+          tryRates.BTC = lastPrice;
+          if (openPrice > 0) tryOpenRates.BTC = openPrice;
+        } else if ((pair === 'ETH_TRY' || pair === 'ETHTRY') && lastPrice > 0) {
+          tryRates.ETH = lastPrice;
+          if (openPrice > 0) tryOpenRates.ETH = openPrice;
+        } else if ((pair === 'XRP_TRY' || pair === 'XRPTRY') && lastPrice > 0) {
+          tryRates.XRP = lastPrice;
+          if (openPrice > 0) tryOpenRates.XRP = openPrice;
         }
       }
       if (tryRates.BTC && tryRates.ETH && tryRates.XRP) {
         return { tryRates, tryOpenRates, usdRates, usdOpenRates };
       }
     }
-  } catch (error) {
-    console.warn('Primary Crypto API (Binance) failed, trying CoinGecko fallback:', error);
+  } catch {
+    // Silent fallback to CoinGecko if BtcTurk is unreachable
   }
 
   // 2. Secondary: CoinGecko with 24hr change
