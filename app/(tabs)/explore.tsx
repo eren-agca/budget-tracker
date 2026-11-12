@@ -23,6 +23,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useSettings } from '@/context/SettingsContext';
 import { analyzeTransactionsWithGemini } from '@/services/geminiService';
 import { expenseCategories, getCategoryLabel } from '@/constants/Categories';
+import { formatGroupedNumber } from '@/utils/numberFormat';
 
 interface Transaction {
   id: string;
@@ -397,7 +398,7 @@ export default function ExploreScreen() {
                   : [styles.totalIncomeText, { color: colors.income }]
               }>
               {displayCurrency.symbol}
-              {totalSum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatGroupedNumber(totalSum, language)}
             </ThemedText>
           </View>
 
@@ -489,10 +490,7 @@ export default function ExploreScreen() {
                         numberOfLines={1}
                         adjustsFontSizeToFit>
                         {displayCurrency.symbol}
-                        {activeSliceItem.amount.toLocaleString('en-US', {
-                          minimumFractionDigits: 0,
-                          maximumFractionDigits: 0,
-                        })}
+                        {formatGroupedNumber(activeSliceItem.amount, language, 0, 0)}
                       </ThemedText>
                       <View
                         style={[
@@ -504,7 +502,7 @@ export default function ExploreScreen() {
                             styles.donutCenterPctText,
                             { color: activeSliceItem.color },
                           ]}>
-                          {`${activeSliceItem.percentage.toFixed(1)}%`}
+                          {`${activeSliceItem.percentage.toFixed(1).replace('.', ',')}%`}
                         </ThemedText>
                       </View>
                     </>
@@ -526,10 +524,7 @@ export default function ExploreScreen() {
                         numberOfLines={1}
                         adjustsFontSizeToFit>
                         {displayCurrency.symbol}
-                        {totalSum.toLocaleString('en-US', {
-                          minimumFractionDigits: 0,
-                          maximumFractionDigits: 0,
-                        })}
+                        {formatGroupedNumber(totalSum, language, 0, 0)}
                       </ThemedText>
                       <ThemedText
                         style={[styles.donutCenterHint, { color: colors.textMuted }]}
@@ -590,7 +585,7 @@ export default function ExploreScreen() {
                           styles.legendChipPct,
                           { color: isSelected ? item.color : colors.textSecondary },
                         ]}>
-                        {`${item.percentage.toFixed(1)}%`}
+                        {`${item.percentage.toFixed(1).replace('.', ',')}%`}
                       </ThemedText>
                     </TouchableOpacity>
                   );
@@ -639,7 +634,7 @@ export default function ExploreScreen() {
                       </ThemedText>
                       <ThemedText style={[styles.breakdownAmount, { color: colors.text }]}>
                         {displayCurrency.symbol}
-                        {item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {formatGroupedNumber(item.amount, language)}
                       </ThemedText>
                     </View>
 
@@ -654,7 +649,7 @@ export default function ExploreScreen() {
                     </View>
 
                     <ThemedText style={[styles.breakdownPercentText, { color: colors.textSecondary }]}>
-                      {item.percentage.toFixed(1)}%
+                      {item.percentage.toFixed(1).replace('.', ',')}%
                     </ThemedText>
                   </View>
                 </TouchableOpacity>

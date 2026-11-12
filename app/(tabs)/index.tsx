@@ -53,6 +53,12 @@ import {
   subscribeUserCollection,
   updateUserDoc,
 } from '@/services/userDataService';
+import {
+  formatAssetUnitRate,
+  formatEditableNumberInput,
+  formatGroupedNumber,
+  parseLocaleNumber,
+} from '@/utils/numberFormat';
 
 interface Transaction {
   id: string;
@@ -152,7 +158,11 @@ const TransactionListItem = React.memo(
             <View style={[styles.assetBadge, { backgroundColor: colors.tintSoft }]}>
               <Ionicons name="sparkles" size={11} color={colors.tint} />
               <ThemedText style={[styles.assetBadgeText, { color: colors.tint }]}>
-                {`${item.assetQuantity} @ ${item.purchaseRate.toFixed(2)} ${itemCurrency.symbol}`}
+                {`${formatGroupedNumber(item.assetQuantity, language, 0, 4)} @ ${formatAssetUnitRate(
+                  item.purchaseRate,
+                  language,
+                  item.purchaseRate < 10 || Boolean(item.assetCode?.startsWith('FUND:'))
+                )} ${itemCurrency.symbol}`}
               </ThemedText>
             </View>
           )}
@@ -165,7 +175,7 @@ const TransactionListItem = React.memo(
                 ? [styles.incomeAmount, { color: incomeAmountColor }]
                 : [styles.expenseAmount, { color: expenseAmountColor }]
             }>
-            {isIncome ? '+' : '-'}{itemCurrency.symbol}{Math.abs(item.amount).toFixed(2)}
+            {isIncome ? '+' : '-'}{itemCurrency.symbol}{formatGroupedNumber(Math.abs(item.amount), language)}
           </ThemedText>
           <TouchableOpacity
             activeOpacity={0.6}
@@ -252,21 +262,13 @@ const InvestmentListItem = React.memo(
 
     const currentUnitInItemCurr = currentUnitInTRY / txCurrRate;
     const isHighPrecision =
-      Boolean(resolvedCode?.startsWith('FUND:')) || buyUnitInItemCurr < 10 || currentUnitInItemCurr < 10;
-    const formatUnitRate = (val: number) =>
-      isHighPrecision ? Number(val.toFixed(4)).toString() : val.toFixed(2);
-    const currentValueDisplay = (currentValueInTRY / displayRate).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    const costValueDisplay = (costInTRY / displayRate).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    const pnlDisplay = (Math.abs(pnlInTRY) / displayRate).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+      (Boolean(resolvedCode?.startsWith('FUND:')) && (buyUnitInItemCurr < 50 || currentUnitInItemCurr < 50)) ||
+      buyUnitInItemCurr < 10 ||
+      currentUnitInItemCurr < 10;
+    const formatUnitRate = (val: number) => formatAssetUnitRate(val, language, isHighPrecision);
+    const currentValueDisplay = formatGroupedNumber(currentValueInTRY / displayRate, language);
+    const costValueDisplay = formatGroupedNumber(costInTRY / displayRate, language);
+    const pnlDisplay = formatGroupedNumber(Math.abs(pnlInTRY) / displayRate, language);
     const pnlPrefixLabel =
       pnlInTRY > 0.005
         ? language === 'tr'
@@ -288,9 +290,9 @@ const InvestmentListItem = React.memo(
     );
 
     return (
-      <View style={[styles.transactionCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={[styles.transactionCard, styles.investmentCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
         {isStockOrFund && resolvedCode ? (
-          <View style={{ marginRight: 12 }}>
+          <View style={{ marginRight: 12, marginTop: 2 }}>
             <StockBrandBadge symbol={resolvedCode} size={42} iconSize={20} />
           </View>
         ) : (
@@ -299,6 +301,7 @@ const InvestmentListItem = React.memo(
               styles.categoryIconCircle,
               {
                 backgroundColor: isProfit ? colors.tintSoft : colors.expenseSoft,
+                marginTop: 2,
               },
             ]}>
             <Ionicons name={iconName as any} size={20} color={isProfit ? colors.tint : colors.expense} />
@@ -306,42 +309,26 @@ const InvestmentListItem = React.memo(
         )}
 
         <View style={styles.transactionMainInfo}>
-          <View style={styles.investmentTitleRow}>
-            <ThemedText style={[styles.transactionTitle, { color: colors.text }]} numberOfLines={1}>
-              {title}
-            </ThemedText>
-            <View
-              style={[
-                styles.rateSourceBadge,
-                {
-                  backgroundColor: isLive ? colors.tintSoft : colors.warningSoft,
-                },
-              ]}>
-              <ThemedText
-                style={[
-                  styles.rateSourceBadgeText,
-                  { color: isLive ? colors.tint : colors.warning },
-                ]}>
-                {isLive ? t('liveRateBadge') : t('manualRateBadge')}
-              </ThemedText>
-            </View>
-          </View>
+          {/* 1. Varlık Adı */}
+          <ThemedText style={[styles.transactionTitle, { color: colors.text }]} numberOfLines={1}>
+            {title}
+          </ThemedText>
 
+          {/* 2. Adet Sayısı */}
+          <ThemedText style={[styles.investmentQuantityText, { color: colors.textSecondary }]}>
+            {`${formatGroupedNumber(quantity, language)} ${language === 'tr' ? 'Adet' : 'Units'}`}
+          </ThemedText>
+
+          {/* 3. Alış Fiyatı -> Güncel Fiyat (Tek ve aynı satırda) */}
           <View style={styles.investmentRateMetaRow}>
-            <ThemedText style={[styles.transactionCategoryTag, { color: colors.textSecondary }]}>
-              {`${quantity} Adet • ${t('buyRateLabel')}: ${itemCurrency.symbol}${formatUnitRate(buyUnitInItemCurr)} → ${t('currentRateLabel')}: ${itemCurrency.symbol}${formatUnitRate(currentUnitInItemCurr)}`}
+            <ThemedText
+              style={[styles.investmentRateText, { color: colors.textSecondary }]}
+              numberOfLines={1}>
+              {`${t('buyRateLabel')}: ${itemCurrency.symbol}${formatUnitRate(buyUnitInItemCurr)} → ${t('currentRateLabel')}: ${itemCurrency.symbol}${formatUnitRate(currentUnitInItemCurr)}`}
             </ThemedText>
-            {liveDirection === 'up' && (
-              <Ionicons name="arrow-up" size={13} color={colors.tint} />
-            )}
-            {liveDirection === 'down' && (
-              <Ionicons name="arrow-down" size={13} color={colors.expense} />
-            )}
-            {liveDirection === 'flat' && (
-              <Ionicons name="remove" size={14} color={isDark ? '#8E8E93' : '#64748B'} />
-            )}
           </View>
 
+          {/* 4. Kâr / Zarar & Güncelleme (Ok sağda: kârda yeşil yukarı, zararda kırmızı aşağı) */}
           <View style={styles.investmentPnlRow}>
             <View
               style={[
@@ -350,11 +337,6 @@ const InvestmentListItem = React.memo(
                   backgroundColor: isProfit ? colors.incomeSoft : colors.expenseSoft,
                 },
               ]}>
-              <Ionicons
-                name={isProfit ? 'trending-up' : 'trending-down'}
-                size={12}
-                color={isProfit ? colors.income : colors.expense}
-              />
               <ThemedText
                 style={[
                   styles.pnlBadgeText,
@@ -362,8 +344,13 @@ const InvestmentListItem = React.memo(
                 ]}>
                 {isBalanceHidden
                   ? `${pnlPrefixLabel}${isProfit ? '+' : '-'}${displayCurrency.symbol}••••`
-                  : `${pnlPrefixLabel}${isProfit ? '+' : '-'}${displayCurrency.symbol}${pnlDisplay} (${isProfit ? '+' : ''}${pnlPct.toFixed(2)}%)`}
+                  : `${pnlPrefixLabel}${isProfit ? '+' : '-'}${displayCurrency.symbol}${pnlDisplay} (${isProfit ? '+' : ''}${formatGroupedNumber(pnlPct, language)}%)`}
               </ThemedText>
+              <Ionicons
+                name={isProfit ? 'arrow-up' : 'arrow-down'}
+                size={13}
+                color={isProfit ? colors.income : colors.expense}
+              />
             </View>
 
             {!isLive && (
@@ -371,7 +358,7 @@ const InvestmentListItem = React.memo(
                 activeOpacity={0.7}
                 onPress={() => {
                   Haptics.selectionAsync().catch(() => {});
-                  onEditPrice(item, Number(currentUnitInItemCurr.toFixed(2)));
+                  onEditPrice(item, Number(currentUnitInItemCurr.toFixed(isHighPrecision ? 4 : 2)));
                 }}
                 style={[
                   styles.updatePriceChip,
@@ -389,15 +376,17 @@ const InvestmentListItem = React.memo(
           </View>
         </View>
 
-        <View style={styles.transactionRightBlock}>
-          <ThemedText style={[styles.incomeAmount, { color: colors.text }]}>
-            {isBalanceHidden ? `${displayCurrency.symbol}•••••` : `${displayCurrency.symbol}${currentValueDisplay}`}
-          </ThemedText>
-          <ThemedText style={{ fontSize: 10.5, fontWeight: '600', color: colors.textMuted, marginTop: -2 }}>
-            {isBalanceHidden
-              ? `${t('costLabel')}: ••••`
-              : `${t('costLabel')}: ${displayCurrency.symbol}${costValueDisplay}`}
-          </ThemedText>
+        <View style={styles.investmentRightBlock}>
+          <View style={{ alignItems: 'flex-end', gap: 2 }}>
+            <ThemedText style={[styles.incomeAmount, { color: colors.text }]}>
+              {isBalanceHidden ? `${displayCurrency.symbol}•••••` : `${displayCurrency.symbol}${currentValueDisplay}`}
+            </ThemedText>
+            <ThemedText style={{ fontSize: 10.5, fontWeight: '600', color: colors.textMuted }}>
+              {isBalanceHidden
+                ? `${t('costLabel')}: ••••`
+                : `${t('costLabel')}: ${displayCurrency.symbol}${costValueDisplay}`}
+            </ThemedText>
+          </View>
           <TouchableOpacity
             activeOpacity={0.6}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -784,7 +773,7 @@ export default function HomeScreen() {
     if (pctValue !== null && isFinite(pctValue)) {
       const clamped = Math.max(-999, Math.min(999, pctValue));
       const sign = clamped >= 0 ? '+' : '';
-      formattedPct = `${sign}${clamped.toFixed(1)}%`;
+      formattedPct = `${sign}${clamped.toFixed(1).replace('.', ',')}%`;
     }
 
     return { chartPoints: pts, monthlyTrendPercent: formattedPct };
@@ -1289,14 +1278,19 @@ export default function HomeScreen() {
     return t('greetingEvening');
   }, [language, t]);
 
-  const handleEditInvestmentPrice = useCallback((item: Transaction, currentUnitRate: number) => {
-    setInvestmentToEditPrice(item);
-    setEditPriceInput(String(currentUnitRate));
-  }, []);
+  const handleEditInvestmentPrice = useCallback(
+    (item: Transaction, currentUnitRate: number) => {
+      setInvestmentToEditPrice(item);
+      const highPrecision =
+        currentUnitRate < 10 || Boolean(item.assetCode?.startsWith('FUND:'));
+      setEditPriceInput(formatAssetUnitRate(currentUnitRate, language, highPrecision));
+    },
+    [language]
+  );
 
   const handleSaveManualPrice = async () => {
     if (!investmentToEditPrice || !user) return;
-    const numeric = parseFloat(editPriceInput.replace(',', '.'));
+    const numeric = parseLocaleNumber(editPriceInput, language);
     if (isNaN(numeric) || numeric <= 0) {
       Toast.show({
         type: 'error',
@@ -1351,12 +1345,9 @@ export default function HomeScreen() {
 
   // Format currency value based on current exchange rate
   const formatAmount = (amountInTRY: number) => {
-    if (!rates) return '0.00';
+    if (!rates) return formatGroupedNumber(0, language);
     const rate = rates[displayCurrency.code] || 1;
-    return (amountInTRY / rate).toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    return formatGroupedNumber(amountInTRY / rate, language);
   };
 
   return (
@@ -1719,8 +1710,9 @@ export default function HomeScreen() {
                         ? `${portfolioSummary.totalPnLInTRY >= -0.005 ? '+' : '-'}${displayCurrency.symbol}••••`
                         : `${portfolioSummary.totalPnLInTRY >= -0.005 ? '+' : '-'}${displayCurrency.symbol}${formatAmount(
                             Math.abs(portfolioSummary.totalPnLInTRY)
-                          )} (${portfolioSummary.totalPnLInTRY >= -0.005 ? '+' : ''}${portfolioSummary.totalPnLPct.toFixed(
-                            2
+                          )} (${portfolioSummary.totalPnLInTRY >= -0.005 ? '+' : ''}${formatGroupedNumber(
+                            portfolioSummary.totalPnLPct,
+                            language
                           )}%)`}
                     </ThemedText>
                   </View>
@@ -2221,7 +2213,7 @@ export default function HomeScreen() {
               }>
               {transactionToDelete.amount > 0 ? '+' : '-'}
               {currencies.find((c) => c.code === transactionToDelete.currency)?.symbol || transactionToDelete.currency}
-              {Math.abs(transactionToDelete.amount).toFixed(2)}
+              {formatGroupedNumber(Math.abs(transactionToDelete.amount), language)}
             </ThemedText>
           </View>
         )}
@@ -2287,9 +2279,12 @@ export default function HomeScreen() {
             </ThemedText>
             <TextInput
               value={editPriceInput}
-              onChangeText={setEditPriceInput}
+              onChangeText={(txt) => {
+                const formatted = formatEditableNumberInput(txt, editPriceInput, 4, language);
+                if (formatted !== null) setEditPriceInput(formatted);
+              }}
               keyboardType="numeric"
-              placeholder="0.00"
+              placeholder="0,00"
               placeholderTextColor={colors.textMuted}
               style={[styles.priceInput, { color: colors.text }]}
               autoFocus={true}
@@ -3003,16 +2998,37 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
+  investmentCard: {
+    alignItems: 'flex-start',
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    minHeight: 114,
+  },
+  investmentRightBlock: {
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
+    paddingLeft: 6,
+  },
   investmentTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
+  investmentQuantityText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 3,
+  },
   investmentRateMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     marginTop: 3,
+  },
+  investmentRateText: {
+    fontSize: 11.5,
+    fontWeight: '500',
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' } : {}),
   },
   rateSourceBadge: {
     paddingHorizontal: 6,

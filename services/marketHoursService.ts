@@ -90,14 +90,14 @@ export function isForexMetalMarketOpen(): boolean {
 
 /**
  * TEFAS Investment Funds:
- * Unit prices (NAV) are officially announced once per business day (typically between 19:00 - 23:59).
- * During intra-day hours (00:00 - 18:30) and weekends, fund prices are static (they do not change).
+ * Trading & valuation window on banking business days is weekdays 09:00 - 18:15 TSİ.
+ * Closed overnight (18:15 - 09:00) and on weekends.
  */
 export function isFundTradingSession(): boolean {
   const { day, totalMinutes } = getTurkeyTime();
   const isWeekday = day >= 1 && day <= 5;
-  // Active new daily price publication window: 18:30 - 23:59 TSİ on weekdays
-  return isWeekday && totalMinutes >= 1110 && totalMinutes <= 1439;
+  // 09:00 (540m) to 18:15 (1095m) TSİ on weekdays
+  return isWeekday && totalMinutes >= 540 && totalMinutes <= 1095;
 }
 
 /**
@@ -173,10 +173,10 @@ export function getMarketStatusInfo(market: MarketType): MarketStatusInfo {
       return {
         isOpen,
         marketType: 'FUND',
-        labelTr: 'TEFAS Günlük Değer',
-        labelEn: 'TEFAS Daily Value',
-        badgeLabelTr: 'GÜNLÜK',
-        badgeLabelEn: 'DAILY',
+        labelTr: isOpen ? 'TEFAS Açık (Günlük Değer)' : 'TEFAS Kapalı (Kapanış)',
+        labelEn: isOpen ? 'TEFAS Open (Daily Value)' : 'TEFAS Closed (Close)',
+        badgeLabelTr: isOpen ? 'CANLI' : 'KAPANIŞ',
+        badgeLabelEn: isOpen ? 'LIVE' : 'CLOSE',
       };
     case 'CRYPTO':
       return {
@@ -205,11 +205,13 @@ let hasLoadedFromStorage = false;
 export async function loadClosingRatesFromStorage(): Promise<{
   rates: ExchangeRates;
   openRates: ExchangeRates;
+  updatedAt: number;
 } | null> {
   if (inMemoryClosingCache && Object.keys(inMemoryClosingCache.rates).length > 0) {
     return {
       rates: inMemoryClosingCache.rates,
       openRates: inMemoryClosingCache.openRates,
+      updatedAt: inMemoryClosingCache.updatedAt,
     };
   }
 
@@ -227,6 +229,7 @@ export async function loadClosingRatesFromStorage(): Promise<{
         return {
           rates: inMemoryClosingCache.rates,
           openRates: inMemoryClosingCache.openRates,
+          updatedAt: inMemoryClosingCache.updatedAt,
         };
       }
     }

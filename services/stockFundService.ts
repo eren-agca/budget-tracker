@@ -2,7 +2,6 @@ import { Platform } from 'react-native';
 import { ExchangeRates } from './currencyService';
 import {
   isMarketOpen,
-  isFundTradingSession,
   loadClosingRatesFromStorage,
   saveClosingRatesToStorage,
 } from './marketHoursService';
@@ -742,7 +741,7 @@ export async function getStockAndFundRates(
           memoryQuotesCache[c] = {
             priceInTRY: val,
             openPriceInTRY: stored.openRates[c] || val,
-            timestamp: now,
+            timestamp: stored.updatedAt || 0,
           };
         }
       }
@@ -771,13 +770,7 @@ export async function getStockAndFundRates(
       rates[code] = cached.priceInTRY;
       openRates[code] = cached.openPriceInTRY;
     } else if (code.startsWith('FUND:')) {
-      // If outside the daily fund announcement window (18:30-23:59 TSİ) and we already have a quote, keep it!
-      if (cached && cached.priceInTRY > 0 && !isFundTradingSession()) {
-        rates[code] = cached.priceInTRY;
-        openRates[code] = cached.openPriceInTRY;
-      } else {
-        staleFundCodes.push(code);
-      }
+      staleFundCodes.push(code);
     } else if (code.startsWith('BIST:') || code.startsWith('US:')) {
       staleStockCodes.push(code);
     }

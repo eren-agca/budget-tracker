@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Timestamp } from 'firebase/firestore';
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -11,6 +11,7 @@ import {
   StyleSheet,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
@@ -20,9 +21,20 @@ import { ThemedText } from '@/components/ThemedText';
 import { AnimatedPressable } from '@/components/AnimatedPressable';
 import { StockBrandBadge } from '@/components/BrandLogo';
 import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
-import { expenseCategories, incomeCategories, getCategoryLabel, isSavingsCategory } from '@/constants/Categories';
+import {
+  ExpenseCategory,
+  expenseCategories,
+  incomeCategories,
+  getCategoryLabel,
+  isSavingsCategory,
+} from '@/constants/Categories';
 import { INVESTMENT_PRESETS, getLiveAssetRateInTRY, getPresetLabel } from '@/constants/Investments';
 import { ExchangeRates, getExchangeRates } from '@/services/currencyService';
+import {
+  formatAssetUnitRate,
+  formatEditableNumberInput,
+  parseLocaleNumber,
+} from '@/utils/numberFormat';
 import {
   fetchSingleAssetQuote,
   POPULAR_BIST_STOCKS,
@@ -40,6 +52,7 @@ export default function AddTransactionScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const { colors, isDark, t, language } = useSettings();
   const styles = React.useMemo(() => createStyles(colors, isDark), [colors, isDark]);
 
@@ -58,6 +71,70 @@ export default function AddTransactionScreen() {
   const [type, setType] = useState<'expense' | 'income' | 'investment'>('expense');
   const [loading, setLoading] = useState(false);
 
+  // 2x4 horizontal grid layout for expense categories (both rows scroll together)
+  const CATEGORY_GAP = 10;
+  const [categoryWrapWidth, setCategoryWrapWidth] = useState(Math.max(windowWidth - 32, 280));
+  const [catScrollX, setCatScrollX] = useState(0);
+  const categoryScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
+
+  const categoryTileWidth = Math.floor(((categoryWrapWidth - 3 * CATEGORY_GAP) / 4) * 10) / 10;
+  const categoryTileHeight = Math.min(Math.max(categoryTileWidth, 72), 86);
+
+  const expenseCategoryColumns = useMemo(() => {
+    const cols: { top: ExpenseCategory; bottom?: ExpenseCategory }[] = [];
+    const pageSize = 8; // 4 columns x 2 rows per horizontal view
+    for (let p = 0; p < expenseCategories.length; p += pageSize) {
+      const chunk = expenseCategories.slice(p, p + pageSize);
+      const colCount = Math.min(4, chunk.length);
+      for (let c = 0; c < colCount; c++) {
+        cols.push({
+          top: chunk[c],
+          bottom: chunk[c + 4],
+        });
+      }
+    }
+    return cols;
+  }, []);
+
+  const categoryContentWidth =
+    expenseCategoryColumns.length * categoryTileWidth +
+    Math.max(0, expenseCategoryColumns.length - 1) * CATEGORY_GAP;
+  const categoryMaxScrollX = Math.max(0, categoryContentWidth - categoryWrapWidth);
+
+  const categoryScrollSteps = useMemo(() => {
+    if (categoryMaxScrollX <= 10) return [0];
+    const stepSize = 4 * (categoryTileWidth + CATEGORY_GAP);
+    const steps: number[] = [0];
+    let pos = stepSize;
+    while (pos < categoryMaxScrollX - 16) {
+      steps.push(pos);
+      pos += stepSize;
+    }
+    steps.push(categoryMaxScrollX);
+    return steps;
+  }, [categoryTileWidth, categoryMaxScrollX]);
+
+  const activeCategoryStep = useMemo(() => {
+    let closestIdx = 0;
+    let minDiff = Infinity;
+    categoryScrollSteps.forEach((stepPos, idx) => {
+      const diff = Math.abs(catScrollX - stepPos);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closestIdx = idx;
+      }
+    });
+    return closestIdx;
+  }, [catScrollX, categoryScrollSteps]);
+
+  const scrollCategoryToStep = (stepIndex: number) => {
+    const clamped = Math.max(0, Math.min(stepIndex, categoryScrollSteps.length - 1));
+    const targetX = categoryScrollSteps[clamped] ?? 0;
+    Haptics.selectionAsync().catch(() => {});
+    setCatScrollX(targetX);
+    categoryScrollRef.current?.scrollTo({ x: targetX, animated: true });
+  };
+
   React.useEffect(() => {
     getExchangeRates(true)
       .then((r) => {
@@ -67,10 +144,8 @@ export default function AddTransactionScreen() {
   }, []);
 
   const formatRateString = (val: number, assetCode: string) => {
-    if (assetCode.startsWith('FUND:') || val < 10) {
-      return Number(val.toFixed(4)).toString();
-    }
-    return val.toFixed(2);
+    const highPrecision = assetCode.startsWith('FUND:') || val < 10;
+    return formatAssetUnitRate(val, language, highPrecision);
   };
 
   const applyPresetRate = (assetCode: string, curr: Currency, ratesObj: ExchangeRates | null) => {
@@ -113,6 +188,7 @@ export default function AddTransactionScreen() {
   const handleTypeChange = (newType: 'expense' | 'income' | 'investment') => {
     Haptics.selectionAsync().catch(() => {});
     setType(newType);
+    setCatScrollX(0);
     if (newType === 'investment') {
       setCategory('Savings');
       setInvestmentTab('market');
@@ -126,6 +202,50 @@ export default function AddTransactionScreen() {
       setDescription('');
       setActiveMarketGroup(null);
     }
+  };
+
+  const renderExpenseCategoryTile = (cat: ExpenseCategory) => {
+    const isSelected =
+      category === cat.label ||
+      category === cat.key ||
+      category === cat.labelTr ||
+      category === cat.labelEn;
+    const label = language === 'tr' ? cat.labelTr : cat.labelEn;
+    return (
+      <AnimatedPressable
+        key={cat.key}
+        onPress={() => {
+          Haptics.selectionAsync().catch(() => {});
+          setCategory(cat.label);
+          if (isSavingsCategory(cat.label)) {
+            setSelectedAssetCode('XAU_GRAM');
+            setDescription(getPresetLabel('XAU_GRAM', language));
+            applyPresetRate('XAU_GRAM', transactionCurrency, liveRates);
+          }
+        }}
+        style={[
+          styles.categoryTile,
+          { width: categoryTileWidth, height: categoryTileHeight },
+          isSelected && styles.categoryTileActive,
+        ]}>
+        <View
+          style={[
+            styles.categoryIconCircle,
+            isSelected && { backgroundColor: colors.tintSoft },
+          ]}>
+          <Ionicons
+            name={cat.icon}
+            size={20}
+            color={isSelected ? colors.tint : colors.textSecondary}
+          />
+        </View>
+        <ThemedText
+          style={[styles.categoryLabel, isSelected && styles.categoryLabelActive]}
+          numberOfLines={1}>
+          {label}
+        </ThemedText>
+      </AnimatedPressable>
+    );
   };
 
   const isSavings = type === 'investment' || (type === 'expense' && isSavingsCategory(category));
@@ -244,13 +364,13 @@ export default function AddTransactionScreen() {
       return;
     }
 
-    const numericAmount = parseFloat(amount.replace(',', '.'));
+    const numericAmount = parseLocaleNumber(amount, language);
     if (isNaN(numericAmount) || numericAmount <= 0) {
       Alert.alert(language === 'tr' ? 'Geçersiz Tutar' : 'Invalid Amount', t('invalidAmount'));
       return;
     }
 
-    const numericPurchaseRate = parseFloat(purchaseRate.replace(',', '.'));
+    const numericPurchaseRate = parseLocaleNumber(purchaseRate, language);
     if (isSavings && (isNaN(numericPurchaseRate) || numericPurchaseRate <= 0)) {
       Alert.alert(language === 'tr' ? 'Geçersiz Kur' : 'Invalid Rate', t('invalidRate'));
       return;
@@ -296,18 +416,16 @@ export default function AddTransactionScreen() {
   };
 
   const handleAmountChange = (text: string) => {
-    if (text.length > 14) return;
-    const numericRegex = /^\d*([.,]\d{0,4})?$/;
-    if (numericRegex.test(text) || text === '') {
-      setAmount(text);
+    const formatted = formatEditableNumberInput(text, amount, 4, language);
+    if (formatted !== null) {
+      setAmount(formatted);
     }
   };
 
   const handleRateChange = (text: string) => {
-    if (text.length > 14) return;
-    const numericRegex = /^\d*([.,]\d{0,6})?$/;
-    if (numericRegex.test(text) || text === '') {
-      setPurchaseRate(text);
+    const formatted = formatEditableNumberInput(text, purchaseRate, 6, language);
+    if (formatted !== null) {
+      setPurchaseRate(formatted);
     }
   };
 
@@ -385,12 +503,12 @@ export default function AddTransactionScreen() {
               <ThemedText style={styles.currencySymbolLarge}>{transactionCurrency.symbol}</ThemedText>
             )}
             <TextInput
-              placeholder={isSavings ? '1' : '0.00'}
+              placeholder={isSavings ? '1' : '0,00'}
               value={amount}
               onChangeText={handleAmountChange}
               style={styles.amountInput}
               keyboardType="numeric"
-              maxLength={12}
+              maxLength={18}
               placeholderTextColor="#444"
               autoFocus={false}
             />
@@ -470,72 +588,125 @@ export default function AddTransactionScreen() {
         )}
 
         {/* Categories or Investment Asset Selection Section */}
-        <View style={styles.sectionWrap}>
-          <ThemedText style={styles.sectionTitle}>
-            {isSavings
-              ? t('selectInvestmentAsset')
-              : type === 'expense'
-              ? t('selectCategory')
-              : t('incomeSourceSelect')}
-          </ThemedText>
+        <View
+          style={styles.sectionWrap}
+          onLayout={(e) => {
+            const w = Math.floor(e.nativeEvent.layout.width);
+            if (w > 200) setCategoryWrapWidth(w);
+          }}>
+          <View style={styles.categoryHeaderRow}>
+            <ThemedText style={[styles.sectionTitle, { marginBottom: 0 }]}>
+              {isSavings
+                ? t('selectInvestmentAsset')
+                : type === 'expense'
+                ? t('selectCategory')
+                : t('incomeSourceSelect')}
+            </ThemedText>
+
+            {!isSavings && type === 'expense' && categoryScrollSteps.length > 1 ? (
+              <View style={styles.categoryPagerControls}>
+                <AnimatedPressable
+                  onPress={() => scrollCategoryToStep(activeCategoryStep - 1)}
+                  disabled={activeCategoryStep <= 0}
+                  style={[
+                    styles.categoryPagerBtn,
+                    activeCategoryStep <= 0 && { opacity: 0.35 },
+                  ]}>
+                  <Ionicons name="chevron-back" size={14} color={colors.textSecondary} />
+                </AnimatedPressable>
+
+                <View style={styles.categoryPagerDots}>
+                  {categoryScrollSteps.map((_, idx) => (
+                    <AnimatedPressable
+                      key={idx}
+                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                      onPress={() => scrollCategoryToStep(idx)}
+                      style={[
+                        styles.categoryPagerDot,
+                        idx === activeCategoryStep && styles.categoryPagerDotActive,
+                      ]}
+                    />
+                  ))}
+                </View>
+
+                <AnimatedPressable
+                  onPress={() => scrollCategoryToStep(activeCategoryStep + 1)}
+                  disabled={activeCategoryStep >= categoryScrollSteps.length - 1}
+                  style={[
+                    styles.categoryPagerBtn,
+                    activeCategoryStep >= categoryScrollSteps.length - 1 && { opacity: 0.35 },
+                  ]}>
+                  <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+                </AnimatedPressable>
+              </View>
+            ) : null}
+          </View>
 
           {isSavings ? (
             <View style={styles.investmentSelectorCard}>
-              {/* 1. Compact 4-Category Filter Tabs */}
-              <View style={styles.investmentTabBar}>
+              {/* 1. 2x2 Category Filter Grid: Row 1 (Altın & Döviz | Hisse), Row 2 (Fon TEFAS | Kripto) */}
+              <View style={styles.investmentTabGrid}>
                 {(
                   [
-                    {
-                      key: 'market',
-                      icon: 'diamond-outline' as const,
-                      labelTr: 'Altın & Döviz',
-                      labelEn: 'Gold & FX',
-                    },
-                    {
-                      key: 'fund',
-                      icon: 'pie-chart-outline' as const,
-                      labelTr: 'Fon (TEFAS)',
-                      labelEn: 'Funds',
-                    },
-                    {
-                      key: 'stock',
-                      icon: 'stats-chart-outline' as const,
-                      labelTr: 'Hisse',
-                      labelEn: 'Stocks',
-                    },
-                    {
-                      key: 'crypto',
-                      icon: 'logo-bitcoin' as const,
-                      labelTr: 'Kripto',
-                      labelEn: 'Crypto',
-                    },
+                    [
+                      {
+                        key: 'market',
+                        icon: 'diamond-outline' as const,
+                        labelTr: 'Altın & Döviz',
+                        labelEn: 'Gold & FX',
+                      },
+                      {
+                        key: 'stock',
+                        icon: 'stats-chart-outline' as const,
+                        labelTr: 'Hisse',
+                        labelEn: 'Stocks',
+                      },
+                    ],
+                    [
+                      {
+                        key: 'fund',
+                        icon: 'pie-chart-outline' as const,
+                        labelTr: 'Fon (TEFAS)',
+                        labelEn: 'Funds (TEFAS)',
+                      },
+                      {
+                        key: 'crypto',
+                        icon: 'logo-bitcoin' as const,
+                        labelTr: 'Kripto',
+                        labelEn: 'Crypto',
+                      },
+                    ],
                   ] as const
-                ).map((tabItem) => {
-                  const isTabActive = investmentTab === tabItem.key;
-                  return (
-                    <AnimatedPressable
-                      key={tabItem.key}
-                      onPress={() => handleSelectInvestmentTab(tabItem.key)}
-                      style={[
-                        styles.investmentTabBtn,
-                        isTabActive && styles.investmentTabBtnActive,
-                      ]}>
-                      <Ionicons
-                        name={tabItem.icon}
-                        size={13}
-                        color={isTabActive ? (isDark ? '#000' : '#FFF') : colors.textSecondary}
-                      />
-                      <ThemedText
-                        style={[
-                          styles.investmentTabText,
-                          isTabActive && styles.investmentTabTextActive,
-                        ]}
-                        numberOfLines={1}>
-                        {language === 'tr' ? tabItem.labelTr : tabItem.labelEn}
-                      </ThemedText>
-                    </AnimatedPressable>
-                  );
-                })}
+                ).map((rowTabs, rowIdx) => (
+                  <View key={rowIdx} style={styles.investmentTabRow}>
+                    {rowTabs.map((tabItem) => {
+                      const isTabActive = investmentTab === tabItem.key;
+                      return (
+                        <AnimatedPressable
+                          key={tabItem.key}
+                          onPress={() => handleSelectInvestmentTab(tabItem.key)}
+                          style={[
+                            styles.investmentTabBtn,
+                            isTabActive && styles.investmentTabBtnActive,
+                          ]}>
+                          <Ionicons
+                            name={tabItem.icon}
+                            size={15}
+                            color={isTabActive ? (isDark ? '#000' : '#FFF') : colors.textSecondary}
+                          />
+                          <ThemedText
+                            style={[
+                              styles.investmentTabText,
+                              isTabActive && styles.investmentTabTextActive,
+                            ]}
+                            numberOfLines={1}>
+                            {language === 'tr' ? tabItem.labelTr : tabItem.labelEn}
+                          </ThemedText>
+                        </AnimatedPressable>
+                      );
+                    })}
+                  </View>
+                ))}
               </View>
 
               {/* 2. Optional Compact Sub-Toolbar for Funds & Stocks (BIST/US Toggle + Custom Code Input) */}
@@ -575,19 +746,19 @@ export default function AddTransactionScreen() {
                   )}
 
                   <View style={styles.compactSearchInputWrap}>
-                    <Ionicons name="search" size={14} color={colors.textMuted} />
+                    <Ionicons name="search" size={14} color={colors.textMuted} style={{ flexShrink: 0 }} />
                     <TextInput
                       placeholder={
                         investmentTab === 'fund'
                           ? language === 'tr'
-                            ? 'Fon kodu (AFA, TI1, YAY...)'
-                            : 'Fund code (AFA, TI1...)'
+                            ? 'Fon kodu (TI1, AFA...)'
+                            : 'Fund code (TI1, AFA...)'
                           : stockMarket === 'BIST'
                           ? language === 'tr'
-                            ? 'Hisse kodu (THYAO, FROTO...)'
-                            : 'BIST ticker (THYAO...)'
+                            ? 'Hisse kodu (THYAO...)'
+                            : 'BIST code (THYAO...)'
                           : language === 'tr'
-                          ? 'ABD kodu (NVDA, AAPL...)'
+                          ? 'ABD hisse (NVDA...)'
                           : 'US ticker (NVDA...)'
                       }
                       value={customTickerInput}
@@ -600,7 +771,7 @@ export default function AddTransactionScreen() {
                       style={styles.compactSearchInput}
                     />
                     {fetchingQuote ? (
-                      <ActivityIndicator size="small" color={colors.tint} />
+                      <ActivityIndicator size="small" color={colors.tint} style={{ flexShrink: 0 }} />
                     ) : (
                       <AnimatedPressable
                         onPress={handleSearchCustomSymbol}
@@ -761,82 +932,111 @@ export default function AddTransactionScreen() {
                   )}
               </ScrollView>
 
-              {/* 4. Compact Selected Asset Summary Strip */}
+              {/* 4. Selected Asset Summary Strip */}
               {description && selectedAssetCode !== 'CUSTOM' ? (
-                <View style={styles.selectedAssetBanner}>
-                  <Ionicons name="checkmark-circle" size={15} color={colors.tint} />
-                  <ThemedText style={styles.selectedAssetBannerText} numberOfLines={1}>
-                    {description}
-                    {purchaseRate ? ` • ${transactionCurrency.symbol}${purchaseRate}` : ''}
-                  </ThemedText>
-                </View>
+                (() => {
+                  const isFundOrStock =
+                    investmentTab === 'fund' ||
+                    investmentTab === 'stock' ||
+                    selectedAssetCode.startsWith('FUND:') ||
+                    selectedAssetCode.startsWith('BIST:') ||
+                    selectedAssetCode.startsWith('US:');
+
+                  return isFundOrStock ? (
+                    // Fon & Hisse: İki satırlı (1. satır tam isim, 2. satır nokta + fiyat)
+                    <View style={styles.selectedAssetBanner}>
+                      <View style={styles.selectedAssetTitleRow}>
+                        <Ionicons name="checkmark-circle" size={15} color={colors.tint} />
+                        <ThemedText style={styles.selectedAssetBannerText} numberOfLines={2}>
+                          {description}
+                        </ThemedText>
+                      </View>
+                      {purchaseRate ? (
+                        <View style={styles.selectedAssetPriceRow}>
+                          <View style={styles.selectedAssetPriceDot} />
+                          <ThemedText style={styles.selectedAssetPriceText}>
+                            {`${transactionCurrency.symbol}${purchaseRate}`}
+                          </ThemedText>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : (
+                    // Altın, Döviz ve Kripto: Tek satır (Sol tarafta isim, sağ tarafta belirgin fiyat)
+                    <View style={styles.selectedAssetBannerRow}>
+                      <View style={styles.selectedAssetInlineTitle}>
+                        <Ionicons name="checkmark-circle" size={15} color={colors.tint} />
+                        <ThemedText style={styles.selectedAssetBannerText} numberOfLines={1}>
+                          {description}
+                        </ThemedText>
+                      </View>
+                      {purchaseRate ? (
+                        <ThemedText style={styles.selectedAssetPriceText}>
+                          {`${transactionCurrency.symbol}${purchaseRate}`}
+                        </ThemedText>
+                      ) : null}
+                    </View>
+                  );
+                })()
               ) : null}
             </View>
           ) : type === 'expense' ? (
-            <View style={styles.categoryGrid}>
-              {expenseCategories.map((cat) => {
-                const isSelected = category === cat.label || category === cat.key || category === cat.labelTr || category === cat.labelEn;
-                const label = language === 'tr' ? cat.labelTr : cat.labelEn;
-                return (
-                  <AnimatedPressable
-                    key={cat.key}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setCategory(cat.label);
-                      if (isSavingsCategory(cat.label)) {
-                        setSelectedAssetCode('XAU_GRAM');
-                        setDescription(getPresetLabel('XAU_GRAM', language));
-                        applyPresetRate('XAU_GRAM', transactionCurrency, liveRates);
-                      }
-                    }}
-                    style={[styles.categoryTile, isSelected && styles.categoryTileActive]}>
-                    <View
-                      style={[
-                        styles.categoryIconCircle,
-                        isSelected && { backgroundColor: 'rgba(57, 255, 20, 0.2)' },
-                      ]}>
-                      <Ionicons
-                        name={cat.icon}
-                        size={20}
-                        color={isSelected ? Colors.tint : '#A1A1A6'}
-                      />
-                    </View>
-                    <ThemedText
-                      style={[styles.categoryLabel, isSelected && styles.categoryLabelActive]}
-                      numberOfLines={1}>
-                      {label}
-                    </ThemedText>
-                  </AnimatedPressable>
-                );
-              })}
-            </View>
+            <ScrollView
+              ref={categoryScrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              decelerationRate="fast"
+              scrollEventThrottle={100}
+              onScroll={(e) => setCatScrollX(e.nativeEvent.contentOffset.x)}
+              contentContainerStyle={styles.categoryCarouselContent}>
+              {expenseCategoryColumns.map((col) => (
+                <View key={col.top.key} style={styles.categoryColumn}>
+                  {renderExpenseCategoryTile(col.top)}
+                  {col.bottom ? (
+                    renderExpenseCategoryTile(col.bottom)
+                  ) : (
+                    <View style={{ width: categoryTileWidth, height: categoryTileHeight }} />
+                  )}
+                </View>
+              ))}
+            </ScrollView>
           ) : (
             <>
-              {/* Income Shortcut Chips */}
-              <View style={styles.incomeShortcuts}>
-                {incomeCategories.map((item) => {
-                  const isSelected = category === item.label || category === item.key || category === item.labelTr || category === item.labelEn;
-                  const label = language === 'tr' ? item.labelTr : item.labelEn;
-                  return (
-                    <AnimatedPressable
-                      key={item.key}
-                      onPress={() => {
-                        Haptics.selectionAsync().catch(() => {});
-                        setCategory(item.label);
-                      }}
-                      style={[styles.shortcutChip, isSelected && styles.shortcutChipActive]}>
-                      <Ionicons
-                        name={item.icon as any}
-                        size={15}
-                        color={isSelected ? Colors.tint : '#8E8E93'}
-                      />
-                      <ThemedText style={[styles.shortcutText, isSelected && styles.shortcutTextActive]}>
-                        {label}
-                      </ThemedText>
-                    </AnimatedPressable>
-                  );
-                })}
-              </View>
+              {/* Income Shortcut Chips — fixed 2 rows so selecting long labels never wraps to a 3rd row */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.incomeShortcutsContainer}>
+                {[incomeCategories.slice(0, 3), incomeCategories.slice(3)].map((rowItems, rowIdx) => (
+                  <View key={rowIdx} style={styles.incomeShortcutsRow}>
+                    {rowItems.map((item) => {
+                      const isSelected =
+                        category === item.label ||
+                        category === item.key ||
+                        category === item.labelTr ||
+                        category === item.labelEn;
+                      const label = language === 'tr' ? item.labelTr : item.labelEn;
+                      return (
+                        <AnimatedPressable
+                          key={item.key}
+                          onPress={() => {
+                            Haptics.selectionAsync().catch(() => {});
+                            setCategory(item.label);
+                          }}
+                          style={[styles.shortcutChip, isSelected && styles.shortcutChipActive]}>
+                          <Ionicons
+                            name={item.icon as any}
+                            size={15}
+                            color={isSelected ? colors.tint : colors.textSecondary}
+                          />
+                          <ThemedText style={[styles.shortcutText, isSelected && styles.shortcutTextActive]}>
+                            {label}
+                          </ThemedText>
+                        </AnimatedPressable>
+                      );
+                    })}
+                  </View>
+                ))}
+              </ScrollView>
 
               {/* Or custom income source text */}
               <View style={[styles.inputCard, { marginTop: 12 }]}>
@@ -1052,14 +1252,51 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       marginBottom: 12,
       textTransform: 'uppercase',
     },
-    categoryGrid: {
+    categoryHeaderRow: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    categoryPagerControls: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    categoryPagerBtn: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: colors.cardSecondary,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    categoryPagerDots: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 2,
+    },
+    categoryPagerDot: {
+      width: 5,
+      height: 5,
+      borderRadius: 2.5,
+      backgroundColor: colors.border,
+    },
+    categoryPagerDotActive: {
+      width: 14,
+      backgroundColor: colors.tint,
+    },
+    categoryCarouselContent: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    categoryColumn: {
       gap: 10,
     },
     categoryTile: {
-      width: '22.5%',
-      aspectRatio: 1,
       backgroundColor: colors.card,
       borderRadius: 16,
       borderWidth: 1,
@@ -1091,9 +1328,12 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       color: colors.tint,
       fontWeight: '700',
     },
-    incomeShortcuts: {
+    incomeShortcutsContainer: {
+      flexDirection: 'column',
+      gap: 8,
+    },
+    incomeShortcutsRow: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
       gap: 8,
     },
     shortcutChip: {
@@ -1102,23 +1342,22 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       backgroundColor: colors.card,
       borderRadius: 12,
       paddingVertical: 9,
-      paddingHorizontal: 14,
+      paddingHorizontal: 12,
       borderWidth: 1,
       borderColor: colors.border,
-      gap: 6,
+      gap: 5,
     },
     shortcutChipActive: {
       borderColor: colors.tint,
       backgroundColor: colors.tintSoft,
     },
     shortcutText: {
-      fontSize: 13,
+      fontSize: 12.5,
       fontWeight: '600',
       color: colors.textSecondary,
     },
     shortcutTextActive: {
       color: colors.tint,
-      fontWeight: '700',
     },
     investmentSelectorCard: {
       backgroundColor: colors.card,
@@ -1127,31 +1366,34 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       borderColor: colors.border,
       padding: 12,
       gap: 10,
+      overflow: 'hidden',
     },
-    investmentTabBar: {
+    investmentTabGrid: {
+      gap: 6,
+    },
+    investmentTabRow: {
       flexDirection: 'row',
-      backgroundColor: colors.cardSecondary,
-      borderRadius: 12,
-      padding: 3,
-      borderWidth: 1,
-      borderColor: colors.borderLight,
-      gap: 2,
+      gap: 6,
     },
     investmentTabBtn: {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 8,
-      paddingHorizontal: 4,
-      borderRadius: 9,
-      gap: 4,
+      backgroundColor: colors.cardSecondary,
+      paddingVertical: 10,
+      paddingHorizontal: 10,
+      borderRadius: 11,
+      borderWidth: 1,
+      borderColor: colors.borderLight,
+      gap: 6,
     },
     investmentTabBtnActive: {
       backgroundColor: colors.tint,
+      borderColor: colors.tint,
     },
     investmentTabText: {
-      fontSize: 11.5,
+      fontSize: 12.5,
       fontWeight: '700',
       color: colors.textSecondary,
     },
@@ -1162,10 +1404,12 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
     compactSearchToolbar: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 6,
+      width: '100%',
     },
     marketMiniSwitch: {
       flexDirection: 'row',
+      flexShrink: 0,
       backgroundColor: colors.cardSecondary,
       borderRadius: 10,
       padding: 2,
@@ -1174,7 +1418,7 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
     },
     marketMiniSwitchBtn: {
       paddingVertical: 6,
-      paddingHorizontal: 10,
+      paddingHorizontal: 8,
       borderRadius: 8,
     },
     marketMiniSwitchBtnActive: {
@@ -1193,6 +1437,7 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
     },
     compactSearchInputWrap: {
       flex: 1,
+      minWidth: 0,
       flexDirection: 'row',
       alignItems: 'center',
       height: 38,
@@ -1200,24 +1445,28 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       borderRadius: 10,
       borderWidth: 1,
       borderColor: colors.borderLight,
-      paddingLeft: 10,
+      paddingLeft: 9,
       paddingRight: 4,
-      gap: 6,
+      gap: 5,
+      overflow: 'hidden',
     },
     compactSearchInput: {
       flex: 1,
+      minWidth: 0,
+      ...(Platform.OS === 'web' ? { width: 0 } : {}),
       color: colors.text,
-      fontSize: 13,
+      fontSize: 12.5,
       fontWeight: '700',
       paddingVertical: 0,
     },
     compactFetchBtn: {
       flexDirection: 'row',
+      flexShrink: 0,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.tint,
       height: 28,
-      paddingHorizontal: 10,
+      paddingHorizontal: 9,
       borderRadius: 7,
       gap: 3,
     },
@@ -1270,18 +1519,55 @@ const createStyles = (colors: ThemeColors, isDark: boolean) =>
       letterSpacing: 0.2,
     },
     selectedAssetBanner: {
+      gap: 4,
+      backgroundColor: colors.tintSoft,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: 10,
+    },
+    selectedAssetBannerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      backgroundColor: colors.tintSoft,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: 10,
+    },
+    selectedAssetInlineTitle: {
+      flex: 1,
+      minWidth: 0,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      backgroundColor: colors.tintSoft,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 10,
+    },
+    selectedAssetTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
     },
     selectedAssetBannerText: {
       flex: 1,
       fontSize: 12.5,
       fontWeight: '700',
+      color: colors.tint,
+    },
+    selectedAssetPriceRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingLeft: 21,
+    },
+    selectedAssetPriceDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: colors.tint,
+    },
+    selectedAssetPriceText: {
+      fontSize: 12.5,
+      fontWeight: '800',
       color: colors.tint,
     },
     saveButton: {

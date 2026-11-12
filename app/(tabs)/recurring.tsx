@@ -25,6 +25,11 @@ import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeColors, useSettings } from '@/context/SettingsContext';
 import { addUserDoc, deleteUserDoc, subscribeUserCollection, updateUserDoc } from '@/services/userDataService';
+import {
+  formatEditableNumberInput,
+  formatGroupedNumber,
+  parseLocaleNumber,
+} from '@/utils/numberFormat';
 import { hs, ms, useResponsive, vs } from '@/utils/responsive';
 
 export interface RecurringIncome {
@@ -278,7 +283,7 @@ export default function RecurringScreen() {
     if (entries.length === 0) return '';
     return entries.map(([curr, amt]) => {
       const sym = currencies.find((c) => c.code === curr)?.symbol || curr;
-      return `+ ${sym}${amt.toFixed(0)}/${language === 'tr' ? 'ay' : 'mo'}`;
+      return `+ ${sym}${formatGroupedNumber(amt, language, 0, 0)}/${language === 'tr' ? 'ay' : 'mo'}`;
     }).join(' ');
   }, [activeSubscriptions]);
 
@@ -296,7 +301,7 @@ export default function RecurringScreen() {
 
   const handleAddSubscription = async () => {
     const trimmedName = subName.trim();
-    const numericAmount = parseFloat(subAmount.replace(',', '.'));
+    const numericAmount = parseLocaleNumber(subAmount, language);
     const numericDueDay = parseInt(subDueDay, 10);
 
     if (!trimmedName) {
@@ -364,7 +369,7 @@ export default function RecurringScreen() {
         text1: isDueToday ? 'Abonelik Kaydedildi & İşlendi 🎉' : 'Abonelik Kaydedildi',
         text2: isDueToday
           ? `${trimmedName} bugün ödeme günü (${today.getDate()}) olduğu için ana sayfadaki harcamalara da eklendi.`
-          : `${trimmedName} (${subCurrency.symbol}${numericAmount}) başarıyla eklendi.`,
+          : `${trimmedName} (${subCurrency.symbol}${formatGroupedNumber(numericAmount, language)}) başarıyla eklendi.`,
       });
 
       setSubName('');
@@ -428,7 +433,7 @@ export default function RecurringScreen() {
       Toast.show({
         type: 'success',
         text1: 'Ödeme Harcamalara Eklendi',
-        text2: `${name} (${currSymbol}${amt}) bakiyenizden düşüldü.`,
+        text2: `${name} (${currSymbol}${formatGroupedNumber(amt, language)}) bakiyenizden düşüldü.`,
       });
     } catch (err) {
       console.error('Error paying subscription:', err);
@@ -464,7 +469,7 @@ export default function RecurringScreen() {
 
   // --- Handlers: Recurring Income ---
   const handleAddRecurringIncome = async () => {
-    const numericAmount = parseFloat(amount.replace(',', '.'));
+    const numericAmount = parseLocaleNumber(amount, language);
     const numericDay = parseInt(dayOfMonth, 10);
 
     if (!category.trim()) {
@@ -553,11 +558,14 @@ export default function RecurringScreen() {
 
   // --- Input formatting helpers ---
 
-  const formatNumberInput = (text: string, setter: (val: string) => void) => {
-    if (text.length > 12) return;
-    const numericRegex = /^\d*([.,]\d{0,2})?$/;
-    if (numericRegex.test(text) || text === '') {
-      setter(text);
+  const handleFormattedAmountInput = (
+    text: string,
+    prevVal: string,
+    setter: (val: string) => void
+  ) => {
+    const formatted = formatEditableNumberInput(text, prevVal, 2, language);
+    if (formatted !== null) {
+      setter(formatted);
     }
   };
 
@@ -660,7 +668,7 @@ export default function RecurringScreen() {
               <View style={styles.kpiCard}>
                 <ThemedText style={styles.kpiLabel}>{t('monthlyTotalCommitment').toUpperCase()}</ThemedText>
                 <ThemedText style={[styles.kpiValue, { color: '#FF375F' }]}>
-                  -₺{subMonthlyTotalTRY.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  -₺{formatGroupedNumber(subMonthlyTotalTRY, language)}
                 </ThemedText>
                 <ThemedText style={styles.kpiSub}>
                   {foreignSubSummary
@@ -672,7 +680,7 @@ export default function RecurringScreen() {
               <View style={styles.kpiCard}>
                 <ThemedText style={styles.kpiLabel}>{language === 'tr' ? 'YILLIK TAHMİNİ MALİYET' : 'ANNUAL ESTIMATE'}</ThemedText>
                 <ThemedText style={[styles.kpiValue, { color: '#BF5AF2' }]}>
-                  ₺{(subMonthlyTotalTRY * 12).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ₺{formatGroupedNumber(subMonthlyTotalTRY * 12, language)}
                 </ThemedText>
                 <ThemedText style={styles.kpiSub}>{language === 'tr' ? 'Yıllık projeksiyon' : 'Yearly projection'}</ThemedText>
               </View>
@@ -774,7 +782,7 @@ export default function RecurringScreen() {
                       <View style={styles.subRight}>
                         <ThemedText style={styles.subAmount}>
                           -{itemCurrency.symbol}
-                          {item.amount.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {formatGroupedNumber(item.amount, language)}
                         </ThemedText>
                         <ThemedText style={styles.subBillingPeriod}>
                           {item.billingCycle === 'yearly' ? (language === 'tr' ? '/ yıl' : '/ yr') : (language === 'tr' ? '/ ay' : '/ mo')}
@@ -901,7 +909,7 @@ export default function RecurringScreen() {
                     <View style={styles.recurringRight}>
                       <ThemedText style={styles.recurringAmount}>
                         +{itemCurrency.symbol}
-                        {item.amount.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {formatGroupedNumber(item.amount, language)}
                       </ThemedText>
                       <AnimatedPressable
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -1297,12 +1305,12 @@ export default function RecurringScreen() {
                     <View style={styles.inputWrap}>
                       <ThemedText style={styles.inputPrefix}>{subCurrency.symbol}</ThemedText>
                       <TextInput
-                        placeholder="0.00"
+                        placeholder="0,00"
                         value={subAmount}
-                        onChangeText={(txt) => formatNumberInput(txt, setSubAmount)}
+                        onChangeText={(txt) => handleFormattedAmountInput(txt, subAmount, setSubAmount)}
                         style={styles.textInput}
                         keyboardType="numeric"
-                        maxLength={12}
+                        maxLength={18}
                         placeholderTextColor="#636366"
                       />
                     </View>
@@ -1534,12 +1542,12 @@ export default function RecurringScreen() {
                 <View style={styles.inputWrap}>
                   <ThemedText style={styles.inputPrefix}>{incomeCurrency.symbol}</ThemedText>
                   <TextInput
-                    placeholder="0.00"
+                    placeholder="0,00"
                     value={amount}
-                    onChangeText={(txt) => formatNumberInput(txt, setAmount)}
+                    onChangeText={(txt) => handleFormattedAmountInput(txt, amount, setAmount)}
                     style={styles.textInput}
                     keyboardType="numeric"
-                    maxLength={12}
+                    maxLength={18}
                     placeholderTextColor="#636366"
                   />
                 </View>
@@ -1602,7 +1610,7 @@ export default function RecurringScreen() {
             </View>
             <ThemedText style={[styles.previewAmount, { color: '#FF453A' }]}>
               -{currencies.find((c) => c.code === subToPay.currency)?.symbol || subToPay.currency}
-              {subToPay.amount.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatGroupedNumber(subToPay.amount, language)}
             </ThemedText>
           </View>
         )}

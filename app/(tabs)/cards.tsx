@@ -23,6 +23,11 @@ import { Currency, currencies, defaultCurrency } from '@/constants/Currencies';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeColors, useSettings } from '@/context/SettingsContext';
 import { addUserDoc, deleteUserDoc, subscribeUserCollection, updateUserDoc } from '@/services/userDataService';
+import {
+  formatEditableNumberInput,
+  formatGroupedNumber,
+  parseLocaleNumber,
+} from '@/utils/numberFormat';
 import { hs, ms, useResponsive, vs } from '@/utils/responsive';
 
 export interface Installment {
@@ -224,7 +229,7 @@ export default function CardsScreen() {
   }, [activeInstallments]);
 
   // Live form calculation
-  const parsedTotal = parseFloat(instTotalAmount.replace(',', '.')) || 0;
+  const parsedTotal = parseLocaleNumber(instTotalAmount, language) || 0;
   const parsedCount = parseInt(instTotalCount, 10) || 1;
   const parsedPaid = parseInt(instPaidCount, 10) || 0;
   const liveMonthly = parsedCount > 0 ? parsedTotal / parsedCount : 0;
@@ -232,9 +237,11 @@ export default function CardsScreen() {
   const liveRemainingDebt = liveMonthly * liveRemainingCount;
 
   // Handlers
-  const formatNumberInput = (text: string, setter: (val: string) => void) => {
-    const cleaned = text.replace(/[^0-9.,]/g, '');
-    setter(cleaned);
+  const handleTotalAmountChange = (text: string) => {
+    const formatted = formatEditableNumberInput(text, instTotalAmount, 2, language);
+    if (formatted !== null) {
+      setInstTotalAmount(formatted);
+    }
   };
 
   const handleTotalCountInput = (text: string) => {
@@ -260,7 +267,7 @@ export default function CardsScreen() {
   };
 
   const handleAddInstallment = async () => {
-    const numericTotal = parseFloat(instTotalAmount.replace(',', '.'));
+    const numericTotal = parseLocaleNumber(instTotalAmount, language);
     const numericCount = parseInt(instTotalCount, 10);
     const numericPaid = parseInt(instPaidCount, 10) || 0;
     const numericDueDay = parseInt(instDueDay, 10);
@@ -350,8 +357,8 @@ export default function CardsScreen() {
         type: 'success',
         text1: language === 'tr' ? 'Taksit Kaydedildi 🎉' : 'Installment Saved 🎉',
         text2: language === 'tr'
-          ? `Aylık ${instCurrency.symbol}${monthlyAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} tutarındaki taksitiniz her ayın ${numericDueDay}. günü için tanımlandı.`
-          : `Monthly ${instCurrency.symbol}${monthlyAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })} installment scheduled for day ${numericDueDay} of each month.`,
+          ? `Aylık ${instCurrency.symbol}${formatGroupedNumber(monthlyAmount, language)} tutarındaki taksitiniz her ayın ${numericDueDay}. günü için tanımlandı.`
+          : `Monthly ${instCurrency.symbol}${formatGroupedNumber(monthlyAmount, language)} installment scheduled for day ${numericDueDay} of each month.`,
       });
     } catch (error) {
       console.error('Error adding installment:', error);
@@ -367,7 +374,7 @@ export default function CardsScreen() {
     const currencySymbol = currencies.find((c) => c.code === item.currency)?.symbol || '₺';
     const nextPaid = (item.paidInstallments || 0) + 1;
     const nextRemaining = (item.remainingInstallments ?? item.totalInstallments) - 1;
-    const formattedAmount = item.monthlyAmount.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 });
+    const formattedAmount = formatGroupedNumber(item.monthlyAmount, language);
 
     Alert.alert(
       t('instPayConfirmTitle'),
@@ -484,7 +491,7 @@ export default function CardsScreen() {
               <ThemedText style={styles.kpiLabel}>{t('totalMonthlyInst').toUpperCase()}</ThemedText>
             </View>
             <ThemedText style={[styles.kpiValue, { color: '#EF4444' }]}>
-              -₺{totalMonthlyCommitment.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              -₺{formatGroupedNumber(totalMonthlyCommitment, language)}
             </ThemedText>
             <ThemedText style={styles.kpiSub}>{language === 'tr' ? 'Her ay otomatik yansır' : 'Reflects monthly'}</ThemedText>
           </View>
@@ -495,7 +502,7 @@ export default function CardsScreen() {
               <ThemedText style={styles.kpiLabel}>{t('totalRemainingDebt').toUpperCase()}</ThemedText>
             </View>
             <ThemedText style={[styles.kpiValue, { color: '#F59E0B' }]}>
-              ₺{totalRemainingDebt.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ₺{formatGroupedNumber(totalRemainingDebt, language)}
             </ThemedText>
             <ThemedText style={styles.kpiSub}>{activeInstallments.length} {language === 'tr' ? 'aktif taksit planı' : 'active installment plans'}</ThemedText>
           </View>
@@ -626,14 +633,14 @@ export default function CardsScreen() {
                     </ThemedText>
                     <ThemedText style={styles.installmentSub}>
                       {language === 'tr' ? 'Toplam:' : 'Total:'} {itemCurrency.symbol}
-                      {item.totalAmount.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}
+                      {formatGroupedNumber(item.totalAmount, language)}
                     </ThemedText>
                   </View>
 
                   <View style={styles.cardAmountCol}>
                     <ThemedText style={styles.installmentMonthlyAmount}>
                       -{itemCurrency.symbol}
-                      {item.monthlyAmount.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {formatGroupedNumber(item.monthlyAmount, language)}
                     </ThemedText>
                     <ThemedText style={styles.installmentPerMonth}>{language === 'tr' ? '/ her ay' : '/ monthly'}</ThemedText>
                   </View>
@@ -660,7 +667,7 @@ export default function CardsScreen() {
                     </ThemedText>
                     <ThemedText style={styles.remainingDebtText}>
                       {language === 'tr' ? 'Kalan:' : 'Remaining:'} {itemCurrency.symbol}
-                      {remainingDebt.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}
+                      {formatGroupedNumber(remainingDebt, language)}
                     </ThemedText>
                   </View>
                 </View>
@@ -1003,12 +1010,12 @@ export default function CardsScreen() {
                     <View style={styles.inputWrap}>
                       <ThemedText style={styles.inputPrefix}>{instCurrency.symbol}</ThemedText>
                       <TextInput
-                        placeholder={language === 'tr' ? 'Örn: 36000' : 'e.g. 36000'}
+                        placeholder={language === 'tr' ? 'Örn: 36.000,00' : 'e.g. 36.000,00'}
                         value={instTotalAmount}
-                        onChangeText={(txt) => formatNumberInput(txt, setInstTotalAmount)}
+                        onChangeText={handleTotalAmountChange}
                         style={styles.textInput}
                         keyboardType="numeric"
-                        maxLength={12}
+                        maxLength={18}
                         placeholderTextColor={colors.textMuted}
                       />
                     </View>
@@ -1100,10 +1107,7 @@ export default function CardsScreen() {
                       </ThemedText>
                       <ThemedText style={styles.calcValue}>
                         {instCurrency.symbol}
-                        {liveMonthly.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}{' '}
+                        {formatGroupedNumber(liveMonthly, language)}{' '}
                         {language === 'tr' ? '/ ay' : '/ mo'}
                       </ThemedText>
                     </View>
@@ -1113,10 +1117,7 @@ export default function CardsScreen() {
                       </ThemedText>
                       <ThemedText style={styles.calcValueSub}>
                         {liveRemainingCount} {language === 'tr' ? 'ay' : 'mo'} • {instCurrency.symbol}
-                        {liveRemainingDebt.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
+                        {formatGroupedNumber(liveRemainingDebt, language)}
                       </ThemedText>
                     </View>
                   </View>
