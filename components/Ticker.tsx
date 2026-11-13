@@ -96,13 +96,7 @@ export const Ticker: React.FC<TickerProps> = ({
     {
       height,
       backgroundColor: colors.card,
-      borderColor: isUnavailable
-        ? colors.warning
-        : isClosed
-        ? isDark
-          ? 'rgba(148, 163, 184, 0.2)'
-          : 'rgba(100, 116, 139, 0.2)'
-        : colors.border,
+      borderColor: isUnavailable ? colors.warning : colors.border,
     },
   ];
 
@@ -119,25 +113,19 @@ export const Ticker: React.FC<TickerProps> = ({
   const badgeBg = isUnavailable
     ? colors.warningSoft
     : isClosed
-    ? isDark
-      ? 'rgba(148, 163, 184, 0.12)'
-      : 'rgba(100, 116, 139, 0.12)'
+    ? colors.cardSecondary
     : colors.tintSoft;
 
   const badgeBorder = isUnavailable
     ? 'rgba(217, 119, 6, 0.25)'
     : isClosed
-    ? isDark
-      ? 'rgba(148, 163, 184, 0.22)'
-      : 'rgba(100, 116, 139, 0.22)'
+    ? colors.border
     : colors.tintSoft;
 
   const badgeColor = isUnavailable
     ? colors.warning
     : isClosed
-    ? isDark
-      ? '#94A3B8'
-      : '#64748B'
+    ? colors.textSecondary
     : colors.tint;
 
   const itemTextColor = isUnavailable

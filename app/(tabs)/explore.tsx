@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -257,11 +258,48 @@ export default function ExploreScreen() {
         oy,
         labelX,
         labelY,
+        startAngle,
+        endAngle,
         isSelected,
         isBrightSlice,
       };
     });
   }, [breakdownList, selectedSliceIndex]);
+
+  const donutPressRef = useRef<any>(null);
+
+  const handleDonutPress = (e: any) => {
+    let x = e?.nativeEvent?.locationX;
+    let y = e?.nativeEvent?.locationY;
+
+    if (Platform.OS === 'web' && donutPressRef.current && typeof donutPressRef.current.getBoundingClientRect === 'function') {
+      const rect = donutPressRef.current.getBoundingClientRect();
+      const clientX = e?.nativeEvent?.clientX ?? e?.clientX;
+      const clientY = e?.nativeEvent?.clientY ?? e?.clientY;
+      if (typeof clientX === 'number' && typeof clientY === 'number') {
+        x = clientX - rect.left;
+        y = clientY - rect.top;
+      }
+    }
+
+    if (typeof x !== 'number' || typeof y !== 'number') return;
+
+    const dx = x - 115;
+    const dy = y - 115;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 50 || dist > 112) return;
+
+    let angle = Math.atan2(dy, dx);
+    if (angle < -Math.PI / 2) {
+      angle += Math.PI * 2;
+    }
+
+    const hit = donutSlices.find((s) => angle >= s.startAngle && angle <= s.endAngle);
+    if (!hit) return;
+
+    Haptics.selectionAsync().catch(() => {});
+    setSelectedSliceIndex((prev) => (prev === hit.index ? null : hit.index));
+  };
 
   const activeSliceItem =
     selectedSliceIndex !== null && breakdownList[selectedSliceIndex]
@@ -297,7 +335,7 @@ export default function ExploreScreen() {
                     isActive && [
                       styles.currencyPillMiniActive,
                       {
-                        backgroundColor: isDark ? '#26282E' : '#FFFFFF',
+                        backgroundColor: isDark ? colors.cardElevated : colors.card,
                         borderColor: colors.tint,
                       },
                     ],
@@ -317,15 +355,15 @@ export default function ExploreScreen() {
         </View>
 
         {/* Expenses / Income Segmented Switcher */}
-        <View style={[styles.segmentedControl, { backgroundColor: colors.cardSecondary, borderColor: colors.borderLight }]}>
+        <View style={[styles.segmentedControl, { backgroundColor: isDark ? colors.card : colors.cardSecondary, borderColor: colors.border }]}>
           <AnimatedPressable
             style={[
               styles.segmentButton,
               activeTab === 'expense' && [
                 styles.segmentButtonActiveExpense,
                 {
-                  backgroundColor: isDark ? '#26282E' : '#FFFFFF',
-                  borderColor: isDark ? 'rgba(255, 59, 48, 0.4)' : 'rgba(239, 68, 68, 0.4)',
+                  backgroundColor: isDark ? colors.cardElevated : colors.card,
+                  borderColor: isDark ? 'rgba(255, 107, 99, 0.45)' : 'rgba(223, 68, 62, 0.4)',
                 },
               ],
             ]}
@@ -353,7 +391,11 @@ export default function ExploreScreen() {
               styles.segmentButton,
               activeTab === 'income' && [
                 styles.segmentButtonActiveIncome,
-                { backgroundColor: colors.tint },
+                {
+                  backgroundColor: isDark ? colors.cardElevated : colors.card,
+                  borderWidth: 1,
+                  borderColor: isDark ? 'rgba(56, 217, 150, 0.45)' : 'rgba(16, 155, 104, 0.4)',
+                },
               ],
             ]}
             onPress={() => {
@@ -363,13 +405,13 @@ export default function ExploreScreen() {
             <Ionicons
               name="arrow-down"
               size={14}
-              color={activeTab === 'income' ? (isDark ? '#000000' : '#FFFFFF') : colors.textSecondary}
+              color={activeTab === 'income' ? colors.income : colors.textSecondary}
             />
             <ThemedText
               style={[
                 styles.segmentButtonText,
                 { color: colors.textSecondary },
-                activeTab === 'income' && { color: isDark ? '#000000' : '#FFFFFF', fontWeight: '800' },
+                activeTab === 'income' && { color: colors.text, fontWeight: '800' },
               ]}>
               {t('income')}
             </ThemedText>
@@ -410,49 +452,43 @@ export default function ExploreScreen() {
             <Animated.View style={[styles.chartContainer, animatedChartStyle]}>
               {/* Interactive Donut Ring + Center Summary */}
               <View style={styles.donutWrapper}>
-                <Svg width={230} height={230} viewBox="0 0 230 230">
-                  <G>
-                    {donutSlices.map((slice) => {
-                      const dimmed = selectedSliceIndex !== null && !slice.isSelected;
-                      const handleSliceSelect = () => {
-                        Haptics.selectionAsync().catch(() => {});
-                        setSelectedSliceIndex((prev) =>
-                          prev === slice.index ? null : slice.index
+                <Pressable
+                  ref={donutPressRef}
+                  onPress={handleDonutPress}
+                  style={Platform.OS === 'web' ? ({ cursor: 'pointer' } as any) : undefined}>
+                  <Svg width={230} height={230} viewBox="0 0 230 230">
+                    <G>
+                      {donutSlices.map((slice) => {
+                        const dimmed = selectedSliceIndex !== null && !slice.isSelected;
+                        return (
+                          <G
+                            key={slice.item.category}
+                            transform={`translate(${slice.ox}, ${slice.oy})`}>
+                            <Path
+                              d={slice.pathData}
+                              fill={slice.item.color}
+                              opacity={dimmed ? 0.38 : 1}
+                              stroke={colors.card}
+                              strokeWidth={breakdownList.length > 1 ? 2.5 : 0}
+                            />
+                            {slice.item.percentage >= 8 && (
+                              <SvgText
+                                x={slice.labelX}
+                                y={slice.labelY}
+                                fill={slice.isBrightSlice ? '#090D16' : '#FFFFFF'}
+                                fontSize="11"
+                                fontWeight="bold"
+                                textAnchor="middle"
+                                opacity={dimmed ? 0.45 : 1}>
+                                {`${Math.round(slice.item.percentage)}%`}
+                              </SvgText>
+                            )}
+                          </G>
                         );
-                      };
-                      const interactionProps =
-                        Platform.OS === 'web'
-                          ? ({ onClick: handleSliceSelect, style: { cursor: 'pointer' } } as any)
-                          : { onPress: handleSliceSelect };
-                      return (
-                        <G
-                          key={slice.item.category}
-                          transform={`translate(${slice.ox}, ${slice.oy})`}
-                          {...interactionProps}>
-                          <Path
-                            d={slice.pathData}
-                            fill={slice.item.color}
-                            opacity={dimmed ? 0.38 : 1}
-                            stroke={colors.card}
-                            strokeWidth={breakdownList.length > 1 ? 2.5 : 0}
-                          />
-                          {slice.item.percentage >= 8 && (
-                            <SvgText
-                              x={slice.labelX}
-                              y={slice.labelY}
-                              fill={slice.isBrightSlice ? '#090D16' : '#FFFFFF'}
-                              fontSize="11"
-                              fontWeight="bold"
-                              textAnchor="middle"
-                              opacity={dimmed ? 0.45 : 1}>
-                              {`${Math.round(slice.item.percentage)}%`}
-                            </SvgText>
-                          )}
-                        </G>
-                      );
-                    })}
-                  </G>
-                </Svg>
+                      })}
+                    </G>
+                  </Svg>
+                </Pressable>
 
                 {/* Center Hole Interactive Summary */}
                 <TouchableOpacity

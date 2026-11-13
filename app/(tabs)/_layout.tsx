@@ -1,7 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { Tabs, useRouter } from 'expo-router';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Tabs, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useRef } from 'react';
+import { Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnimatedPressable } from '@/components/AnimatedPressable';
@@ -21,7 +28,7 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
 
 
   const bottomOffset = Platform.OS === 'ios' ? Math.max(insets.bottom - 15, 12) : 10;
-  const inactiveIconColor = isDark ? '#7C7C82' : '#94A3B8';
+  const inactiveIconColor = colors.textSecondary;
 
   const getTabConfig = (routeName: string, isFocused: boolean) => {
     switch (routeName) {
@@ -115,12 +122,12 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
           styles.floatingAddButton,
           {
             backgroundColor: colors.tint,
-            shadowColor: isDark ? colors.tint : '#64748B',
+            shadowColor: isDark ? colors.tint : colors.shadow.shadowColor,
           },
         ]}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         onPress={onAddPress}>
-        <Ionicons name="add" size={28} color={isDark ? '#000000' : '#FFFFFF'} />
+        <Ionicons name="add" size={28} color={isDark ? colors.background : '#FAF7F2'} />
       </AnimatedPressable>
 
       {/* Main Pill Dock Body */}
@@ -128,10 +135,10 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
         style={[
           styles.tabBarMain,
           {
-            backgroundColor: isDark ? '#141722' : '#FFFFFF',
-            borderColor: colors.border,
-            shadowColor: isDark ? '#000000' : '#64748B',
-            shadowOpacity: isDark ? 0.45 : 0.12,
+            backgroundColor: isDark ? colors.cardElevated : '#E7DFD0',
+            borderColor: isDark ? 'rgba(240, 223, 194, 0.22)' : 'rgba(36, 31, 27, 0.14)',
+            shadowColor: isDark ? '#000000' : colors.shadow.shadowColor,
+            shadowOpacity: isDark ? 0.48 : 0.14,
           },
         ]}>
         {/* Left Side: Wallet & Charts */}
@@ -147,12 +154,71 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
   );
 }
 
+const TAB_ORDER: Record<string, number> = {
+  index: 0,
+  explore: 1,
+  recurring: 2,
+  cards: 3,
+};
+
+let previousTabIndex = 0;
+let hasInitializedFirstTab = false;
+
+function TabSlideWrapper({
+  routeName,
+  children,
+}: {
+  routeName: string;
+  children: React.ReactNode;
+}) {
+  const { width } = useWindowDimensions();
+  const { colors } = useSettings();
+  const translateX = useSharedValue(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      const nextIndex = TAB_ORDER[routeName] ?? 0;
+      if (!hasInitializedFirstTab) {
+        hasInitializedFirstTab = true;
+        previousTabIndex = nextIndex;
+        return;
+      }
+      if (nextIndex === previousTabIndex) return;
+
+      const direction = nextIndex > previousTabIndex ? 1 : -1;
+      previousTabIndex = nextIndex;
+
+      translateX.value = direction * width;
+      translateX.value = withTiming(0, {
+        duration: 240,
+        easing: Easing.out(Easing.cubic),
+      });
+    }, [routeName, width, translateX])
+  );
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.background, overflow: 'hidden' }}>
+      <Animated.View style={[{ flex: 1 }, animatedStyle]}>{children}</Animated.View>
+    </View>
+  );
+}
+
 export default function TabLayout() {
+  const { colors } = useSettings();
+
   return (
     <Tabs
       tabBar={(props) => <CustomTabBar {...props} />}
+      screenLayout={({ route, children }) => (
+        <TabSlideWrapper routeName={route.name}>{children}</TabSlideWrapper>
+      )}
       screenOptions={{
         headerShown: false,
+        sceneStyle: { backgroundColor: colors.background },
       }}>
       <Tabs.Screen
         name="index"

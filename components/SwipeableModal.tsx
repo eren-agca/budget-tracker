@@ -47,6 +47,9 @@ export function SwipeableModal({
   const isClosingRef = useRef(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const sheetTopRef = useRef(0);
+  const enableFullSheetDragRef = useRef(enableFullSheetDrag);
+  enableFullSheetDragRef.current = enableFullSheetDrag;
 
   // Backdrop opacity is 100% synchronized with sheet translateY position
   const backdropOpacity = translateY.interpolate({
@@ -65,6 +68,7 @@ export function SwipeableModal({
         damping: 26,
         stiffness: 260,
         mass: 0.85,
+        overshootClamping: true,
         useNativeDriver: true,
       }).start();
     } else if (rendered && !isClosingRef.current) {
@@ -105,16 +109,19 @@ export function SwipeableModal({
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, gestureState) => {
-        return gestureState.dy > 4 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+        const isDownwardSwipe =
+          gestureState.dy > 5 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx) * 1.2;
+        if (!isDownwardSwipe) return false;
+        if (enableFullSheetDragRef.current) return true;
+        // Allow dragging from the handle and the entire top header zone (~96px)
+        const touchOffsetFromTop = gestureState.y0 - sheetTopRef.current;
+        return touchOffsetFromTop <= 96;
       },
+      onPanResponderTerminationRequest: () => false,
       onPanResponderMove: (_, gestureState) => {
-        if (gestureState.dy > 0) {
-          translateY.setValue(gestureState.dy);
-        } else {
-          translateY.setValue(gestureState.dy * 0.12);
-        }
+        translateY.setValue(Math.max(0, gestureState.dy));
       },
       onPanResponderRelease: (_, gestureState) => {
         if (gestureState.dy > 80 || gestureState.vy > 0.65) {
@@ -124,9 +131,19 @@ export function SwipeableModal({
             toValue: 0,
             damping: 24,
             stiffness: 280,
+            overshootClamping: true,
             useNativeDriver: true,
           }).start();
         }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(translateY, {
+          toValue: 0,
+          damping: 24,
+          stiffness: 280,
+          overshootClamping: true,
+          useNativeDriver: true,
+        }).start();
       },
     })
   ).current;
@@ -157,7 +174,10 @@ export function SwipeableModal({
         </TouchableWithoutFeedback>
 
         <Animated.View
-          {...(enableFullSheetDrag ? panResponder.panHandlers : {})}
+          onLayout={(e) => {
+            sheetTopRef.current = e.nativeEvent.layout.y;
+          }}
+          {...panResponder.panHandlers}
           style={[
             styles.sheet,
             {
@@ -170,9 +190,7 @@ export function SwipeableModal({
             { transform: [{ translateY }] },
           ]}>
           {showHandle && (
-            <View
-              style={styles.handleContainer}
-              {...(!enableFullSheetDrag ? panResponder.panHandlers : {})}>
+            <View style={styles.handleContainer}>
               <View
                 style={[
                   styles.handle,

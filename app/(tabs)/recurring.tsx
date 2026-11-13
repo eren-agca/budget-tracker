@@ -851,16 +851,16 @@ export default function RecurringScreen() {
                 </View>
                 <View style={styles.openModalTextCol}>
                   <ThemedText style={styles.openModalTitle}>{t('newRecurringIncome')}</ThemedText>
-                  <ThemedText style={styles.openModalSubtitle} numberOfLines={1}>
+                  <ThemedText style={styles.openModalSubtitle}>
                     {language === 'tr'
                       ? 'Maaş, kira veya aylık düzenli gelir ekleyin'
                       : 'Add salary, rent or monthly recurring income'}
                   </ThemedText>
                 </View>
               </View>
-              <View style={[styles.openModalActionBadge, { backgroundColor: colors.income }]}>
-                <Ionicons name="add" size={18} color="#000000" />
-                <ThemedText style={[styles.openModalActionBadgeText, { color: '#000000' }]}>
+              <View style={[styles.openModalActionBadge, { backgroundColor: colors.tint }]}>
+                <Ionicons name="add" size={18} color={isDark ? '#000000' : '#FFFFFF'} />
+                <ThemedText style={[styles.openModalActionBadgeText, { color: isDark ? '#000000' : '#FFFFFF' }]}>
                   {language === 'tr' ? 'Ekle' : 'Add'}
                 </ThemedText>
               </View>
@@ -1699,11 +1699,11 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
     },
     segmentContainer: {
       flexDirection: 'row',
-      backgroundColor: colors.cardSecondary,
+      backgroundColor: isDark ? colors.card : colors.cardSecondary,
       borderRadius: 14,
       padding: 4,
       borderWidth: 1,
-      borderColor: colors.borderLight,
+      borderColor: colors.border,
       marginBottom: 16,
     },
     segmentButton: {
@@ -1715,9 +1715,9 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       borderRadius: 11,
     },
     segmentButtonActive: {
-      backgroundColor: isDark ? '#24262E' : '#FFFFFF',
+      backgroundColor: isDark ? colors.cardElevated : colors.card,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(57, 255, 20, 0.3)' : 'rgba(5, 150, 105, 0.3)',
+      borderColor: colors.tint,
     },
     segmentText: {
       fontSize: 12,
@@ -1729,7 +1729,7 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
     },
     segmentBadge: {
       marginLeft: 4,
-      backgroundColor: isDark ? '#1E1F24' : '#E2E8F0',
+      backgroundColor: isDark ? colors.cardSecondary : colors.cardElevated,
       paddingHorizontal: 5,
       paddingVertical: 1,
       borderRadius: 8,
@@ -1944,7 +1944,7 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       borderColor: colors.border,
     },
     chipActive: {
-      backgroundColor: isDark ? '#26282E' : '#FFFFFF',
+      backgroundColor: isDark ? colors.cardElevated : colors.card,
       borderColor: colors.tint,
     },
     chipText: {
@@ -1971,7 +1971,7 @@ const createStyles = (colors: ThemeColors, isDark: boolean) => {
       alignItems: 'center',
     },
     currencyPillActive: {
-      backgroundColor: isDark ? '#26282E' : '#FFFFFF',
+      backgroundColor: isDark ? colors.cardElevated : colors.card,
       borderWidth: 1,
       borderColor: colors.tint,
     },

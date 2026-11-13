@@ -31,11 +31,13 @@ interface RawCryptoResult {
 
 const OUNCE_TO_GRAM = 31.1035;
 
-// In-memory cache with 25-second TTL for fast 30s polling without hitting rate limits
+// In-memory cache with 60-second TTL and in-flight deduplication to avoid rate limits
 let cachedRates: ExchangeRates | null = null;
 let cachedOpenRates: ExchangeRates | null = null;
 let lastCacheTime = 0;
-const CACHE_TTL_MS = 25 * 1000; // 25 seconds
+let inFlightRatesPromise: Promise<ExchangeRates | null> | null = null;
+let coinGeckoCooldownUntil = 0;
+const CACHE_TTL_MS = 60 * 1000; // 60 seconds
 
 const getPreviousBusinessDateString = (): string => {
   const d = new Date();
@@ -217,64 +219,99 @@ const getCryptoRatesRaw = async (): Promise<RawCryptoResult> => {
     }
   }
 
-  // 2. Secondary: CoinGecko with 24hr change
+  // 2. Primary Web / Secondary Mobile: Binance Public 24h Ticker (CORS-friendly, high rate limits)
   try {
     const response = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,ripple&vs_currencies=try&include_24hr_change=true'
+      'https://api.binance.com/api/v3/ticker/24hr?symbols=%5B%22BTCUSDT%22,%22ETHUSDT%22,%22XRPUSDT%22%5D'
     );
     if (response.ok) {
-      const data = await response.json();
-      if (data.bitcoin?.try) {
-        tryRates.BTC = data.bitcoin.try;
-        if (typeof data.bitcoin.try_24h_change === 'number') {
-          tryOpenRates.BTC = data.bitcoin.try / (1 + data.bitcoin.try_24h_change / 100);
-        }
-      }
-      if (data.ethereum?.try) {
-        tryRates.ETH = data.ethereum.try;
-        if (typeof data.ethereum.try_24h_change === 'number') {
-          tryOpenRates.ETH = data.ethereum.try / (1 + data.ethereum.try_24h_change / 100);
-        }
-      }
-      if (data.ripple?.try) {
-        tryRates.XRP = data.ripple.try;
-        if (typeof data.ripple.try_24h_change === 'number') {
-          tryOpenRates.XRP = data.ripple.try / (1 + data.ripple.try_24h_change / 100);
-        }
-      }
-      if (Object.keys(tryRates).length > 0) {
-        return { tryRates, tryOpenRates, usdRates, usdOpenRates };
-      }
-    }
-  } catch (error) {
-    console.warn('Secondary Crypto API (CoinGecko) failed, trying CoinCap fallback:', error);
-  }
-
-  // 3. Tertiary: CoinCap USD
-  try {
-    const response = await fetch('https://api.coincap.io/v2/assets?ids=bitcoin,ethereum,ripple');
-    if (response.ok) {
-      const data = await response.json();
-      if (Array.isArray(data?.data)) {
-        for (const asset of data.data) {
-          const priceUsd = parseFloat(asset.priceUsd);
-          const changePct = parseFloat(asset.changePercent24Hr || '0');
-          const openUsd = priceUsd / (1 + changePct / 100);
-          if (asset.id === 'bitcoin' && priceUsd > 0) {
-            usdRates.BTC = priceUsd;
-            usdOpenRates.BTC = openUsd;
-          } else if (asset.id === 'ethereum' && priceUsd > 0) {
-            usdRates.ETH = priceUsd;
-            usdOpenRates.ETH = openUsd;
-          } else if (asset.id === 'ripple' && priceUsd > 0) {
-            usdRates.XRP = priceUsd;
-            usdOpenRates.XRP = openUsd;
+      const list = await response.json();
+      if (Array.isArray(list)) {
+        for (const item of list) {
+          const last = parseFloat(item?.lastPrice);
+          const open = parseFloat(item?.openPrice);
+          if (item?.symbol === 'BTCUSDT' && last > 0) {
+            usdRates.BTC = last;
+            if (open > 0) usdOpenRates.BTC = open;
+          } else if (item?.symbol === 'ETHUSDT' && last > 0) {
+            usdRates.ETH = last;
+            if (open > 0) usdOpenRates.ETH = open;
+          } else if (item?.symbol === 'XRPUSDT' && last > 0) {
+            usdRates.XRP = last;
+            if (open > 0) usdOpenRates.XRP = open;
           }
         }
+        if (usdRates.BTC && usdRates.ETH && usdRates.XRP) {
+          return { tryRates, tryOpenRates, usdRates, usdOpenRates };
+        }
       }
     }
-  } catch (fallbackError) {
-    console.error('All Crypto APIs failed:', fallbackError);
+  } catch {
+    // Fallback to CryptoCompare / CoinGecko
+  }
+
+  // 3. Fallback: CryptoCompare Multi-Full (CORS-friendly, returns TRY + OPEN24HOUR directly)
+  try {
+    const response = await fetch(
+      'https://min-api.cryptocompare.com/data/pricemultifull?fsyms=BTC,ETH,XRP&tsyms=TRY'
+    );
+    if (response.ok) {
+      const json = await response.json();
+      const raw = json?.RAW;
+      if (raw) {
+        for (const sym of ['BTC', 'ETH', 'XRP'] as const) {
+          const entry = raw[sym]?.TRY;
+          if (typeof entry?.PRICE === 'number' && entry.PRICE > 0) {
+            tryRates[sym] = entry.PRICE;
+            if (typeof entry?.OPEN24HOUR === 'number' && entry.OPEN24HOUR > 0) {
+              tryOpenRates[sym] = entry.OPEN24HOUR;
+            }
+          }
+        }
+        if (Object.keys(tryRates).length > 0) {
+          return { tryRates, tryOpenRates, usdRates, usdOpenRates };
+        }
+      }
+    }
+  } catch {
+    // Fallback to CoinGecko
+  }
+
+  // 4. Tertiary Fallback: CoinGecko with 5-minute cooldown if rate-limited (HTTP 429)
+  if (Date.now() >= coinGeckoCooldownUntil) {
+    try {
+      const response = await fetch(
+        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,ripple&vs_currencies=try&include_24hr_change=true'
+      );
+      if (response.status === 429) {
+        coinGeckoCooldownUntil = Date.now() + 5 * 60 * 1000;
+      } else if (response.ok) {
+        const data = await response.json();
+        if (data.bitcoin?.try) {
+          tryRates.BTC = data.bitcoin.try;
+          if (typeof data.bitcoin.try_24h_change === 'number') {
+            tryOpenRates.BTC = data.bitcoin.try / (1 + data.bitcoin.try_24h_change / 100);
+          }
+        }
+        if (data.ethereum?.try) {
+          tryRates.ETH = data.ethereum.try;
+          if (typeof data.ethereum.try_24h_change === 'number') {
+            tryOpenRates.ETH = data.ethereum.try / (1 + data.ethereum.try_24h_change / 100);
+          }
+        }
+        if (data.ripple?.try) {
+          tryRates.XRP = data.ripple.try;
+          if (typeof data.ripple.try_24h_change === 'number') {
+            tryOpenRates.XRP = data.ripple.try / (1 + data.ripple.try_24h_change / 100);
+          }
+        }
+        if (Object.keys(tryRates).length > 0) {
+          return { tryRates, tryOpenRates, usdRates, usdOpenRates };
+        }
+      }
+    } catch {
+      // Silent fallback; cached rates will be preserved if available
+    }
   }
 
   return { tryRates, tryOpenRates, usdRates, usdOpenRates };
@@ -291,89 +328,101 @@ export const getExchangeRates = async (forceRefresh = false): Promise<ExchangeRa
     return cachedRates;
   }
 
-  // Load closing rates from storage if memory cache is empty (e.g. app restart while markets closed)
-  if (!cachedRates) {
-    const stored = await loadClosingRatesFromStorage();
-    if (stored && Object.keys(stored.rates).length > 0) {
-      cachedRates = { ...stored.rates };
-      cachedOpenRates = { ...stored.openRates };
-    }
+  if (inFlightRatesPromise) {
+    return inFlightRatesPromise;
   }
 
-  const combinedRates: ExchangeRates = { TRY: 1, ...(cachedRates || {}) };
-  const combinedOpenRates: ExchangeRates = { TRY: 1, ...(cachedOpenRates || {}) };
-
-  const forexMetalOpen = isForexMetalMarketOpen();
-
-  // If Forex & Metals markets are OPEN, fetch live; if CLOSED (weekend), preserve closing rates
-  const [fiatSettled, metalSettled, cryptoSettled] = await Promise.allSettled([
-    forexMetalOpen || !combinedRates.USD ? getFiatRatesRaw() : Promise.resolve<RawFiatResult | null>(null),
-    forexMetalOpen || !combinedRates.XAU_GRAM ? getMetalRatesRaw() : Promise.resolve<RawMetalResult | null>(null),
-    getCryptoRatesRaw(), // Crypto is always 24/7
-  ]);
-
-  if (fiatSettled.status === 'fulfilled' && fiatSettled.value) {
-    Object.assign(combinedRates, fiatSettled.value.rates);
-    Object.assign(combinedOpenRates, fiatSettled.value.openRates);
-  }
-
-  const usdToTry = combinedRates.USD;
-  const openUsdToTry = combinedOpenRates.USD || usdToTry;
-
-  if (metalSettled.status === 'fulfilled' && metalSettled.value && usdToTry) {
-    const { xauUsd, xagUsd, xauOpenUsd, xagOpenUsd } = metalSettled.value;
-    if (xauUsd) {
-      combinedRates.XAU_GRAM = Number(((xauUsd / OUNCE_TO_GRAM) * usdToTry).toFixed(2));
-    }
-    if (xagUsd) {
-      combinedRates.XAG_GRAM = Number(((xagUsd / OUNCE_TO_GRAM) * usdToTry).toFixed(2));
-    }
-    if (xauOpenUsd && openUsdToTry) {
-      combinedOpenRates.XAU_GRAM = Number(((xauOpenUsd / OUNCE_TO_GRAM) * openUsdToTry).toFixed(2));
-    }
-    if (xagOpenUsd && openUsdToTry) {
-      combinedOpenRates.XAG_GRAM = Number(((xagOpenUsd / OUNCE_TO_GRAM) * openUsdToTry).toFixed(2));
-    }
-  }
-
-  if (cryptoSettled.status === 'fulfilled') {
-    const { tryRates, tryOpenRates, usdRates, usdOpenRates } = cryptoSettled.value;
-    if (Object.keys(tryRates).length > 0) {
-      Object.assign(combinedRates, tryRates);
-      Object.assign(combinedOpenRates, tryOpenRates);
-    } else if (usdToTry && Object.keys(usdRates).length > 0) {
-      for (const [k, v] of Object.entries(usdRates)) {
-        combinedRates[k] = v * usdToTry;
+  inFlightRatesPromise = (async () => {
+    try {
+      // Load closing rates from storage if memory cache is empty (e.g. app restart while markets closed)
+      if (!cachedRates) {
+        const stored = await loadClosingRatesFromStorage();
+        if (stored && Object.keys(stored.rates).length > 0) {
+          cachedRates = { ...stored.rates };
+          cachedOpenRates = { ...stored.openRates };
+        }
       }
-      for (const [k, v] of Object.entries(usdOpenRates)) {
-        combinedOpenRates[k] = v * (openUsdToTry || usdToTry);
+
+      const combinedRates: ExchangeRates = { TRY: 1, ...(cachedRates || {}) };
+      const combinedOpenRates: ExchangeRates = { TRY: 1, ...(cachedOpenRates || {}) };
+
+      const forexMetalOpen = isForexMetalMarketOpen();
+
+      // If Forex & Metals markets are OPEN, fetch live; if CLOSED (weekend), preserve closing rates
+      const [fiatSettled, metalSettled, cryptoSettled] = await Promise.allSettled([
+        forexMetalOpen || !combinedRates.USD ? getFiatRatesRaw() : Promise.resolve<RawFiatResult | null>(null),
+        forexMetalOpen || !combinedRates.XAU_GRAM ? getMetalRatesRaw() : Promise.resolve<RawMetalResult | null>(null),
+        getCryptoRatesRaw(), // Crypto is always 24/7
+      ]);
+
+      if (fiatSettled.status === 'fulfilled' && fiatSettled.value) {
+        Object.assign(combinedRates, fiatSettled.value.rates);
+        Object.assign(combinedOpenRates, fiatSettled.value.openRates);
       }
+
+      const usdToTry = combinedRates.USD;
+      const openUsdToTry = combinedOpenRates.USD || usdToTry;
+
+      if (metalSettled.status === 'fulfilled' && metalSettled.value && usdToTry) {
+        const { xauUsd, xagUsd, xauOpenUsd, xagOpenUsd } = metalSettled.value;
+        if (xauUsd) {
+          combinedRates.XAU_GRAM = Number(((xauUsd / OUNCE_TO_GRAM) * usdToTry).toFixed(2));
+        }
+        if (xagUsd) {
+          combinedRates.XAG_GRAM = Number(((xagUsd / OUNCE_TO_GRAM) * usdToTry).toFixed(2));
+        }
+        if (xauOpenUsd && openUsdToTry) {
+          combinedOpenRates.XAU_GRAM = Number(((xauOpenUsd / OUNCE_TO_GRAM) * openUsdToTry).toFixed(2));
+        }
+        if (xagOpenUsd && openUsdToTry) {
+          combinedOpenRates.XAG_GRAM = Number(((xagOpenUsd / OUNCE_TO_GRAM) * openUsdToTry).toFixed(2));
+        }
+      }
+
+      if (cryptoSettled.status === 'fulfilled') {
+        const { tryRates, tryOpenRates, usdRates, usdOpenRates } = cryptoSettled.value;
+        if (Object.keys(tryRates).length > 0) {
+          Object.assign(combinedRates, tryRates);
+          Object.assign(combinedOpenRates, tryOpenRates);
+        } else if (usdToTry && Object.keys(usdRates).length > 0) {
+          for (const [k, v] of Object.entries(usdRates)) {
+            combinedRates[k] = v * usdToTry;
+          }
+          for (const [k, v] of Object.entries(usdOpenRates)) {
+            combinedOpenRates[k] = v * (openUsdToTry || usdToTry);
+          }
+        }
+      }
+
+      const isOnline = Object.keys(combinedRates).length > 1;
+
+      // Fetch Stock & TEFAS Fund rates using the resolved USD/TRY rate
+      try {
+        const stockFund = await getStockAndFundRates(usdToTry || 34.5, isOnline);
+        Object.assign(combinedRates, stockFund.rates);
+        Object.assign(combinedOpenRates, stockFund.openRates);
+      } catch (err) {
+        console.warn('Error fetching stock/fund rates:', err);
+      }
+
+      if (Object.keys(combinedRates).length <= 1) {
+        cachedRates = null;
+        cachedOpenRates = null;
+        return null;
+      }
+
+      cachedRates = combinedRates;
+      cachedOpenRates = combinedOpenRates;
+      lastCacheTime = Date.now();
+
+      // Save current rates so on next app open / market closure we have exact closing prices
+      saveClosingRatesToStorage(combinedRates, combinedOpenRates).catch(() => {});
+
+      return combinedRates;
+    } finally {
+      inFlightRatesPromise = null;
     }
-  }
+  })();
 
-  const isOnline = Object.keys(combinedRates).length > 1;
-
-  // Fetch Stock & TEFAS Fund rates using the resolved USD/TRY rate
-  try {
-    const stockFund = await getStockAndFundRates(usdToTry || 34.5, isOnline);
-    Object.assign(combinedRates, stockFund.rates);
-    Object.assign(combinedOpenRates, stockFund.openRates);
-  } catch (err) {
-    console.warn('Error fetching stock/fund rates:', err);
-  }
-
-  if (Object.keys(combinedRates).length <= 1) {
-    cachedRates = null;
-    cachedOpenRates = null;
-    return null;
-  }
-
-  cachedRates = combinedRates;
-  cachedOpenRates = combinedOpenRates;
-  lastCacheTime = now;
-
-  // Save current rates so on next app open / market closure we have exact closing prices
-  saveClosingRatesToStorage(combinedRates, combinedOpenRates).catch(() => {});
-
-  return combinedRates;
+  return inFlightRatesPromise;
 };

@@ -1375,10 +1375,10 @@ export default function HomeScreen() {
               style={[
                 styles.topCurrencyTrigger,
                 {
-                  backgroundColor: isDark ? '#191A20' : '#FFFFFF',
-                  borderColor: colors.border,
-                  shadowColor: isDark ? colors.tint : '#64748B',
-                  shadowOpacity: isDark ? 0.12 : 0.08,
+                  backgroundColor: isDark ? colors.cardSecondary : colors.card,
+                  borderColor: isDark ? 'rgba(240, 223, 194, 0.28)' : 'rgba(36, 31, 27, 0.18)',
+                  shadowColor: isDark ? colors.tint : colors.shadow.shadowColor,
+                  shadowOpacity: isDark ? 0.14 : 0.10,
                 },
               ]}>
               <View
@@ -1403,9 +1403,9 @@ export default function HomeScreen() {
               style={[
                 styles.topCurrencyDropdown,
                 {
-                  backgroundColor: isDark ? '#191A20' : '#FFFFFF',
+                  backgroundColor: isDark ? colors.cardElevated : colors.card,
                   borderColor: colors.tint,
-                  shadowColor: isDark ? colors.tint : '#64748B',
+                  shadowColor: isDark ? colors.tint : colors.shadow.shadowColor,
                   shadowOpacity: isDark ? 0.24 : 0.14,
                 },
               ]}>
@@ -1421,6 +1421,7 @@ export default function HomeScreen() {
                     }}
                     style={[
                       styles.topCurrencyDropdownItem,
+                      isActive && { backgroundColor: colors.tintSoft },
                       !isActive && {
                         borderTopWidth: StyleSheet.hairlineWidth,
                         borderTopColor: colors.border,
@@ -1537,7 +1538,7 @@ export default function HomeScreen() {
               style={[
                 styles.viewModeSwitcher,
                 {
-                  backgroundColor: isDark ? '#121215' : colors.cardSecondary,
+                  backgroundColor: isDark ? colors.card : colors.cardSecondary,
                   borderColor: colors.border,
                 },
               ]}>
@@ -1551,7 +1552,7 @@ export default function HomeScreen() {
                   activeView === 'wallet' && [
                     styles.viewModeTabActive,
                     {
-                      backgroundColor: isDark ? '#26282E' : '#FFFFFF',
+                      backgroundColor: isDark ? colors.cardElevated : colors.card,
                       borderColor: colors.tint,
                     },
                   ],
@@ -1581,7 +1582,7 @@ export default function HomeScreen() {
                   activeView === 'investments' && [
                     styles.viewModeTabActive,
                     {
-                      backgroundColor: isDark ? '#26282E' : '#FFFFFF',
+                      backgroundColor: isDark ? colors.cardElevated : colors.card,
                       borderColor: colors.tint,
                     },
                   ],
@@ -1755,9 +1756,7 @@ export default function HomeScreen() {
                     ? portfolioSummary.totalPnLInTRY >= -0.005
                       ? colors.tint
                       : colors.expense
-                    : balance >= 0
-                    ? colors.tint
-                    : colors.expense
+                    : colors.tint
                 }
                 isDark={isDark}
               />
